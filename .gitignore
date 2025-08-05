@@ -1,0 +1,8 @@
+unnecessary/
+.venv/
+.env
+accounts.db
+data.ipynb
+espn.ipynb
+roadmap.md
+__pycache__/espn_api.cpython-311.pyc
