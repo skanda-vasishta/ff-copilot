@@ -5,4 +5,5 @@ accounts.db
 data.ipynb
 espn.ipynb
 roadmap.md
+viz3.py
 __pycache__/espn_api.cpython-311.pyc
