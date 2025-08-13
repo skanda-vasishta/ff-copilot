@@ -7,3 +7,10 @@ espn.ipynb
 roadmap.md
 viz3.py
 __pycache__/espn_api.cpython-311.pyc
+trades.ipynb
+chroma_langchain_db/chroma.sqlite3
+chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/data_level0.bin
+chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/header.bin
+chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/index_metadata.pickle
+chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/length.bin
+chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/link_lists.bin
