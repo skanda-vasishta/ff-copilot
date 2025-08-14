@@ -1,4 +1,4 @@
-# viz2.py
+# viz2.py - vibe coded prototype
 import streamlit as st
 import pandas as pd
 import json
