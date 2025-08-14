@@ -11,8 +11,8 @@ class LeagueMetrics:
         self.team_name = team_name
         self.team_id = team_id
         # following two might have to change
-        self.stats_df = pd.read_csv('player_stats.csv')
-        self.sentiment_df = pd.read_csv('player_scraped_info.csv')
+        self.stats_df = pd.read_csv('../data/player_stats.csv')
+        self.sentiment_df = pd.read_csv('../data/player_scraped_info.csv')
         self.all_players_stats = self.evaluate_all_players()
         self.league_team_stats = self.evaluate_all_teams()
         self.league_comparisons, _ = self.add_league_comparisons()
@@ -352,7 +352,7 @@ class LeagueMetrics:
             # print()
         
         team_df = pd.DataFrame(team_evaluations)
-        team_df['overall_score'] = self.custom_scale(team_df['overall_score'].values)    
+        # team_df['overall_score'] = self.custom_scale(team_df['overall_score'].values)    
         return team_df
     
 
@@ -442,5 +442,5 @@ if __name__ == "__main__":
     league = LeagueMetrics(league_id=600021088, year=2025, team_name='FC Skanda', team_id=1)
     # print(league.recommend_free_agents(position='RB', sort_by_score='composite_score'))
 
-    ch = league.evaluate_trade(league.league.teams[0], league.league.teams[1], [ 'Omarion Hampton'], ['Kenneth Walker III'])
+    ch = league.evaluate_trade(league.league.teams[0], league.league.teams[1], [ 'Omarion Hampton', 'Malik Nabers', 'Drake Maye'], ['Kenneth Walker III'])
     print(ch)
