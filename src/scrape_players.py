@@ -191,6 +191,7 @@ def get_player_stats(player, on_team_id=None):
 
 
 if __name__ == "__main__":
+    time_start = time.time()
     league = League(league_id=600021088, year=2025)
 
     stats = []
@@ -203,7 +204,7 @@ if __name__ == "__main__":
             stats.append(player_data)
             scraped_info.append(player_scraped_info)
 
-    for player in league.free_agents():
+    for player in league.free_agents(size=100):
         player_data = get_player_stats(player, on_team_id=None)
         player_scraped_info = scrape_player_data(player)
         print(player, " processed")
@@ -221,3 +222,5 @@ if __name__ == "__main__":
     df_scraped_info.index.name = 'playerId'
 
     df_scraped_info.to_csv('player_scraped_info.csv')
+    time_end = time.time()
+    print(f"Time taken: {(time_end - time_start)/60} minutes")

@@ -108,7 +108,11 @@ class LeagueMetrics:
         for team in self.league.teams:
             wrs, qbs, tes, rbs, dsts, k = [], [], [], [], [], []
             for player in team.roster:
-                eval = self.evaluate_player(player.name)
+                if player.name == "Cam Ward":
+                    print("FOUND CAM WARD")
+                    eval = self.evaluate_player("Cameron Ward")
+                else:
+                    eval = self.evaluate_player(player.name)
                 if not eval:
                     continue
                 res = [eval['name'], eval['composite_score']]
@@ -134,6 +138,8 @@ class LeagueMetrics:
             starting_wr_score = np.mean([x[1] for x in sorted_wrs[:2]])
             starting_rb_score = np.mean([x[1] for x in sorted_rbs[:2]])
             starting_te_score = sorted_tes[0][1]
+            # print(sorted_qbs)
+            # print("TEAM NAME: ", team.team_name)
             starting_qbs_score = sorted_qbs[0][1]
             dst_score = np.mean([x[1] for x in sorted_dsts])
             k_score = np.mean([x[1] for x in sorted_k])
@@ -440,7 +446,7 @@ class LeagueMetrics:
 
 if __name__ == "__main__":
     league = LeagueMetrics(league_id=600021088, year=2025, team_name='FC Skanda', team_id=1)
-    # print(league.recommend_free_agents(position='RB', sort_by_score='composite_score'))
+    print(league.recommend_free_agents(position='WR', sort_by_score='composite_score'))
 
-    ch = league.evaluate_trade(league.league.teams[0], league.league.teams[1], [ 'Omarion Hampton', 'Malik Nabers', 'Drake Maye'], ['Kenneth Walker III'])
-    print(ch)
+    # ch = league.evaluate_trade(league.league.teams[0], league.league.teams[1], [ 'Omarion Hampton', 'Malik Nabers', 'Drake Maye'], ['Kenneth Walker III'])
+    # print(ch)
