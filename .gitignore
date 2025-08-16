@@ -14,3 +14,5 @@ chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/header.bin
 chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/index_metadata.pickle
 chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/length.bin
 chroma_langchain_db/334bbc48-57df-4c3f-89bc-bea5b7da9533/link_lists.bin
+src/__pycache__/league_metrics.cpython-311.pyc
+src/__pycache__/api.cpython-311.pyc

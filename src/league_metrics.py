@@ -17,6 +17,12 @@ class LeagueMetrics:
         self.league_team_stats = self.evaluate_all_teams()
         self.league_comparisons, _ = self.add_league_comparisons()
         self.free_agents = self.league.free_agents(size=50)
+
+    def get_all_player_raw_stats(self):
+        return self.stats_df
+    
+    def get_all_player_sentiment(self):
+        return self.sentiment_df
         
     def parse_sentiment_json(self,sentiment_str):
         try:

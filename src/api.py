@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 from league_metrics import LeagueMetrics
@@ -85,7 +85,58 @@ async def evaluate_trade(
         
         result = league_metrics.evaluate_trade(team1, team2, team1_outgoing, team2_outgoing)
         
-        return result.to_dict()
+        result_clean = result.fillna(0).replace([float('inf'), float('-inf')], 0)
+        return result_clean.to_dict()
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/recommend_free_agents")
+async def recommend_free_agents(
+    league_id: int,
+    year: int,
+    team_name: str,
+    team_id: int,
+    position: Optional[str] = None,
+    sort_by_score: str = "composite_score"
+):
+    """
+    Recommend free agents for the team
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        result = league_metrics.recommend_free_agents(position=position, sort_by_score=sort_by_score)
+        
+        return result.to_dict('records')
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/get_all_player_raw_stats")
+async def get_all_player_raw_stats(league_id: int, year: int, team_name: str, team_id: int):
+    """
+    Get all raw player statistics
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        result = league_metrics.get_all_player_raw_stats()
+        
+        result_clean = result.fillna(0).replace([float('inf'), float('-inf')], 0)
+        return result_clean.to_dict('records')
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/get_all_player_sentiment")
+async def get_all_player_sentiment(league_id: int, year: int, team_name: str, team_id: int):
+    """
+    Get all player sentiment
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        result = league_metrics.get_all_player_sentiment()
+        result_clean = result.fillna(0).replace([float('inf'), float('-inf')], 0)
+        return result_clean.to_dict('records')
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
