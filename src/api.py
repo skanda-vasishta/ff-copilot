@@ -179,7 +179,6 @@ async def get_team_roster(league_id: int, year: int, team_name: str, team_id: in
         league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
         roster_df = league_metrics.get_team_roster()
         
-        # Clean the dataframe and convert to records
         roster_clean = roster_df.fillna(0).replace([float('inf'), float('-inf')], 0)
         return roster_clean.to_dict('records')
         
@@ -197,6 +196,19 @@ async def get_all_player_names(league_id: int, year: int, team_name: str, team_i
         
         player_names = stats_df['name'].unique().tolist()
         return {"player_names": player_names}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/get_all_team_names")
+async def get_all_team_names(league_id: int, year: int, team_name: str, team_id: int):
+    """
+    Get all team names for autocomplete functionality
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        team_names = league_metrics.get_all_team_names()
+        return {"team_names": team_names}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

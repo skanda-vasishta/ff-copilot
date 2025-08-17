@@ -6,55 +6,29 @@ export default function HomePage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Fantasy Football Copilot</h1>
         
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">0.000</p>
-                <p className="text-sm text-gray-600">Team Score</p>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">#0</p>
-                <p className="text-sm text-gray-600">League Rank</p>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">0</p>
-                <p className="text-sm text-gray-600">Recommended Moves</p>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-purple-600">0</p>
-                <p className="text-sm text-gray-600">Available FAs</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* About Section */}
+        <Card>
+          <CardHeader>
+            <h2 className="text-xl font-semibold">About</h2>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-700 text-lg leading-relaxed">
+              This is a fantasy football copilot built to help you navigate the wonderful world of fantasy football, 
+              compiling numerous sources from the internet for player analysis and providing the following suite of tools:
+            </p>
+          </CardContent>
+        </Card>
         
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <h3 className="text-lg font-semibold">Team Analysis</h3>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
+            <CardContent className="flex flex-col flex-grow">
+              <p className="text-gray-600 mb-4 flex-grow">
                 View detailed analysis of your team's performance and player evaluations.
               </p>
               <Link href="/team-analysis">
@@ -63,12 +37,12 @@ export default function HomePage() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <h3 className="text-lg font-semibold">Player Rankings</h3>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
+            <CardContent className="flex flex-col flex-grow">
+              <p className="text-gray-600 mb-4 flex-grow">
                 Check comprehensive player rankings across all positions.
               </p>
               <Link href="/player-rankings">
@@ -77,12 +51,12 @@ export default function HomePage() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <h3 className="text-lg font-semibold">Free Agents</h3>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
+            <CardContent className="flex flex-col flex-grow">
+              <p className="text-gray-600 mb-4 flex-grow">
                 Get personalized free agent recommendations for your team.
               </p>
               <Link href="/free-agents">
@@ -91,12 +65,12 @@ export default function HomePage() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <h3 className="text-lg font-semibold">Trade Tool</h3>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
+            <CardContent className="flex flex-col flex-grow">
+              <p className="text-gray-600 mb-4 flex-grow">
                 Analyze potential trades to improve your team.
               </p>
               <Link href="/trade-tool">
@@ -105,12 +79,12 @@ export default function HomePage() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <h3 className="text-lg font-semibold">League Analysis</h3>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
+            <CardContent className="flex flex-col flex-grow">
+              <p className="text-gray-600 mb-4 flex-grow">
                 Compare your team against the entire league.
               </p>
               <Link href="/league-analysis">
@@ -119,12 +93,12 @@ export default function HomePage() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <h3 className="text-lg font-semibold">Player Lookup</h3>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
+            <CardContent className="flex flex-col flex-grow">
+              <p className="text-gray-600 mb-4 flex-grow">
                 Search for any player and view their detailed stats.
               </p>
               <Link href="/player-lookup">

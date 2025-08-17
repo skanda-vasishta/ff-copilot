@@ -18,6 +18,9 @@ class LeagueMetrics:
         self.league_comparisons, _ = self.add_league_comparisons()
         self.free_agents = self.league.free_agents(size=50)
 
+    def get_all_team_names(self):
+        return [[team.team_name, team.team_id] for team in self.league.teams]
+    
     def get_team_roster(self, id=None):
         if id is None:
             id = self.team_id
@@ -333,7 +336,16 @@ class LeagueMetrics:
         for team in team1_roster, team2_roster:
             wrs, qbs, tes, rbs, dsts, k = [], [], [], [], [], []
             for player in team:
-                eval = self.evaluate_player(player)
+                # Handle special case for Cam Ward
+                if player == "Cam Ward":
+                    eval = self.evaluate_player("Cameron Ward")
+                else:
+                    eval = self.evaluate_player(player)
+                
+                if not eval:
+                    print(f"Warning: Could not evaluate player '{player}' - skipping")
+                    continue
+                    
                 res = [eval['name'], eval['composite_score']]
                 if eval['position'] == 'WR':
                     wrs.append(res)
@@ -347,6 +359,7 @@ class LeagueMetrics:
                     dsts.append(res)
                 elif eval['position'] == 'K':
                     k.append(res)
+            
             sorted_wrs = sorted(wrs, key=lambda x: x[1], reverse=True)
             sorted_rbs = sorted(rbs, key=lambda x: x[1], reverse=True)
             sorted_tes = sorted(tes, key=lambda x: x[1], reverse=True)
@@ -354,12 +367,12 @@ class LeagueMetrics:
             sorted_dsts = sorted(dsts, key=lambda x: x[1], reverse=True)
             sorted_k = sorted(k, key=lambda x: x[1], reverse=True)
 
-            starting_wr_score = np.mean([x[1] for x in sorted_wrs[:2]])
-            starting_rb_score = np.mean([x[1] for x in sorted_rbs[:2]])
-            starting_te_score = sorted_tes[0][1]
-            starting_qbs_score = sorted_qbs[0][1]
-            dst_score = np.mean([x[1] for x in sorted_dsts])
-            k_score = np.mean([x[1] for x in sorted_k])
+            starting_wr_score = np.mean([x[1] for x in sorted_wrs[:2]]) if len(sorted_wrs) >= 2 else (sorted_wrs[0][1] if len(sorted_wrs) == 1 else 0)
+            starting_rb_score = np.mean([x[1] for x in sorted_rbs[:2]]) if len(sorted_rbs) >= 2 else (sorted_rbs[0][1] if len(sorted_rbs) == 1 else 0)
+            starting_te_score = sorted_tes[0][1] if len(sorted_tes) > 0 else 0
+            starting_qbs_score = sorted_qbs[0][1] if len(sorted_qbs) > 0 else 0
+            dst_score = np.mean([x[1] for x in sorted_dsts]) if len(sorted_dsts) > 0 else 0
+            k_score = np.mean([x[1] for x in sorted_k]) if len(sorted_k) > 0 else 0
 
             bench_wr_score, bench_rb_score, bench_te_score, bench_qbs_score = 0,0,0,0
             if len(sorted_wrs) > 2: 
