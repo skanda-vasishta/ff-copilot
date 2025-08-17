@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -6,6 +7,15 @@ import pandas as pd
 from league_metrics import LeagueMetrics
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Allows requests from Next.js dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/evaluate_player")
 async def evaluate_player(player_name: str, league_id: int, year: int, team_name: str, team_id: int):
@@ -49,6 +59,25 @@ async def add_league_comparisons(league_id: int, year: int, team_name: str, team
         
         return {
             "comparisons": comparison_df.to_dict('records'),
+            "league_stats": league_stats
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/get_team_analysis")
+async def get_team_analysis(league_id: int, year: int, team_name: str, team_id: int):
+    """
+    Get league comparisons and return as JSON
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        comparison_df, league_stats = league_metrics.add_league_comparisons()
+        #need to find df row for team_name
+        team_row = comparison_df[comparison_df['team_name'] == team_name]
+        
+        return {
+            "team_row": team_row.to_dict('records'),
             "league_stats": league_stats
         }
         
@@ -137,6 +166,22 @@ async def get_all_player_sentiment(league_id: int, year: int, team_name: str, te
         result = league_metrics.get_all_player_sentiment()
         result_clean = result.fillna(0).replace([float('inf'), float('-inf')], 0)
         return result_clean.to_dict('records')
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/get_team_roster")
+async def get_team_roster(league_id: int, year: int, team_name: str, team_id: int):
+    """
+    Get team roster with player evaluations
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        roster_df = league_metrics.get_team_roster()
+        
+        # Clean the dataframe and convert to records
+        roster_clean = roster_df.fillna(0).replace([float('inf'), float('-inf')], 0)
+        return roster_clean.to_dict('records')
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

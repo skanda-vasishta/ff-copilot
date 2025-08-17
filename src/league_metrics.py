@@ -18,6 +18,26 @@ class LeagueMetrics:
         self.league_comparisons, _ = self.add_league_comparisons()
         self.free_agents = self.league.free_agents(size=50)
 
+    def get_team_roster(self, id=None):
+        if id is None:
+            id = self.team_id
+        team = self.league.teams[id-1]
+        roster = [player.name for player in team.roster]
+        for player in roster:
+            if player == "Cam Ward":
+                roster.remove(player)
+                roster.append("Cameron Ward")   
+        eval = []
+        for player in roster:
+            temp = self.evaluate_player(player)
+            raw_stats = self.stats_df[self.stats_df['name'] == player]
+            temp['raw_stats'] = raw_stats.to_dict('records')
+            sentiment_str = self.sentiment_df[self.sentiment_df['name'] == player]['sentiment'].values[0]
+            temp['sentiment'] = self.parse_complete_sentiment_json(sentiment_str)
+            eval.append(temp)
+        eval_df = pd.DataFrame(eval)
+        return eval_df
+
     def get_all_player_raw_stats(self):
         return self.stats_df
     
@@ -34,6 +54,27 @@ class LeagueMetrics:
                 return sentiment_data.get('overall_sentiment_score', 5)
         except:
             return 5
+    
+    def parse_complete_sentiment_json(self, sentiment_str):
+        """Parse the complete sentiment JSON object including all summaries and scores"""
+        try:
+            if sentiment_str.startswith('```json\n'):
+                json_content = sentiment_str[8:]
+                if json_content.endswith('\n```'):
+                    json_content = json_content[:-4]
+                sentiment_data = json.loads(json_content)
+                return sentiment_data
+        except:
+            return {
+                "reddit_summary": "",
+                "reddit_sentiment_score": 5,
+                "fantasypros_summary": "",
+                "fantasypros_sentiment_score": 5,
+                "espn_summary": "",
+                "espn_sentiment_score": 5,
+                "overall_summary": "",
+                "overall_sentiment_score": 5
+            }
     
     def evaluate_player(self, player_name):
         player = self.stats_df[self.stats_df['name'] == player_name]
