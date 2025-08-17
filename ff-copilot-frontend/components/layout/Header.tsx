@@ -1,6 +1,11 @@
+'use client';
+
 import Link from 'next/link'
+import { useAuth } from '@/contexts/AuthContext';
 
 export function Header() {
+  const { user, logout, isAuthenticated } = useAuth();
+
   return (
     <header className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -36,15 +41,26 @@ export function Header() {
 
           {/* Auth Section */}
           <div className="flex items-center space-x-4">
-            <button className="text-gray-700 hover:text-blue-600">
-              Login
-            </button>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-              Sign Up
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={logout}
+                className="text-gray-700 hover:text-blue-600"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <>
+                <Link href="/login" className="text-gray-700 hover:text-blue-600">
+                  Login
+                </Link>
+                <Link href="/signup" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
     </header>
   )
-} 
+}

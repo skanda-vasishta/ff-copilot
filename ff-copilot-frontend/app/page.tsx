@@ -1,25 +1,48 @@
+'use client';
+
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import Link from 'next/link'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function HomePage() {
+  const { user, isAuthenticated } = useAuth();
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">Fantasy Football Copilot</h1>
         
-        {/* About Section */}
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">About</h2>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-700 text-lg leading-relaxed">
-              This is a fantasy football copilot built to help you navigate the wonderful world of fantasy football, 
-              compiling numerous sources from the internet for player analysis and providing the following suite of tools:
-            </p>
-          </CardContent>
-        </Card>
+        {/* Welcome Section */}
+        {isAuthenticated && user ? (
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-semibold">Welcome back, {user.name}!</h2>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-700 text-lg leading-relaxed">
+                <strong>League:</strong> {user.league_id} ({user.year})
+              </p>
+              <p className="text-gray-700 text-lg leading-relaxed">
+                <strong>Team:</strong> {user.team_name} (ID: {user.team_id})
+              </p>
+              <p className="text-gray-600 mt-2">
+                Choose from the tools below to analyze your team, find trades, or discover free agents.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-semibold">About</h2>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-700 text-lg leading-relaxed">
+                This is a fantasy football copilot built to help you navigate the wonderful world of fantasy football, 
+                compiling numerous sources from the internet for player analysis and providing the following suite of tools:
+              </p>
+            </CardContent>
+          </Card>
+        )}
         
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
