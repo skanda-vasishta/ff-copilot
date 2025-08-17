@@ -143,11 +143,31 @@ class LeagueMetrics:
         players = self.stats_df['name'].unique()
 
         for player in players:
-            result = self.evaluate_player(player)
-            if result:
-                all_results.append(result)
+            temp = self.evaluate_player(player)
+            if temp:  
+                raw_stats = self.stats_df[self.stats_df['name'] == player]
+                raw_stats_clean = raw_stats.fillna(0).replace([float('inf'), float('-inf')], 0)
+                temp['raw_stats'] = raw_stats_clean.to_dict('records')
+                
+                try:
+                    sentiment_str = self.sentiment_df[self.sentiment_df['name'] == player]['sentiment'].values[0]
+                    temp['sentiment'] = self.parse_complete_sentiment_json(sentiment_str)
+                except (IndexError, KeyError):
+                    temp['sentiment'] = {
+                        "reddit_summary": "",
+                        "reddit_sentiment_score": 5,
+                        "fantasypros_summary": "",
+                        "fantasypros_sentiment_score": 5,
+                        "espn_summary": "",
+                        "espn_sentiment_score": 5,
+                        "overall_summary": "",
+                        "overall_sentiment_score": 5
+                    }
+                
+                all_results.append(temp)
 
         results_df = pd.DataFrame(all_results)
+        results_df = results_df.fillna(0).replace([float('inf'), float('-inf')], 0)
         return results_df
     
     def evaluate_all_teams(self):

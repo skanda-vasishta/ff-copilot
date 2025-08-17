@@ -186,6 +186,21 @@ async def get_team_roster(league_id: int, year: int, team_name: str, team_id: in
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+@app.get("/get_all_player_names")
+async def get_all_player_names(league_id: int, year: int, team_name: str, team_id: int):
+    """
+    Get all player names for autocomplete functionality
+    """
+    try:
+        league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
+        stats_df = league_metrics.get_all_player_raw_stats()
+        
+        player_names = stats_df['name'].unique().tolist()
+        return {"player_names": player_names}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 
 
 
