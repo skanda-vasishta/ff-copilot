@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface PlayerRanking {
   name: string
@@ -32,18 +33,19 @@ export function RankingsTable() {
   const [currentPage, setCurrentPage] = useState(1)
   const [playersPerPage, setPlayersPerPage] = useState(25)
 
+  // Get league parameters from auth context
+  const { leagueId, year, teamName, teamId } = useAuth()
 
-  // Mock league parameters - in a real app, these would come from context/props
   const leagueParams = {
-    league_id: 600021088,
-    year: 2025,
-    team_name: "FC Skanda",
-    team_id: 1
+    league_id: leagueId,
+    year: year,
+    team_name: teamName,
+    team_id: teamId
   }
 
   useEffect(() => {
     fetchPlayers()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   useEffect(() => {
     filterAndSortPlayers()
@@ -54,6 +56,11 @@ export function RankingsTable() {
     try {
       setLoading(true)
       setError(null)
+      
+      // Check if we have the required league parameters
+      if (!leagueId || !year || !teamName || !teamId) {
+        throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+      }
       
       const params = new URLSearchParams(leagueParams as any)
       const response = await fetch(`http://localhost:8000/evaluate_all_players?${params}`)

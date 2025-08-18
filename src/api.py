@@ -188,8 +188,37 @@ async def get_team_roster(league_id: int, year: int, team_name: str, team_id: in
         league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
         roster_df = league_metrics.get_team_roster()
         
-        roster_clean = roster_df.fillna(0).replace([float('inf'), float('-inf')], 0)
-        return roster_clean.to_dict('records')
+        # More thorough cleaning of the data
+        import numpy as np
+        
+        # Convert to records first, then clean each record
+        roster_records = roster_df.to_dict('records')
+        
+        def clean_value(value):
+            """Clean a single value to ensure JSON compliance"""
+            if pd.isna(value) or value is None:
+                return 0
+            if isinstance(value, float):
+                if np.isinf(value) or np.isnan(value):
+                    return 0
+                # Check for extremely large values that might cause JSON issues
+                if abs(value) > 1e308:
+                    return 0
+            return value
+        
+        def clean_dict(d):
+            """Recursively clean a dictionary"""
+            if isinstance(d, dict):
+                return {k: clean_dict(v) for k, v in d.items()}
+            elif isinstance(d, list):
+                return [clean_dict(item) for item in d]
+            else:
+                return clean_value(d)
+        
+        # Clean all records
+        roster_clean = [clean_dict(record) for record in roster_records]
+        
+        return roster_clean
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

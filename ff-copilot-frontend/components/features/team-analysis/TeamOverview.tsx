@@ -2,6 +2,7 @@
 
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { useEffect, useState } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface TeamAnalysisData {
   starting_wr_score: number
@@ -74,11 +75,25 @@ export function TeamOverview() {
   const [startingLineupExpanded, setStartingLineupExpanded] = useState(true)
   const [benchExpanded, setBenchExpanded] = useState(true)
 
+  // Get league parameters from auth context
+  const { leagueId, year, teamName, teamId } = useAuth()
+
   useEffect(() => {
     const fetchTeamAnalysis = async () => {
       try {
-        // Hard-coded params for now
-        const response = await fetch('http://localhost:8000/get_team_analysis?league_id=600021088&year=2025&team_name=FC%20Skanda&team_id=1')
+        // Check if we have the required league parameters
+        if (!leagueId || !year || !teamName || !teamId) {
+          throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+        }
+
+        const params = new URLSearchParams({
+          league_id: leagueId.toString(),
+          year: year.toString(),
+          team_name: teamName,
+          team_id: teamId.toString()
+        })
+        
+        const response = await fetch(`http://localhost:8000/get_team_analysis?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch team analysis')
         }
@@ -93,7 +108,7 @@ export function TeamOverview() {
     }
 
     fetchTeamAnalysis()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   if (loading) {
     return (

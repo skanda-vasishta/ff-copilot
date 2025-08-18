@@ -10,8 +10,14 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, league_id: number, year: number, team_name: string, team_id: number, password: string) => Promise<void>;
   logout: () => void;
+  updateLeagueInfo: (league_id: number, year: number, team_name: string, team_id: number) => void;
   isAuthenticated: boolean;
   hasSelectedLeague: boolean;
+  // League parameters for API calls
+  leagueId: number | null;
+  year: number | null;
+  teamName: string | null;
+  teamId: number | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -88,14 +94,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
+  const updateLeagueInfo = (league_id: number, year: number, team_name: string, team_id: number) => {
+    if (user) {
+      const updatedUser = {
+        ...user,
+        league_id,
+        year,
+        team_name,
+        team_id
+      };
+      setUser(updatedUser);
+      // Update localStorage as well
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
+  };
+
   const value = {
     user,
     isLoading,
     login,
     signup,
     logout,
+    updateLeagueInfo,
     isAuthenticated: !!user,
     hasSelectedLeague: !!user?.league_id,
+    // League parameters for API calls
+    leagueId: user?.league_id || null,
+    year: user?.year || null,
+    teamName: user?.team_name || null,
+    teamId: user?.team_id || null,
   };
 
   // Show loading spinner while checking auth

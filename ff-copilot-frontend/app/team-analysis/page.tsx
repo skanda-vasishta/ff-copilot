@@ -3,6 +3,7 @@
 import { TeamOverview } from '@/components/features/team-analysis/TeamOverview'
 import { PlayerCard } from '@/components/features/team-analysis/PlayerCard'
 import { useEffect, useState } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface PlayerData {
   name: string
@@ -41,15 +42,41 @@ export default function TeamAnalysisPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Get league parameters from auth context
+  const { leagueId, year, teamName, teamId, isLoading: authLoading } = useAuth()
+
   useEffect(() => {
+    // Don't fetch if auth is still loading
+    if (authLoading) {
+      return
+    }
+
     const fetchRoster = async () => {
       try {
-        const response = await fetch('http://localhost:8000/get_team_roster?league_id=600021088&year=2025&team_name=FC%20Skanda&team_id=1')
+        // Check if we have the required league parameters
+        if (!leagueId || !year || !teamName || !teamId) {
+          setError('League information not available. Please ensure you are logged in and have selected a league.')
+          setLoading(false)
+          return
+        }
+
+        setLoading(true)
+        setError(null)
+
+        const params = new URLSearchParams({
+          league_id: leagueId.toString(),
+          year: year.toString(),
+          team_name: teamName,
+          team_id: teamId.toString()
+        })
+
+        const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch roster data')
         }
         const data = await response.json()
         setRosterData(data)
+        setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
@@ -58,7 +85,7 @@ export default function TeamAnalysisPage() {
     }
 
     fetchRoster()
-  }, [])
+  }, [leagueId, year, teamName, teamId, authLoading])
 
   return (
     <div className="container mx-auto px-4 py-8">

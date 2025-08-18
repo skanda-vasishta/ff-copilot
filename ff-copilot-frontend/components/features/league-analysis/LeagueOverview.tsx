@@ -4,6 +4,7 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { PlayerCard } from '@/components/features/team-analysis/PlayerCard'
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface TeamComparison {
   team_name: string
@@ -123,22 +124,29 @@ export function LeagueOverview() {
   const [startingLineupExpanded, setStartingLineupExpanded] = useState(true)
   const [benchExpanded, setBenchExpanded] = useState(true)
 
-  // Mock league parameters - in a real app, these would come from context/props
+  // Get league parameters from auth context
+  const { leagueId, year, teamName, teamId } = useAuth()
+
   const leagueParams = {
-    league_id: 600021088,
-    year: 2025,
-    team_name: "FC Skanda",
-    team_id: 1
+    league_id: leagueId,
+    year: year,
+    team_name: teamName,
+    team_id: teamId
   }
 
   useEffect(() => {
     fetchLeagueData()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   const fetchLeagueData = async () => {
     try {
       setLoading(true)
       setError(null)
+      
+      // Check if we have the required league parameters
+      if (!leagueId || !year || !teamName || !teamId) {
+        throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+      }
       
       const params = new URLSearchParams(leagueParams as any)
       const response = await fetch(`http://localhost:8000/add_league_comparisons?${params}`)
@@ -165,11 +173,17 @@ export function LeagueOverview() {
       setLoading(true)
       setError(null)
       
+      // Check if we have the required league parameters
+      if (!leagueId || !year) {
+        throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+      }
+      
       const params = new URLSearchParams({
-        ...leagueParams,
+        league_id: leagueId.toString(),
+        year: year.toString(),
         team_name: teamName,
         team_id: teamId.toString()
-      } as any)
+      })
       
       const response = await fetch(`http://localhost:8000/get_team_analysis?${params}`)
       
@@ -193,11 +207,17 @@ export function LeagueOverview() {
 
   const fetchTeamRoster = async (teamName: string, teamId: number) => {
     try {
+      // Check if we have the required league parameters
+      if (!leagueId || !year) {
+        throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+      }
+
       const params = new URLSearchParams({
-        ...leagueParams,
+        league_id: leagueId.toString(),
+        year: year.toString(),
         team_name: teamName,
         team_id: teamId.toString()
-      } as any)
+      })
       
       const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
       

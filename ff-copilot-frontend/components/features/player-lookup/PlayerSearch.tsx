@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface PlayerData {
   name: string
@@ -82,13 +83,26 @@ export function PlayerSearch() {
   const [comparisonSuggestions, setComparisonSuggestions] = useState<PlayerData[]>([])
   const [showComparisonSuggestions, setShowComparisonSuggestions] = useState(false)
 
+  // Get league parameters from auth context
+  const { leagueId, year, teamName, teamId } = useAuth()
+
   // Fetch all players on component mount
   useEffect(() => {
     const fetchAllPlayers = async () => {
       try {
-        const response = await fetch(
-          'http://localhost:8000/evaluate_all_players?league_id=600021088&year=2025&team_name=FC%20Skanda&team_id=1'
-        )
+        // Check if we have the required league parameters
+        if (!leagueId || !year || !teamName || !teamId) {
+          throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+        }
+
+        const params = new URLSearchParams({
+          league_id: leagueId.toString(),
+          year: year.toString(),
+          team_name: teamName,
+          team_id: teamId.toString()
+        })
+
+        const response = await fetch(`http://localhost:8000/evaluate_all_players?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch players')
         }
@@ -102,7 +116,7 @@ export function PlayerSearch() {
     }
 
     fetchAllPlayers()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   // Update suggestions for main search
   useEffect(() => {

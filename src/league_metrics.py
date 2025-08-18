@@ -514,11 +514,14 @@ class LeagueMetrics:
                 for col in position_mapping.keys()
                 if col in team_row and team_row[col] in ['D', 'F']
             ]   
-            print(positions_needed) 
-            for position in positions_needed:
+            print(f"Positions needed: {positions_needed}")
+            
+            # If no specific positions are needed (no D or F grades), return all free agents
+            if positions_needed:
                 recs = fas[fas['position'].isin(positions_needed)]
-
-
+            else:
+                # Return top free agents from all positions if team doesn't have any weak spots
+                recs = fas.head(50)  # Return top 50 free agents
 
         return recs  
     

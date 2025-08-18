@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Team {
   name: string
@@ -45,17 +46,19 @@ export function TradeAnalyzer() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Mock league parameters - in a real app, these would come from context/props
+  // Get league parameters from auth context
+  const { leagueId, year, teamName, teamId } = useAuth()
+
   const leagueParams = {
-    league_id: 600021088,
-    year: 2025,
-    team_name: "FC Skanda",
-    team_id: 1
+    league_id: leagueId,
+    year: year,
+    team_name: teamName,
+    team_id: teamId
   }
 
   useEffect(() => {
     fetchTeams()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   useEffect(() => {
     setTeam1Outgoing([]) // Clear selected players when team changes
@@ -77,6 +80,11 @@ export function TradeAnalyzer() {
 
   const fetchTeams = async () => {
     try {
+      // Check if we have the required league parameters
+      if (!leagueId || !year || !teamName || !teamId) {
+        throw new Error('League information not available. Please ensure you are logged in and have selected a league.')
+      }
+
       const params = new URLSearchParams(leagueParams as any)
       const response = await fetch(`http://localhost:8000/get_all_team_names?${params}`)
       

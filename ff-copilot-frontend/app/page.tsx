@@ -4,6 +4,7 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import { LeagueSettings } from '@/components/ui/LeagueSettings'
 
 export default function HomePage() {
   const { user, isAuthenticated } = useAuth();
@@ -14,22 +15,19 @@ export default function HomePage() {
         
         {/* Welcome Section */}
         {isAuthenticated && user ? (
-          <Card>
-            <CardHeader>
-              <h2 className="text-xl font-semibold">Welcome back, {user.name}!</h2>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700 text-lg leading-relaxed">
-                <strong>League:</strong> {user.league_id} ({user.year})
-              </p>
-              <p className="text-gray-700 text-lg leading-relaxed">
-                <strong>Team:</strong> {user.team_name} (ID: {user.team_id})
-              </p>
-              <p className="text-gray-600 mt-2">
-                Choose from the tools below to analyze your team, find trades, or discover free agents.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <h2 className="text-xl font-semibold">Welcome back, {user.name}!</h2>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Choose from the tools below to analyze your team, find trades, or discover free agents.
+                </p>
+              </CardContent>
+            </Card>
+            <LeagueSettings />
+          </div>
         ) : (
           <Card>
             <CardHeader>
