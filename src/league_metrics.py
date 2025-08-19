@@ -10,22 +10,9 @@ class LeagueMetrics:
         self.year = year
         self.team_name = team_name
         self.team_id = team_id
-        # File paths that work both locally and on Vercel
-        import os
-        from pathlib import Path
-        
-        # Get the directory where this file is located
-        current_dir = Path(__file__).parent
-        data_dir = current_dir.parent / 'data'
-        
-        try:
-            self.stats_df = pd.read_csv(data_dir / 'player_stats.csv')
-            self.sentiment_df = pd.read_csv(data_dir / 'player_scraped_info.csv')
-        except FileNotFoundError as e:
-            print(f"Warning: Could not load data files: {e}")
-            # Create empty dataframes as fallback
-            self.stats_df = pd.DataFrame()
-            self.sentiment_df = pd.DataFrame()
+        # following two might have to change
+        self.stats_df = pd.read_csv('data/player_stats.csv')
+        self.sentiment_df = pd.read_csv('data/player_scraped_info.csv')
         self.all_players_stats = self.evaluate_all_players()
         self.league_team_stats = self.evaluate_all_teams()
         self.league_comparisons, _ = self.add_league_comparisons()
