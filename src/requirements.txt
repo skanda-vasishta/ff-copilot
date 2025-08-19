@@ -1,0 +1,22 @@
+# Core API framework
+fastapi
+uvicorn==0.35.0
+pydantic==2.11.7
+
+# Data processing
+pandas==2.3.1
+numpy==2.3.1
+
+# Fantasy sports API
+espn-api==0.45.1
+
+# Authentication & Security
+PyJWT==2.10.1
+passlib[bcrypt]
+bcrypt==4.3.0
+
+# Environment variables
+python-dotenv==1.1.1
+
+# Standard library extensions (already included in Python)
+# datetime, os, json, typing are built-in

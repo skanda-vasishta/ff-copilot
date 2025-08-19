@@ -26,6 +26,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {
+        "message": "FF Copilot API is running!",
+        "endpoints": [
+            "/docs",
+            "/get_teams_auth",
+            "/evaluate_player", 
+            "/recommend_free_agents",
+            "/add_league_comparisons"
+        ]
+    }
+
 @app.get("/evaluate_player")
 async def evaluate_player(player_name: str, league_id: int, year: int, team_name: str, team_id: int):
     """
