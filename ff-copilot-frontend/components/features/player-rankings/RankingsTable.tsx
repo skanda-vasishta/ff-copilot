@@ -4,6 +4,7 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface PlayerRanking {
   name: string
@@ -63,7 +64,7 @@ export function RankingsTable() {
       }
       
       const params = new URLSearchParams(leagueParams as any)
-      const response = await fetch(`http://localhost:8000/evaluate_all_players?${params}`)
+      const response = await fetch(createApiUrl('/evaluate_all_players', params))
       
       if (!response.ok) {
         throw new Error('Failed to fetch player rankings')

@@ -4,6 +4,7 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface FreeAgent {
   name: string
@@ -79,7 +80,7 @@ export function FreeAgentRecommendations() {
         params.append('sort_by_score', sortByScore)
       }
       
-      const response = await fetch(`http://localhost:8000/recommend_free_agents?${params}`)
+      const response = await fetch(createApiUrl('/recommend_free_agents', params))
       
       if (!response.ok) {
         throw new Error('Failed to fetch free agent recommendations')

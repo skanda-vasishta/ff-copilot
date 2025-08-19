@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface TeamAnalysisData {
   starting_wr_score: number
@@ -93,7 +94,7 @@ export function TeamOverview() {
           team_id: teamId.toString()
         })
         
-        const response = await fetch(`http://localhost:8000/get_team_analysis?${params}`)
+        const response = await fetch(createApiUrl('/get_team_analysis', params))
         if (!response.ok) {
           throw new Error('Failed to fetch team analysis')
         }

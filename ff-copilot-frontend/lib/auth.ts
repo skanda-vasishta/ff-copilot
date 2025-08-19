@@ -1,4 +1,5 @@
 // Frontend auth service to connect with FastAPI backend
+import { API_BASE_URL } from './api-config';
 
 export interface User {
   email: string;
@@ -30,7 +31,7 @@ export interface AuthResponse {
   user: User;
 }
 
-const API_BASE_URL = 'http://localhost:8000';
+
 
 export class AuthService {
   static async login(loginData: LoginData): Promise<AuthResponse> {

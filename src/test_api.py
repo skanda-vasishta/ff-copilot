@@ -1,4 +1,11 @@
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
 params  = {
         "player_name": "Josh Allen",
         "league_id": 600021088,
@@ -7,7 +14,7 @@ params  = {
         "team_id": 1
     }
 def test_evaluate_player():
-    response = requests.get("http://localhost:8000/evaluate_player", params=params)
+    response = requests.get(f"{API_BASE_URL}/evaluate_player", params=params)
     print(f"Status: {response.status_code}")
     print(response.json())
 

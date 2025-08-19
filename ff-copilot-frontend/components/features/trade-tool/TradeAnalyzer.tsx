@@ -4,6 +4,7 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface Team {
   name: string
@@ -86,7 +87,7 @@ export function TradeAnalyzer() {
       }
 
       const params = new URLSearchParams(leagueParams as any)
-      const response = await fetch(`http://localhost:8000/get_all_team_names?${params}`)
+      const response = await fetch(createApiUrl('/get_all_team_names', params))
       
       if (!response.ok) {
         throw new Error('Failed to fetch teams')
@@ -111,7 +112,7 @@ export function TradeAnalyzer() {
         team_id: team.id.toString()
       } as any)
       
-      const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
+      const response = await fetch(createApiUrl('/get_team_roster', params))
       
       if (!response.ok) {
         throw new Error(`Failed to fetch roster for ${team.name}`)
@@ -186,7 +187,7 @@ export function TradeAnalyzer() {
         params.append('team2_outgoing', player)
       })
 
-      const response = await fetch(`http://localhost:8000/evaluate_trade?${params}`)
+      const response = await fetch(createApiUrl('/evaluate_trade', params))
 
       if (!response.ok) {
         throw new Error('Failed to evaluate trade')

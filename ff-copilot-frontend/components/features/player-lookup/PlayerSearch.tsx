@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface PlayerData {
   name: string
@@ -102,7 +103,7 @@ export function PlayerSearch() {
           team_id: teamId.toString()
         })
 
-        const response = await fetch(`http://localhost:8000/evaluate_all_players?${params}`)
+        const response = await fetch(createApiUrl('/evaluate_all_players', params))
         if (!response.ok) {
           throw new Error('Failed to fetch players')
         }

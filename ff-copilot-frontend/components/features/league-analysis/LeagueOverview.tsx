@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { PlayerCard } from '@/components/features/team-analysis/PlayerCard'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface TeamComparison {
   team_name: string
@@ -149,7 +150,7 @@ export function LeagueOverview() {
       }
       
       const params = new URLSearchParams(leagueParams as any)
-      const response = await fetch(`http://localhost:8000/add_league_comparisons?${params}`)
+      const response = await fetch(createApiUrl('/add_league_comparisons', params))
       
       if (!response.ok) {
         throw new Error('Failed to fetch league analysis data')
@@ -185,7 +186,7 @@ export function LeagueOverview() {
         team_id: teamId.toString()
       })
       
-      const response = await fetch(`http://localhost:8000/get_team_analysis?${params}`)
+      const response = await fetch(createApiUrl('/get_team_analysis', params))
       
       if (!response.ok) {
         throw new Error('Failed to fetch team analysis data')
@@ -219,7 +220,7 @@ export function LeagueOverview() {
         team_id: teamId.toString()
       })
       
-      const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
+      const response = await fetch(createApiUrl('/get_team_roster', params))
       
       if (!response.ok) {
         throw new Error('Failed to fetch roster data')

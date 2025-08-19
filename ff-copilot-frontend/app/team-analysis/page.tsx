@@ -4,6 +4,7 @@ import { TeamOverview } from '@/components/features/team-analysis/TeamOverview'
 import { PlayerCard } from '@/components/features/team-analysis/PlayerCard'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { createApiUrl } from '@/lib/api-config'
 
 interface PlayerData {
   name: string
@@ -70,7 +71,7 @@ export default function TeamAnalysisPage() {
           team_id: teamId.toString()
         })
 
-        const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
+        const response = await fetch(createApiUrl('/get_team_roster', params))
         if (!response.ok) {
           throw new Error('Failed to fetch roster data')
         }
