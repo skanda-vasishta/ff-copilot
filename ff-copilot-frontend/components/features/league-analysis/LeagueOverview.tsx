@@ -4,6 +4,7 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { PlayerCard } from '@/components/features/team-analysis/PlayerCard'
 import { useState, useEffect } from 'react'
+import { useLeague } from '@/contexts/LeagueContext'
 
 interface TeamComparison {
   team_name: string
@@ -113,6 +114,7 @@ function getTierColor(tier: string) {
 }
 
 export function LeagueOverview() {
+  const { leagueId, year, teamName, teamId, hasLeagueParams } = useLeague()
   const [leagueData, setLeagueData] = useState<LeagueData | null>(null)
   const [teamAnalysis, setTeamAnalysis] = useState<TeamAnalysisData | null>(null)
   const [selectedTeam, setSelectedTeam] = useState<TeamComparison | null>(null)
@@ -123,25 +125,31 @@ export function LeagueOverview() {
   const [startingLineupExpanded, setStartingLineupExpanded] = useState(true)
   const [benchExpanded, setBenchExpanded] = useState(true)
 
-  // Mock league parameters - in a real app, these would come from context/props
-  const leagueParams = {
-    league_id: 600021088,
-    year: 2025,
-    team_name: "FC Skanda",
-    team_id: 1
-  }
+
 
   useEffect(() => {
     fetchLeagueData()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   const fetchLeagueData = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const params = new URLSearchParams(leagueParams as any)
-      const response = await fetch(`http://localhost:8000/add_league_comparisons?${params}`)
+      if (!hasLeagueParams()) {
+        setError('League parameters not configured. Please set up your league first.')
+        setLoading(false)
+        return
+      }
+
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const params = new URLSearchParams({
+        league_id: leagueId!.toString(),
+        year: year!.toString(),
+        team_name: teamName!,
+        team_id: teamId!.toString()
+      });
+      const response = await fetch(`${API_BASE_URL}/add_league_comparisons?${params}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch league analysis data')
@@ -153,6 +161,7 @@ export function LeagueOverview() {
       data.comparisons.sort((a: TeamComparison, b: TeamComparison) => b.overall_score - a.overall_score)
       
       setLeagueData(data)
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -165,13 +174,16 @@ export function LeagueOverview() {
       setLoading(true)
       setError(null)
       
+      // ONLY use league ID for other team analysis, not user's team info
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
       const params = new URLSearchParams({
-        ...leagueParams,
+        league_id: leagueId!.toString(),
+        year: year!.toString(),
         team_name: teamName,
         team_id: teamId.toString()
-      } as any)
+      });
       
-      const response = await fetch(`http://localhost:8000/get_team_analysis?${params}`)
+      const response = await fetch(`${API_BASE_URL}/get_team_analysis?${params}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch team analysis data')
@@ -193,23 +205,36 @@ export function LeagueOverview() {
 
   const fetchTeamRoster = async (teamName: string, teamId: number) => {
     try {
+      // Reset roster data first
+      setRosterData([])
+      
+      // ONLY use league ID for other team roster, not user's team info
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
       const params = new URLSearchParams({
-        ...leagueParams,
+        league_id: leagueId!.toString(),
+        year: year!.toString(),
         team_name: teamName,
         team_id: teamId.toString()
-      } as any)
+      });
       
-      const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
+      const response = await fetch(`${API_BASE_URL}/get_team_roster?${params}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch roster data')
       }
       
       const data = await response.json()
-      setRosterData(data)
+      // Handle different possible response structures
+      if (data.players) {
+        setRosterData(data.players)
+      } else if (Array.isArray(data)) {
+        setRosterData(data)
+      } else {
+        setRosterData([])
+      }
     } catch (err) {
-      console.error('Failed to fetch roster:', err)
-      setRosterData([])
+      setError(err instanceof Error ? err.message : 'An error occurred')
+      setRosterData([]) // Ensure it's always an array
     }
   }
 
@@ -240,7 +265,7 @@ export function LeagueOverview() {
   }
 
   const isUserTeam = (team: TeamComparison): boolean => {
-    return team.team_name === leagueParams.team_name
+    return team.team_name === teamName
   }
 
   if (loading) {
@@ -526,7 +551,7 @@ export function LeagueOverview() {
           {/* Players Section - exact same as team-analysis page */}
           <div className="mt-8">
             <h2 className="text-xl font-semibold mb-6 text-black">{teamData.team_name} Players</h2>
-            {rosterData.length > 0 ? (
+            {rosterData && rosterData.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                 {rosterData.map((player, index) => (
                   <PlayerCard key={index} player={player} />

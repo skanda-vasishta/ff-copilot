@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { LeagueSetup } from '@/components/ui/LeagueSetup'
 import Link from 'next/link'
 
 export default function HomePage() {
@@ -7,6 +8,9 @@ export default function HomePage() {
     <div className="container mx-auto px-4 py-8">
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">Fantasy Football Copilot</h1>
+        
+        {/* League Setup Section */}
+        <LeagueSetup />
         
         {/* About Section */}
         <Card>

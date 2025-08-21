@@ -1,7 +1,7 @@
 import requests
 params  = {
         "player_name": "Josh Allen",
-        "league_id": 600021088,
+        "league_id": 251954166,
         "year": 2025,
         "team_name": "FC Skanda",
         "team_id": 1
@@ -24,7 +24,7 @@ def test_add_league_comparisons():
 
 def test_evaluate_trade():
     trade_params = {
-        "league_id": 600021088,
+        "league_id": 251954166,
         "year": 2025,
         "team_name": "FC Skanda",
         "team_id": 1,
@@ -44,7 +44,7 @@ def test_evaluate_trade():
 
 def test_recommend_free_agents():
     fa_params = {
-        "league_id": 600021088,
+        "league_id": 251954166,
         "year": 2025,
         "team_name": "FC Skanda",
         "team_id": 1,

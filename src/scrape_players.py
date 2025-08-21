@@ -192,7 +192,7 @@ def get_player_stats(player, on_team_id=None):
 
 if __name__ == "__main__":
     time_start = time.time()
-    league = League(league_id=600021088, year=2025)
+    league = League(league_id=251954166, year=2025)
 
     stats = []
     scraped_info = []

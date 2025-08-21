@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
+import { useLeague } from '@/contexts/LeagueContext'
 
 interface FreeAgent {
   name: string
@@ -38,41 +39,47 @@ interface FreeAgent {
 }
 
 export function FreeAgentRecommendations() {
+  const { leagueId, year, teamName, teamId, hasLeagueParams } = useLeague()
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedPosition, setSelectedPosition] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('composite_score')
 
-
-  // Mock league parameters - in a real app, these would come from context/props
-  const leagueParams = {
-    league_id: 600021088,
-    year: 2025,
-    team_name: "FC Skanda",
-    team_id: 1
-  }
-
   useEffect(() => {
-    fetchRecommendations()
-  }, [])
+    // Initial fetch without filters
+    fetchRecommendations(undefined, undefined)
+  }, [leagueId, year, teamName, teamId])
 
   const fetchRecommendations = async (position?: string, sortByScore?: string) => {
     try {
       setLoading(true)
       setError(null)
       
-      const params = new URLSearchParams(leagueParams as any)
+      if (!hasLeagueParams()) {
+        setError('League parameters not configured. Please set up your league first.')
+        setLoading(false)
+        return
+      }
+
+      // Use ALL global context parameters
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const params = new URLSearchParams({
+        league_id: leagueId!.toString(),
+        year: year!.toString(),
+        team_name: teamName!,
+        team_id: teamId!.toString()
+      });
       
       // Add optional parameters
-      if (position) {
+      if (position && position.trim() !== '') {
         params.append('position', position)
       }
-      if (sortByScore) {
+      if (sortByScore && sortByScore.trim() !== '') {
         params.append('sort_by_score', sortByScore)
       }
       
-      const response = await fetch(`http://localhost:8000/recommend_free_agents?${params}`)
+      const response = await fetch(`${API_BASE_URL}/recommend_free_agents?${params}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch free agent recommendations')
@@ -80,6 +87,7 @@ export function FreeAgentRecommendations() {
       
       const data = await response.json()
       setFreeAgents(data)
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

@@ -2,6 +2,7 @@
 
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { useEffect, useState } from 'react'
+import { useLeague } from '@/contexts/LeagueContext'
 
 interface TeamAnalysisData {
   starting_wr_score: number
@@ -67,6 +68,7 @@ function getTierColor(tier: string) {
 }
 
 export function TeamOverview() {
+  const { leagueId, year, teamName, teamId, hasLeagueParams } = useLeague()
   const [teamData, setTeamData] = useState<TeamAnalysisData | null>(null)
   const [leagueStats, setLeagueStats] = useState<LeagueStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -77,14 +79,27 @@ export function TeamOverview() {
   useEffect(() => {
     const fetchTeamAnalysis = async () => {
       try {
-        // Hard-coded params for now
-        const response = await fetch('http://localhost:8000/get_team_analysis?league_id=600021088&year=2025&team_name=FC%20Skanda&team_id=1')
+        if (!hasLeagueParams()) {
+          setError('League parameters not configured. Please set up your league first.')
+          setLoading(false)
+          return
+        }
+
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+        const params = new URLSearchParams({
+          league_id: leagueId!.toString(),
+          year: year!.toString(),
+          team_name: teamName!,
+          team_id: teamId!.toString()
+        });
+        const response = await fetch(`${API_BASE_URL}/get_team_analysis?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch team analysis')
         }
         const data: ApiResponse = await response.json()
         setTeamData(data.team_row[0]) // API returns array, take first item
         setLeagueStats(data.league_stats)
+        setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
@@ -93,7 +108,7 @@ export function TeamOverview() {
     }
 
     fetchTeamAnalysis()
-  }, [])
+  }, [leagueId, year, teamName, teamId, hasLeagueParams])
 
   if (loading) {
     return (

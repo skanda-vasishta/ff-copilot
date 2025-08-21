@@ -491,10 +491,8 @@ class LeagueMetrics:
         fas = self.all_players_stats[self.all_players_stats['name'].isin(fa_names)]
         fas = fas.sort_values(sort_by_score, ascending=False)
 
-
         if position:
             recs = fas[fas['position'] == position]
-
         else:
             position_mapping = {
                 'starting_qbs_score_tier': 'QB',
@@ -514,18 +512,21 @@ class LeagueMetrics:
                 for col in position_mapping.keys()
                 if col in team_row and team_row[col] in ['D', 'F']
             ]   
-            print(positions_needed) 
-            for position in positions_needed:
+            print(f"Positions needed: {positions_needed}")
+            
+            # If specific positions are needed, filter by those
+            if positions_needed:
                 recs = fas[fas['position'].isin(positions_needed)]
-
-
+            else:
+                # If no specific needs detected, return all free agents
+                recs = fas
 
         return recs  
     
 
 
 if __name__ == "__main__":
-    league = LeagueMetrics(league_id=600021088, year=2025, team_name='FC Skanda', team_id=1)
+    league = LeagueMetrics(league_id=251954166, year=2025, team_name='FC Skanda', team_id=1)
     print(league.recommend_free_agents(position='WR', sort_by_score='composite_score'))
 
     # ch = league.evaluate_trade(league.league.teams[0], league.league.teams[1], [ 'Omarion Hampton', 'Malik Nabers', 'Drake Maye'], ['Kenneth Walker III'])

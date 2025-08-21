@@ -3,6 +3,7 @@
 import { TeamOverview } from '@/components/features/team-analysis/TeamOverview'
 import { PlayerCard } from '@/components/features/team-analysis/PlayerCard'
 import { useEffect, useState } from 'react'
+import { useLeague } from '@/contexts/LeagueContext'
 
 interface PlayerData {
   name: string
@@ -37,6 +38,7 @@ interface PlayerData {
 }
 
 export default function TeamAnalysisPage() {
+  const { leagueId, year, teamName, teamId, hasLeagueParams } = useLeague()
   const [rosterData, setRosterData] = useState<PlayerData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,12 +46,26 @@ export default function TeamAnalysisPage() {
   useEffect(() => {
     const fetchRoster = async () => {
       try {
-        const response = await fetch('http://localhost:8000/get_team_roster?league_id=600021088&year=2025&team_name=FC%20Skanda&team_id=1')
+        if (!hasLeagueParams()) {
+          setError('League parameters not configured. Please set up your league first.')
+          setLoading(false)
+          return
+        }
+
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+        const params = new URLSearchParams({
+          league_id: leagueId!.toString(),
+          year: year!.toString(),
+          team_name: teamName!,
+          team_id: teamId!.toString()
+        });
+        const response = await fetch(`${API_BASE_URL}/get_team_roster?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch roster data')
         }
         const data = await response.json()
         setRosterData(data)
+        setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
@@ -58,7 +74,7 @@ export default function TeamAnalysisPage() {
     }
 
     fetchRoster()
-  }, [])
+  }, [leagueId, year, teamName, teamId, hasLeagueParams])
 
   return (
     <div className="container mx-auto px-4 py-8">

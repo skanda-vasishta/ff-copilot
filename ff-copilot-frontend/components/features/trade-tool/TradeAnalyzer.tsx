@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
+import { useLeague } from '@/contexts/LeagueContext'
 
 interface Team {
   name: string
@@ -34,6 +35,7 @@ interface TradeResults {
 }
 
 export function TradeAnalyzer() {
+  const { leagueId, year, teamName, teamId, hasLeagueParams } = useLeague()
   const [teams, setTeams] = useState<Team[]>([])
   const [selectedTeam1, setSelectedTeam1] = useState<Team | null>(null)
   const [selectedTeam2, setSelectedTeam2] = useState<Team | null>(null)
@@ -45,17 +47,9 @@ export function TradeAnalyzer() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Mock league parameters - in a real app, these would come from context/props
-  const leagueParams = {
-    league_id: 600021088,
-    year: 2025,
-    team_name: "FC Skanda",
-    team_id: 1
-  }
-
   useEffect(() => {
     fetchTeams()
-  }, [])
+  }, [leagueId, year])
 
   useEffect(() => {
     setTeam1Outgoing([]) // Clear selected players when team changes
@@ -77,19 +71,29 @@ export function TradeAnalyzer() {
 
   const fetchTeams = async () => {
     try {
-      const params = new URLSearchParams(leagueParams as any)
-      const response = await fetch(`http://localhost:8000/get_all_team_names?${params}`)
+      if (!hasLeagueParams()) {
+        setError('League parameters not configured. Please set up your league first.')
+        return
+      }
+
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const params = new URLSearchParams({
+        league_id: leagueId!.toString(),
+        year: year!.toString()
+      });
+      const response = await fetch(`${API_BASE_URL}/get_teams_auth?${params}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch teams')
       }
       
       const data = await response.json()
-      const teamsList = data.team_names.map((team: [string, number]) => ({
+      const teamsList = data.teams.map((team: [string, number]) => ({
         name: team[0],
         id: team[1]
       }))
       setTeams(teamsList)
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch teams')
     }
@@ -97,20 +101,23 @@ export function TradeAnalyzer() {
 
   const fetchTeamRoster = async (team: Team, setRoster: (roster: Player[]) => void) => {
     try {
+      // Use league ID and year from global context, but team info from selection
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
       const params = new URLSearchParams({
-        ...leagueParams,
+        league_id: leagueId!.toString(),
+        year: year!.toString(),
         team_name: team.name,
         team_id: team.id.toString()
-      } as any)
+      });
       
-      const response = await fetch(`http://localhost:8000/get_team_roster?${params}`)
+      const response = await fetch(`${API_BASE_URL}/get_team_roster?${params}`)
       
       if (!response.ok) {
         throw new Error(`Failed to fetch roster for ${team.name}`)
       }
       
       const data = await response.json()
-      setRoster(data)
+      setRoster(data.players || data)
     } catch (err) {
       console.error(`Error fetching roster for ${team.name}:`, err)
       setRoster([])
@@ -164,11 +171,18 @@ export function TradeAnalyzer() {
       setLoading(true)
       setError(null)
 
+      // Use league ID, year, and user's team from global context, plus selected teams
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
       const params = new URLSearchParams({
-        ...leagueParams,
+        league_id: leagueId!.toString(),
+        year: year!.toString(),
+        team_name: teamName!,
+        team_id: teamId!.toString(),
         team1_name: selectedTeam1.name,
-        team2_name: selectedTeam2.name
-      } as any)
+        team1_id: selectedTeam1.id.toString(),
+        team2_name: selectedTeam2.name,
+        team2_id: selectedTeam2.id.toString()
+      })
 
       // Add outgoing players as query parameters
       team1Outgoing.forEach(player => {
@@ -178,7 +192,7 @@ export function TradeAnalyzer() {
         params.append('team2_outgoing', player)
       })
 
-      const response = await fetch(`http://localhost:8000/evaluate_trade?${params}`)
+      const response = await fetch(`${API_BASE_URL}/evaluate_trade?${params}`)
 
       if (!response.ok) {
         throw new Error('Failed to evaluate trade')

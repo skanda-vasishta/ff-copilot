@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
+import { useLeague } from '@/contexts/LeagueContext'
 
 interface PlayerData {
   name: string
@@ -67,6 +68,7 @@ function getInjuryStatusColor(status: string) {
 }
 
 export function PlayerSearch() {
+  const { leagueId, year, teamName, teamId, hasLeagueParams } = useLeague()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerData | null>(null)
   const [allPlayers, setAllPlayers] = useState<PlayerData[]>([])
@@ -86,14 +88,26 @@ export function PlayerSearch() {
   useEffect(() => {
     const fetchAllPlayers = async () => {
       try {
-        const response = await fetch(
-          'http://localhost:8000/evaluate_all_players?league_id=600021088&year=2025&team_name=FC%20Skanda&team_id=1'
-        )
+        if (!hasLeagueParams()) {
+          setError('League parameters not configured. Please set up your league first.')
+          setLoading(false)
+          return
+        }
+
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+        const params = new URLSearchParams({
+          league_id: leagueId!.toString(),
+          year: year!.toString(),
+          team_name: teamName!,
+          team_id: teamId!.toString()
+        });
+        const response = await fetch(`${API_BASE_URL}/evaluate_all_players?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch players')
         }
         const data = await response.json()
         setAllPlayers(data)
+        setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load players')
       } finally {
@@ -102,7 +116,7 @@ export function PlayerSearch() {
     }
 
     fetchAllPlayers()
-  }, [])
+  }, [leagueId, year, teamName, teamId])
 
   // Update suggestions for main search
   useEffect(() => {
