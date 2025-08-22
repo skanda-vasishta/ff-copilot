@@ -35,14 +35,14 @@ export function Header() {
           </nav>
 
           {/* Auth Section */}
-          <div className="flex items-center space-x-4">
-            <button className="text-gray-700 hover:text-blue-600">
+          {/* <div className="flex items-center space-x-4"> */}
+            {/* <button className="text-gray-700 hover:text-blue-600">
               Login
             </button>
             <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
               Sign Up
-            </button>
-          </div>
+            </button> */}
+          {/* </div> */}
         </div>
       </div>
     </header>
