@@ -17,20 +17,13 @@ load_dotenv()
 
 app = FastAPI()
 
-# Add CORS middleware
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-allowed_origins = [FRONTEND_URL]
 
-# Allow multiple origins from environment variable
-additional_origins = os.getenv("ADDITIONAL_CORS_ORIGINS", "")
-if additional_origins:
-    allowed_origins.extend([origin.strip() for origin in additional_origins.split(",")])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://ff-copilot.vercel.app"],  
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
