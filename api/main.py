@@ -26,7 +26,7 @@ class LeagueMetrics:
         self.all_players_stats = self.evaluate_all_players()
         self.league_team_stats = self.evaluate_all_teams()
         self.league_comparisons, _ = self.add_league_comparisons()
-        self.free_agents = self.league.free_agents(size=50)
+        self.free_agents = self.league.free_agents(size=100)
 
     def _initialize_s3_client(self):
         try:
