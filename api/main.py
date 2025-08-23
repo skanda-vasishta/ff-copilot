@@ -174,7 +174,15 @@ class LeagueMetrics:
 
 
     def custom_scale(self, values, target_min=0.65, target_max=0.95):
+        if len(values) == 0:
+            return values
+        if len(values) == 1:
+            return np.array([target_min])
+        
         p5, p95 = np.percentile(values, [5, 95])
+        if p95 == p5:  # All values are the same
+            return np.full_like(values, target_min)
+        
         scaled = (values - p5) / (p95 - p5) * (target_max - target_min) + target_min
         return np.clip(scaled, target_min - 0.05, target_max + 0.05)
 
@@ -242,14 +250,14 @@ class LeagueMetrics:
             sorted_dsts = sorted(dsts, key=lambda x: x[1], reverse=True)
             sorted_k = sorted(k, key=lambda x: x[1], reverse=True)
 
-            starting_wr_score = np.mean([x[1] for x in sorted_wrs[:2]])
-            starting_rb_score = np.mean([x[1] for x in sorted_rbs[:2]])
-            starting_te_score = sorted_tes[0][1]
+            starting_wr_score = np.mean([x[1] for x in sorted_wrs[:2]]) if len(sorted_wrs) >= 2 else (sorted_wrs[0][1] if len(sorted_wrs) == 1 else 0)
+            starting_rb_score = np.mean([x[1] for x in sorted_rbs[:2]]) if len(sorted_rbs) >= 2 else (sorted_rbs[0][1] if len(sorted_rbs) == 1 else 0)
+            starting_te_score = sorted_tes[0][1] if len(sorted_tes) > 0 else 0
             # print(sorted_qbs)
             # print("TEAM NAME: ", team.team_name)
-            starting_qbs_score = sorted_qbs[0][1]
-            dst_score = np.mean([x[1] for x in sorted_dsts])
-            k_score = np.mean([x[1] for x in sorted_k])
+            starting_qbs_score = sorted_qbs[0][1] if len(sorted_qbs) > 0 else 0
+            dst_score = np.mean([x[1] for x in sorted_dsts]) if len(sorted_dsts) > 0 else 0
+            k_score = np.mean([x[1] for x in sorted_k]) if len(sorted_k) > 0 else 0
 
             bench_wr_score, bench_rb_score, bench_te_score, bench_qbs_score = 0,0,0,0
             if len(sorted_wrs) > 2: 
@@ -265,9 +273,13 @@ class LeagueMetrics:
             if len(sorted_tes) > 1:
                 # bench_te_score = np.mean([x[1] for x in sorted_tes[1:]])
                 bench_te_score = sorted_tes[1][1]
+            elif len(sorted_tes) == 1:
+                bench_te_score = 0
             if len(sorted_qbs) > 1:
                 # bench_qbs_score = np.mean([x[1] for x in sorted_qbs[1:]])
                 bench_qbs_score = sorted_qbs[1][1]
+            elif len(sorted_qbs) == 1:
+                bench_qbs_score = 0
 
         
 
@@ -317,7 +329,8 @@ class LeagueMetrics:
             # print()
         
         team_df = pd.DataFrame(team_evaluations)
-        team_df['overall_score'] = self.custom_scale(team_df['overall_score'].values)    
+        if not team_df.empty and 'overall_score' in team_df.columns:
+            team_df['overall_score'] = self.custom_scale(team_df['overall_score'].values)    
         return team_df
 
 
@@ -325,6 +338,10 @@ class LeagueMetrics:
         """
         Add league-wide statistical comparisons for each position and overall scores.
         """
+        
+        # Check if we have valid team stats
+        if self.league_team_stats.empty:
+            return pd.DataFrame(), {}
         
         position_cols = [
             'starting_wr_score', 'starting_rb_score', 'starting_te_score', 
@@ -336,13 +353,18 @@ class LeagueMetrics:
         
         league_stats = {}
         for col in position_cols:
-            league_stats[col] = {
-                'mean': self.league_team_stats[col].mean(),
-                'std': self.league_team_stats[col].std(),
-                'min': self.league_team_stats[col].min(),
-                'max': self.league_team_stats[col].max(),
-                'median': self.league_team_stats[col].median()
-            }
+            if col in self.league_team_stats.columns:
+                league_stats[col] = {
+                    'mean': self.league_team_stats[col].mean(),
+                    'std': self.league_team_stats[col].std(),
+                    'min': self.league_team_stats[col].min(),
+                    'max': self.league_team_stats[col].max(),
+                    'median': self.league_team_stats[col].median()
+                }
+            else:
+                league_stats[col] = {
+                    'mean': 0, 'std': 0, 'min': 0, 'max': 0, 'median': 0
+                }
         
         comparison_df = self.league_team_stats.copy()[position_cols]
     
@@ -350,9 +372,13 @@ class LeagueMetrics:
         comparison_df['team_id'] = self.league_team_stats['team_id']
         
         for col in position_cols:
-            zscore = (self.league_team_stats[col] - league_stats[col]['mean']) / league_stats[col]['std']
-            comparison_df[f'{col}_percentile'] = self.league_team_stats[col].rank(pct=True) * 100
-            comparison_df[f'{col}_tier'] = zscore.apply(self.classify_tier)    
+            if col in self.league_team_stats.columns and league_stats[col]['std'] != 0:
+                zscore = (self.league_team_stats[col] - league_stats[col]['mean']) / league_stats[col]['std']
+                comparison_df[f'{col}_percentile'] = self.league_team_stats[col].rank(pct=True) * 100
+                comparison_df[f'{col}_tier'] = zscore.apply(self.classify_tier)
+            else:
+                comparison_df[f'{col}_percentile'] = 50  # Default to middle percentile
+                comparison_df[f'{col}_tier'] = 'C'  # Default to C tier
         return comparison_df, league_stats
 
     def classify_tier(self, zscore):
@@ -645,8 +671,25 @@ async def get_team_analysis(league_id: int, year: int, team_name: str, team_id: 
     try:
         league_metrics = LeagueMetrics(league_id, year, team_name, team_id)
         comparison_df, league_stats = league_metrics.add_league_comparisons()
+        
+        # Check if we have valid comparison data
+        if comparison_df.empty:
+            return {
+                "team_row": [],
+                "league_stats": league_stats,
+                "error": "No league comparison data available"
+            }
+        
         #need to find df row for team_name
         team_row = comparison_df[comparison_df['team_name'] == team_name]
+        
+        # Check if team was found
+        if team_row.empty:
+            return {
+                "team_row": [],
+                "league_stats": league_stats,
+                "error": f"Team '{team_name}' not found in league"
+            }
         
         return {
             "team_row": team_row.to_dict('records'),
