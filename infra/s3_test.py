@@ -4,7 +4,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError, NoCredentialsError
 
-# Load environment variables
 load_dotenv()
 
 class S3Uploader:
@@ -185,8 +184,10 @@ def main():
     
     # Step 2: Upload the specific files
     files_to_upload = [
-        ("../data/player_stats.csv", "player_stats.csv"),
-        ("../data/player_scraped_info.csv", "player_scraped_info.csv")
+        # ("../data/player_stats.csv", "player_stats.csv"),
+        # ("../data/player_scraped_info.csv", "player_scraped_info.csv")
+        ("../player_stats.csv", "player_stats.csv"),
+        ("../player_scraped_info.csv", "player_scraped_info.csv")
     ]
     
     print("\nUploading fresh data files...")
