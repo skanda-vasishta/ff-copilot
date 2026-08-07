@@ -1,3 +1,4 @@
+import asyncio
 import os
 from functools import lru_cache
 from typing import Any, Literal
@@ -174,9 +175,44 @@ async def require_player(player_id: str, db: SupabaseREST) -> dict[str, Any]:
     return data[0]
 
 
+def ranking_summary(data: list[dict[str, Any]]) -> dict[str, float | int | None]:
+    ranks = sorted(float(row["overall_rank"]) for row in data if row.get("overall_rank") is not None)
+    median = None if not ranks else (ranks[len(ranks)//2] if len(ranks) % 2 else sum(ranks[len(ranks)//2-1:len(ranks)//2+1]) / 2)
+    return {
+        "average": sum(ranks) / len(ranks) if ranks else None,
+        "median": median,
+        "minimum": min(ranks) if ranks else None,
+        "maximum": max(ranks) if ranks else None,
+        "source_count": len({row["source"] for row in data if row.get("overall_rank") is not None}),
+    }
+
+
 @app.get("/v1/players/{player_id}")
 async def get_player(player_id: str, db: SupabaseREST = Depends(db_for)):
     return await require_player(player_id, db)
+
+
+@app.get("/v1/players/{player_id}/detail")
+async def get_player_detail(player_id: str, season: int | None = None, db: SupabaseREST = Depends(db_for)):
+    player = await require_player(player_id, db)
+    snapshot_params = {"player_id": f"eq.{player_id}", "select": "*", "order": "fetched_at.desc"}
+    ranking_params = {"player_id": f"eq.{player_id}", "select": "*", "order": "fetched_at.desc"}
+    if season:
+        snapshot_params["season"] = f"eq.{season}"
+        ranking_params["season"] = f"eq.{season}"
+    (snapshots, _), (rankings, _), (sources, _) = await asyncio.gather(
+        db.request("GET", "player_snapshots", params=snapshot_params),
+        db.request("GET", "player_rankings", params=ranking_params),
+        db.request("GET", "source_documents", params={
+            "player_id": f"eq.{player_id}", "select": "*", "order": "fetched_at.desc"
+        }),
+    )
+    return {
+        "player": player,
+        "snapshots": snapshots,
+        "rankings": {"items": rankings, "summary": ranking_summary(rankings)},
+        "sources": sources,
+    }
 
 
 @app.get("/v1/players/{player_id}/snapshots")
@@ -196,15 +232,7 @@ async def get_player_rankings(player_id: str, season: int | None = None, db: Sup
     if season:
         params["season"] = f"eq.{season}"
     data, _ = await db.request("GET", "player_rankings", params=params)
-    ranks = [float(row["overall_rank"]) for row in data if row.get("overall_rank") is not None]
-    ranks.sort()
-    median = None if not ranks else (ranks[len(ranks)//2] if len(ranks) % 2 else sum(ranks[len(ranks)//2-1:len(ranks)//2+1]) / 2)
-    return {"items": data, "summary": {
-        "average": sum(ranks) / len(ranks) if ranks else None,
-        "median": median, "minimum": min(ranks) if ranks else None,
-        "maximum": max(ranks) if ranks else None,
-        "source_count": len({row["source"] for row in data if row.get("overall_rank") is not None}),
-    }}
+    return {"items": data, "summary": ranking_summary(data)}
 
 
 @app.get("/v1/players/{player_id}/sources")

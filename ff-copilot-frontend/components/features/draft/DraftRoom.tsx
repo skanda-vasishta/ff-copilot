@@ -38,6 +38,11 @@ type SourceDocument = {
   content: string;
   source_url: string | null;
 };
+type PlayerDetail = {
+  snapshots: Snapshot[];
+  rankings: RankingResponse;
+  sources: SourceDocument[];
+};
 
 const STORAGE_KEY = "ff-copilot:draft-room";
 const positions = ["ALL", "QB", "RB", "WR", "TE", "K", "D/ST"];
@@ -751,28 +756,17 @@ function PlayerModal({
   onClose: () => void;
 }) {
   useModal(onClose);
-  const snapshots = useQuery({
-    queryKey: ["player-snapshots", player.id],
+  const detail = useQuery({
+    queryKey: ["player-detail", player.id, season],
     queryFn: () =>
-      api<Snapshot[]>(`/v1/players/${player.id}/snapshots?season=${season}`),
+      api<PlayerDetail>(`/v1/players/${player.id}/detail?season=${season}`),
   });
-  const rankings = useQuery({
-    queryKey: ["player-rankings", player.id],
-    queryFn: () =>
-      api<RankingResponse>(
-        `/v1/players/${player.id}/rankings?season=${season}`,
-      ),
-  });
-  const sources = useQuery({
-    queryKey: ["player-sources", player.id],
-    queryFn: () => api<SourceDocument[]>(`/v1/players/${player.id}/sources`),
-  });
-  const latest = snapshots.data?.[0];
-  const sourceItems = (sources.data || [])
+  const latest = detail.data?.snapshots[0];
+  const rankings = detail.data?.rankings;
+  const sourceItems = (detail.data?.sources || [])
     .filter((item) => item.source !== "openai_summary")
     .slice(0, 3);
-  const loading =
-    snapshots.isLoading || rankings.isLoading || sources.isLoading;
+  const loading = detail.isLoading;
   return (
     <ModalFrame onClose={onClose} label={`${player.name} player file`} wide>
       <header className="relative overflow-hidden border-b border-white/[.08] p-5 sm:p-7">
@@ -812,7 +806,7 @@ function PlayerModal({
             <QuickStat
               label="Median rank"
               value={formatNumber(
-                rankings.data?.summary.median ?? player.median_rank,
+                rankings?.summary.median ?? player.median_rank,
               )}
             />
             <QuickStat
@@ -829,8 +823,8 @@ function PlayerModal({
                   Latest source notes
                 </h3>
                 <span className="font-mono text-[9px] text-[#65716b]">
-                  {rankings.data?.summary.source_count || player.source_count}{" "}
-                  rank sources
+                  {rankings?.summary.source_count || player.source_count} rank
+                  sources
                 </span>
               </div>
               <div className="mt-3 space-y-2">
@@ -906,13 +900,13 @@ function PlayerModal({
                 <div className="flex justify-between">
                   <dt className="text-[#78847e]">Best rank</dt>
                   <dd className="font-mono text-white">
-                    {formatNumber(rankings.data?.summary.minimum, 0)}
+                    {formatNumber(rankings?.summary.minimum, 0)}
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-[#78847e]">Worst rank</dt>
                   <dd className="font-mono text-white">
-                    {formatNumber(rankings.data?.summary.maximum, 0)}
+                    {formatNumber(rankings?.summary.maximum, 0)}
                   </dd>
                 </div>
               </dl>

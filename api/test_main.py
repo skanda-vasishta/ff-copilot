@@ -66,6 +66,37 @@ def test_draft_pool_includes_espn_ids():
         app.dependency_overrides.clear()
 
 
+class PlayerDetailDB:
+    async def request(self, method, table, **kwargs):
+        rows = {
+            "players": [{"id": "player-1", "name": "Test Player"}],
+            "player_snapshots": [{"id": "snapshot-1", "season": 2026}],
+            "player_rankings": [
+                {"id": "rank-1", "source": "espn", "overall_rank": 10},
+                {"id": "rank-2", "source": "fantasypros", "overall_rank": 20},
+            ],
+            "source_documents": [{"id": "source-1", "source": "reddit"}],
+        }
+        return rows[table], {}
+
+
+def test_player_detail_combines_facts_in_one_request():
+    app.dependency_overrides[db_for] = lambda: PlayerDetailDB()
+    try:
+        response = client.get("/v1/players/player-1/detail?season=2026")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["player"]["name"] == "Test Player"
+        assert body["snapshots"][0]["season"] == 2026
+        assert body["rankings"]["summary"] == {
+            "average": 15.0, "median": 15.0, "minimum": 10.0,
+            "maximum": 20.0, "source_count": 2,
+        }
+        assert body["sources"][0]["source"] == "reddit"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_source_freshness_counts_unique_players_and_latest_fetch():
     summary = source_freshness([
         {"source": "espn", "player_id": "one", "fetched_at": "2026-08-01T00:00:00Z"},
