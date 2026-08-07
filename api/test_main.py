@@ -57,10 +57,16 @@ def test_source_freshness_counts_unique_players_and_latest_fetch():
 class LeagueStateDB:
     async def request(self, method, table, **kwargs):
         if table == "user_leagues":
-            return ([{
-                "created_at": "2026-08-01T00:00:00Z",
-                "league": {"id": "league-1", "provider": "espn", "external_id": "111", "season": 2026},
-            }], {})
+            return ([
+                {
+                    "created_at": "2025-08-01T00:00:00Z",
+                    "league": {"id": "league-old", "provider": "espn", "external_id": "111", "season": 2025},
+                },
+                {
+                    "created_at": "2026-08-01T00:00:00Z",
+                    "league": {"id": "league-1", "provider": "espn", "external_id": "111", "season": 2026},
+                },
+            ], {})
         if table == "sync_requests":
             return ([
                 {"id": "duplicate", "provider": "espn", "external_id": "111", "season": 2026, "requested_at": "2026-08-02T00:00:00Z", "status": "pending"},
@@ -75,8 +81,11 @@ def test_my_leagues_presents_product_states_and_hides_duplicate_preparations():
     try:
         response = client.get("/v1/me/leagues")
         assert response.status_code == 200
-        assert [item["state"] for item in response.json()] == ["available", "being_prepared"]
-        assert response.json()[1]["league"]["external_id"] == "222"
-        assert "sync_request" not in response.json()[1]
+        by_external_id = {item["league"]["external_id"]: item for item in response.json()}
+        assert set(by_external_id) == {"111", "222"}
+        assert by_external_id["111"]["state"] == "available"
+        assert by_external_id["111"]["league"]["id"] == "league-1"
+        assert by_external_id["222"]["state"] == "being_prepared"
+        assert "sync_request" not in by_external_id["222"]
     finally:
         app.dependency_overrides.clear()

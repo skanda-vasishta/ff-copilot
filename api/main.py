@@ -208,10 +208,6 @@ async def my_leagues(user: AuthenticatedUser = Depends(current_user), db: Supaba
         "status": "in.(pending,running)", "select": "id,provider,external_id,season,requested_at,status",
         "order": "requested_at.desc",
     })
-    linked_keys = {
-        (row["league"]["provider"], row["league"]["external_id"], row["league"]["season"])
-        for row in data
-    }
     available = [{**row, "state": "available"} for row in data]
     being_prepared = [
         {
@@ -228,9 +224,22 @@ async def my_leagues(user: AuthenticatedUser = Depends(current_user), db: Supaba
             },
         }
         for request in preparations
-        if (request["provider"], request["external_id"], request["season"]) not in linked_keys
     ]
-    return available + being_prepared
+    deduplicated: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in available + being_prepared:
+        league = row["league"]
+        key = (league["provider"], league["external_id"])
+        current = deduplicated.get(key)
+        candidate_priority = (league["season"], row["state"] == "available", row["created_at"])
+        if current is None:
+            deduplicated[key] = row
+            continue
+        current_priority = (
+            current["league"]["season"], current["state"] == "available", current["created_at"]
+        )
+        if candidate_priority > current_priority:
+            deduplicated[key] = row
+    return sorted(deduplicated.values(), key=lambda row: row["created_at"], reverse=True)
 
 
 @app.post("/v1/me/leagues", status_code=201)
