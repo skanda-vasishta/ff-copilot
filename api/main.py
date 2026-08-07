@@ -149,6 +149,24 @@ async def list_players(
     return {"items": data, "page": page, "page_size": page_size, "total": total}
 
 
+@app.get("/v1/draft/player-pool")
+async def draft_player_pool(
+    season: int = Query(2026, ge=2000, le=2100),
+    db: SupabaseREST = Depends(db_for),
+):
+    external_ids, _ = await db.request("GET", "player_external_ids", params={
+        "provider": "eq.espn", "select": "player_id,external_id", "limit": 1000
+    })
+    directory, _ = await db.request("GET", "player_directory", params={
+        "season": f"eq.{season}", "select": "*", "limit": 1000
+    })
+    espn_by_player = {row["player_id"]: row["external_id"] for row in external_ids}
+    return {"items": [
+        {**player, "espn_id": espn_by_player.get(player["id"])}
+        for player in directory if espn_by_player.get(player["id"])
+    ]}
+
+
 async def require_player(player_id: str, db: SupabaseREST) -> dict[str, Any]:
     data, _ = await db.request("GET", "players", params={"id": f"eq.{player_id}", "select": "*"})
     if not data:

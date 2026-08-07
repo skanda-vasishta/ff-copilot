@@ -8,6 +8,7 @@ const links = [
   { href: '/', label: 'Overview', icon: '▦' },
   { href: '/player-lookup', label: 'Players', icon: '⌕' },
   { href: '/leagues', label: 'My leagues', icon: '◉' },
+  { href: '/draft-room', label: 'Draft room', icon: '◆' },
 ]
 
 export function Header() {
@@ -22,7 +23,7 @@ export function Header() {
       </Link>
       <nav className="ml-5 flex flex-1 items-center gap-1 sm:ml-10" aria-label="Primary navigation">
         {links.map(({ href, label, icon }) => {
-          const active = pathname === href
+          const active = pathname === href || pathname.startsWith(`${href}/`)
           return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`focus-ring flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${active ? 'bg-white/[.08] text-white' : 'text-[#8c9992] hover:bg-white/[.04] hover:text-white'}`}>
             <span className="hidden text-base leading-none sm:inline" aria-hidden>{icon}</span><span>{label}</span>
           </Link>

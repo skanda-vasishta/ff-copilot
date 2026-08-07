@@ -45,6 +45,27 @@ def test_players_are_paginated_from_directory_view():
         app.dependency_overrides.clear()
 
 
+class DraftPoolDB:
+    async def request(self, method, table, **kwargs):
+        assert method == "GET"
+        if table == "player_external_ids":
+            return ([{"player_id": "player-1", "external_id": "123"}], {})
+        if table == "player_directory":
+            assert kwargs["params"]["season"] == "eq.2026"
+            return ([{"id": "player-1", "name": "Draft Player"}], {})
+        raise AssertionError(table)
+
+
+def test_draft_pool_includes_espn_ids():
+    app.dependency_overrides[db_for] = lambda: DraftPoolDB()
+    try:
+        response = client.get("/v1/draft/player-pool?season=2026")
+        assert response.status_code == 200
+        assert response.json() == {"items": [{"id": "player-1", "name": "Draft Player", "espn_id": "123"}]}
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_source_freshness_counts_unique_players_and_latest_fetch():
     summary = source_freshness([
         {"source": "espn", "player_id": "one", "fetched_at": "2026-08-01T00:00:00Z"},
