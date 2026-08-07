@@ -126,7 +126,7 @@ async def list_players(
     season: int | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
-    sort: Literal["name", "projected_total_points", "average_rank"] = "name",
+    sort: Literal["name", "projected_total_points", "average_rank", "median_rank"] = "name",
     direction: Literal["asc", "desc"] = "asc",
     db: SupabaseREST = Depends(db_for),
 ):
@@ -295,13 +295,21 @@ async def league_teams(league_id: str, db: SupabaseREST = Depends(db_for)):
     return data
 
 
+@app.get("/v1/leagues/{league_id}/seasons")
+async def league_seasons(league_id: str, db: SupabaseREST = Depends(db_for)):
+    data, _ = await db.request("POST", "rpc/link_league_history", json={"p_league_id": league_id})
+    if not data:
+        raise HTTPException(status_code=404, detail="League not found")
+    return sorted(data, key=lambda league: league["season"], reverse=True)
+
+
 @app.get("/v1/teams/{team_id}/roster")
 async def team_roster(team_id: str, db: SupabaseREST = Depends(db_for)):
     snapshots, _ = await db.request("GET", "roster_snapshots", params={
         "team_id": f"eq.{team_id}", "select": "*", "order": "fetched_at.desc", "limit": 1
     })
     if not snapshots:
-        raise HTTPException(status_code=404, detail="Roster snapshot not found")
+        return {"snapshot": None, "players": []}
     roster, _ = await db.request("GET", "roster_players", params={
         "roster_snapshot_id": f"eq.{snapshots[0]['id']}", "select": "lineup_slot,acquisition_type,player:players(*)"
     })
