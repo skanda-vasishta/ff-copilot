@@ -1,0 +1,35 @@
+name: Sync fantasy leagues
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season
+        required: true
+        default: "2026"
+      week:
+        description: Optional week
+        required: false
+      league_id:
+        description: ESPN league ID; leave blank to process pending requests
+        required: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r ingestion/requirements.txt
+      - name: Run sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEK: ${{ inputs.week }}
+          LEAGUE_ID: ${{ inputs.league_id }}
+        run: |
+          args=(sync-league --season "${{ inputs.season }}")
+          if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
+          if [ -n "$LEAGUE_ID" ]; then args+=(--league-id "$LEAGUE_ID"); else args+=(--pending); fi
+          python -m ingestion.sync "${args[@]}"

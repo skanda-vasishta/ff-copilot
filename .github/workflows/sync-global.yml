@@ -1,0 +1,39 @@
+name: Sync global player data
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season
+        required: true
+        default: "2026"
+      week:
+        description: Optional week
+        required: false
+      include_sources:
+        description: Scrape source documents
+        type: boolean
+        default: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r ingestion/requirements.txt
+      - name: Run sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ESPN_SEED_LEAGUE_ID: ${{ secrets.ESPN_SEED_LEAGUE_ID }}
+          REDDIT_CLIENT: ${{ secrets.REDDIT_CLIENT }}
+          REDDIT_SECRET: ${{ secrets.REDDIT_SECRET }}
+          WEEK: ${{ inputs.week }}
+          SOURCES: ${{ inputs.include_sources }}
+        run: |
+          args=(sync-global --season "${{ inputs.season }}")
+          if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
+          if [ "$SOURCES" = "true" ]; then args+=(--sources); fi
+          python -m ingestion.sync "${args[@]}"
