@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from main import app, db_for
+from main import app, db_for, source_freshness
 
 
 client = TestClient(app)
@@ -43,3 +43,12 @@ def test_players_are_paginated_from_directory_view():
         }
     finally:
         app.dependency_overrides.clear()
+
+
+def test_source_freshness_counts_unique_players_and_latest_fetch():
+    summary = source_freshness([
+        {"source": "espn", "player_id": "one", "fetched_at": "2026-08-01T00:00:00Z"},
+        {"source": "espn", "player_id": "one", "fetched_at": "2026-08-02T00:00:00Z"},
+        {"source": "espn", "player_id": "two", "fetched_at": "2026-08-01T00:00:00Z"},
+    ])
+    assert summary == {"espn": {"latest_fetched_at": "2026-08-02T00:00:00Z", "player_count": 2}}

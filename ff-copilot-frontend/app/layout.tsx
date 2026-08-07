@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fantasy Football Copilot - Fantasy Football Analysis Tool",
-  description: "Advanced fantasy football analysis with player evaluations, trade tools, and league insights",
+  title: "FF Copilot — Your fantasy football workspace",
+  description: "Fresh player data, source rankings, and every fantasy team in one focused workspace.",
 };
 
 export default function RootLayout({
@@ -27,11 +27,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AppProviders>
           <Header />
-          <main className="min-h-screen">
+          <main className="min-h-[calc(100vh-4rem)]">
             {children}
           </main>
         </AppProviders>

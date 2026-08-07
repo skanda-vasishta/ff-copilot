@@ -37,3 +37,9 @@ jobs:
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
           if [ "$SOURCES" = "true" ]; then args+=(--sources); fi
           python -m ingestion.sync "${args[@]}"
+      - name: Verify 2026 coverage
+        if: ${{ inputs.season == '2026' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m ingestion.sync coverage-report --season 2026 --minimum-players 250

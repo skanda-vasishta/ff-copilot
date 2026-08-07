@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,6 +49,11 @@ def parse_json(value: Any, fallback: Any) -> Any:
         return fallback
 
 
+def chunks(items: list[Any], size: int = 100):
+    for index in range(0, len(items), size):
+        yield items[index:index + size]
+
+
 class SupabaseAdmin:
     def __init__(self):
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -79,6 +85,10 @@ class SupabaseAdmin:
     def patch(self, table: str, filters: dict[str, Any], data: dict):
         return self.request("PATCH", table, params={key: f"eq.{value}" for key, value in filters.items()}, data=data,
                             prefer="return=representation")
+
+
+class ProviderContractError(RuntimeError):
+    pass
 
 
 @dataclass
@@ -154,14 +164,29 @@ def resolve_player(db: SupabaseAdmin, external_id: str, payload: dict[str, Any])
     return player_id
 
 
+def parse_fantasypros_html(html: str) -> str:
+    content = "\n".join(p.get_text(" ", strip=True) for p in BeautifulSoup(html, "html.parser").find_all("p"))
+    if not content.strip():
+        raise ProviderContractError("FantasyPros player notes markup returned no paragraph content")
+    return content
+
+
 def fantasypros_text(name: str) -> tuple[str, str]:
     slug = re.sub(r"[^a-zA-Z0-9\s]", "", name).replace(" ", "-").lower()
     aliases = {"Kenneth Walker III": "kenneth-walker-rb", "Amon-Ra St. Brown": "amonra-stbrown"}
     url = f"https://www.fantasypros.com/nfl/notes/{aliases.get(name, slug)}.php"
     response = httpx.get(url, timeout=15, follow_redirects=True)
     response.raise_for_status()
-    content = "\n".join(p.get_text(" ", strip=True) for p in BeautifulSoup(response.text, "html.parser").find_all("p"))
-    return url, content
+    return url, parse_fantasypros_html(response.text)
+
+
+def parse_espn_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    node = soup.find("div", class_="FantasyOverview__News")
+    content = node.get_text("\n", strip=True) if node else ""
+    if not content:
+        raise ProviderContractError("ESPN player page is missing FantasyOverview__News")
+    return content
 
 
 def espn_text(external_id: str, name: str) -> tuple[str, str]:
@@ -169,9 +194,7 @@ def espn_text(external_id: str, name: str) -> tuple[str, str]:
     url = f"https://www.espn.com/nfl/player/_/id/{external_id}/{slug}"
     response = httpx.get(url, timeout=15, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
     response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    node = soup.find("div", class_="FantasyOverview__News")
-    return url, node.get_text("\n", strip=True) if node else ""
+    return url, parse_espn_html(response.text)
 
 
 def reddit_documents(name: str) -> list[dict[str, Any]]:
@@ -209,24 +232,75 @@ def insert_documents(db: SupabaseAdmin, player_id: str, external_id: str, name: 
 
 def sync_global(args):
     db = SupabaseAdmin()
-    league = League(league_id=int(args.league_id), year=args.season)
-    fetched_at = now()
-    unique = {str(player.playerId): player for team in league.teams for player in team.roster}
-    unique.update({str(player.playerId): player for player in league.free_agents(size=args.free_agents)})
     with Run(db, "global", args.season, args.week) as run:
+        league = League(league_id=int(args.league_id), year=args.season)
+        fetched_at = now()
+        unique = {str(player.playerId): player for team in league.teams for player in team.roster}
+        unique.update({str(player.playerId): player for player in league.free_agents(size=args.free_agents)})
         run.read = len(unique)
+        external_rows = db.request("GET", "player_external_ids", params={
+            "provider": "eq.espn", "select": "external_id,player_id", "limit": 1000
+        })
+        existing = {row["external_id"]: row["player_id"] for row in external_rows}
+        player_rows, id_rows, snapshots, rankings = [], [], [], []
+        resolved: dict[str, str] = {}
         for external_id, player in unique.items():
-            player_id = resolve_player(db, external_id, player_payload(player))
-            db.upsert("player_snapshots", snapshot_payload(player_id, player, args.season, args.week, fetched_at),
-                      "player_id,source,season,week,data_hash")
+            player_id = existing.get(external_id, str(uuid.uuid4()))
+            resolved[external_id] = player_id
+            player_rows.append({"id": player_id, **player_payload(player)})
+            id_rows.append({"player_id": player_id, "provider": "espn", "external_id": external_id})
+            snapshots.append(snapshot_payload(player_id, player, args.season, args.week, fetched_at))
             if getattr(player, "posRank", None) is not None:
-                db.upsert("player_rankings", {"player_id": player_id, "source": "espn", "season": args.season,
+                rankings.append({"player_id": player_id, "source": "espn", "season": args.season,
                     "week": args.week, "scoring_format": "league", "ranking_type": "position",
-                    "position_rank": player.posRank, "fetched_at": fetched_at},
-                    "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank")
-            run.written += 1
-            if args.sources:
-                insert_documents(db, player_id, external_id, player.name, fetched_at, run)
+                    "position_rank": player.posRank, "fetched_at": fetched_at})
+
+        for batch in chunks(player_rows):
+            db.upsert("players", batch, "id")
+        for batch in chunks(id_rows):
+            db.upsert("player_external_ids", batch, "provider,external_id")
+        for batch in chunks(snapshots, 50):
+            db.upsert("player_snapshots", batch, "player_id,source,season,week,data_hash")
+        for batch in chunks(rankings):
+            db.upsert("player_rankings", batch,
+                      "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank")
+        run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
+
+        if args.sources:
+            for external_id, player in unique.items():
+                insert_documents(db, resolved[external_id], external_id, player.name, fetched_at, run)
+
+
+def coverage_report(args):
+    db = SupabaseAdmin()
+    snapshots = db.request("GET", "player_snapshots", params={
+        "season": f"eq.{args.season}", "select": "player_id,source,fetched_at", "limit": 10000
+    })
+    rankings = db.request("GET", "player_rankings", params={
+        "season": f"eq.{args.season}", "select": "player_id,source,fetched_at", "limit": 10000
+    })
+    documents = db.request("GET", "source_documents", params={
+        "select": "player_id,source,fetched_at", "limit": 10000
+    })
+    runs = db.request("GET", "sync_runs", params={
+        "season": f"eq.{args.season}", "select": "status,records_read,records_written,source_errors,started_at,finished_at",
+        "order": "started_at.desc", "limit": 1
+    })
+
+    def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        by_source: dict[str, set[str]] = {}
+        latest = None
+        for row in rows:
+            by_source.setdefault(row["source"], set()).add(row["player_id"])
+            latest = max(latest or row["fetched_at"], row["fetched_at"])
+        return {"players_by_source": {key: len(value) for key, value in sorted(by_source.items())},
+                "latest_fetched_at": latest}
+
+    report = {"season": args.season, "snapshots": summarize(snapshots), "rankings": summarize(rankings),
+              "documents": summarize(documents), "latest_run": runs[0] if runs else None}
+    print(json.dumps(report, indent=2, sort_keys=True))
+    if args.minimum_players and len({row["player_id"] for row in snapshots}) < args.minimum_players:
+        raise SystemExit(f"Coverage below minimum of {args.minimum_players} players")
 
 
 def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int | None, request_id: str | None = None):
@@ -330,6 +404,10 @@ def parser():
     global_sync.add_argument("--free-agents", type=int, default=300)
     global_sync.add_argument("--sources", action="store_true")
     global_sync.set_defaults(func=sync_global)
+    coverage = commands.add_parser("coverage-report")
+    coverage.add_argument("--season", type=int, required=True)
+    coverage.add_argument("--minimum-players", type=int, default=0)
+    coverage.set_defaults(func=coverage_report)
     league_sync = commands.add_parser("sync-league")
     league_sync.add_argument("--season", type=int, default=datetime.now().year)
     league_sync.add_argument("--week", type=int)

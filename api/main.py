@@ -268,10 +268,48 @@ async def team_roster(team_id: str, db: SupabaseREST = Depends(db_for)):
     return {"snapshot": snapshots[0], "players": roster}
 
 
+def source_freshness(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    summary: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        source = row["source"]
+        current = summary.setdefault(source, {"latest_fetched_at": None, "player_count": 0, "_players": set()})
+        current["latest_fetched_at"] = max(current["latest_fetched_at"] or row["fetched_at"], row["fetched_at"])
+        if row.get("player_id"):
+            current["_players"].add(row["player_id"])
+    for current in summary.values():
+        current["player_count"] = len(current.pop("_players"))
+    return summary
+
+
 @app.get("/v1/sync-status")
-async def sync_status(user: AuthenticatedUser = Depends(current_user), db: SupabaseREST = Depends(db_for)):
+async def sync_status(
+    season: int = Query(2026, ge=2000, le=2100),
+    user: AuthenticatedUser = Depends(current_user),
+    db: SupabaseREST = Depends(db_for),
+):
     requests, _ = await db.request("GET", "sync_requests", params={
         "requested_by": f"eq.{user.id}", "select": "*", "order": "requested_at.desc", "limit": 20
     })
-    runs, _ = await db.request("GET", "sync_runs", params={"select": "*", "order": "started_at.desc", "limit": 20})
-    return {"requests": requests, "runs": runs}
+    runs, _ = await db.request("GET", "sync_runs", params={
+        "season": f"eq.{season}", "select": "*", "order": "started_at.desc", "limit": 20
+    })
+    snapshots, _ = await db.request("GET", "player_snapshots", params={
+        "season": f"eq.{season}", "select": "player_id,source,fetched_at", "limit": 10000
+    })
+    rankings, _ = await db.request("GET", "player_rankings", params={
+        "season": f"eq.{season}", "select": "player_id,source,fetched_at", "limit": 10000
+    })
+    documents, _ = await db.request("GET", "source_documents", params={
+        "select": "player_id,source,fetched_at", "limit": 10000
+    })
+    return {
+        "season": season,
+        "requests": requests,
+        "runs": runs,
+        "latest_global_run": next((run for run in runs if run["kind"] == "global"), None),
+        "freshness": {
+            "snapshots": source_freshness(snapshots),
+            "rankings": source_freshness(rankings),
+            "documents": source_freshness(documents),
+        },
+    }
