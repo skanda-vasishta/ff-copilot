@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import Link from 'next/link'
 import { api, Player, Paginated, queryString } from '@/lib/api'
 
 const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']
@@ -34,7 +35,7 @@ export function PlayerDirectory() {
       <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
         <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]"><th className="px-5 py-4 sm:px-6">Player</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">Projection</th><th className="px-3 py-4 text-right">Median rank</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
         <tbody className="divide-y divide-white/[.055]">{players.data.items.map(player => <tr key={player.id} className="group transition hover:bg-white/[.025]">
-          <td className="px-5 py-4 sm:px-6"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white">{player.name}</span></div></td>
+          <td className="px-5 py-4 sm:px-6"><Link href={`/player-lookup/${player.id}`} className="focus-ring flex w-fit items-center gap-3 rounded-lg"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc] transition group-hover:bg-[#b7f34a]/10 group-hover:text-[#c8f775]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white transition group-hover:text-[#c8f775]">{player.name}</span><span className="text-[#4f5a54] transition group-hover:translate-x-0.5 group-hover:text-[#b7f34a]">→</span></Link></td>
           <td className="px-3 py-4"><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#9da7a2]'}`}>{player.position || '—'}</span></td><td className="px-3 py-4 font-mono text-xs text-[#9da7a2]">{player.nfl_team || 'FA'}</td>
           <td className="px-3 py-4 text-right font-mono font-medium text-white">{player.projected_total_points?.toFixed(1) ?? '—'}</td><td className="px-3 py-4 text-right"><span className="font-mono font-medium text-white">{player.median_rank?.toFixed(1) ?? '—'}</span>{player.source_count ? <span className="ml-1.5 text-[10px] text-[#65716b]">{player.source_count} src</span> : null}</td>
           <td className="px-3 py-4"><span className={`inline-flex items-center gap-1.5 text-xs ${player.injury_status ? 'text-amber-200' : 'text-[#78847e]'}`}><span className={`size-1.5 rounded-full ${player.injury_status ? 'bg-amber-300' : 'bg-[#4f5a54]'}`} />{player.injury_status || 'No designation'}</span></td><td className="px-5 py-4 text-right text-xs text-[#65716b] sm:px-6">{player.fetched_at ? new Date(player.fetched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Not synced'}</td>
