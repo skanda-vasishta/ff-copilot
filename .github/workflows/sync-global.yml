@@ -13,6 +13,10 @@ on:
         description: Scrape source documents
         type: boolean
         default: false
+      include_summaries:
+        description: Generate labeled cross-source player briefs
+        type: boolean
+        default: false
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -30,12 +34,15 @@ jobs:
           ESPN_SEED_LEAGUE_ID: ${{ secrets.ESPN_SEED_LEAGUE_ID }}
           REDDIT_CLIENT: ${{ secrets.REDDIT_CLIENT }}
           REDDIT_SECRET: ${{ secrets.REDDIT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           WEEK: ${{ inputs.week }}
           SOURCES: ${{ inputs.include_sources }}
+          SUMMARIES: ${{ inputs.include_summaries }}
         run: |
           args=(sync-global --season "${{ inputs.season }}")
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
           if [ "$SOURCES" = "true" ]; then args+=(--sources); fi
+          if [ "$SUMMARIES" = "true" ]; then args+=(--summaries); fi
           python -m ingestion.sync "${args[@]}"
       - name: Verify 2026 coverage
         if: ${{ inputs.season == '2026' }}

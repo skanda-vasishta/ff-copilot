@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { SyncOverview } from '@/components/features/sync/SyncOverview'
 
 export default async function HomePage() {
   const { data: { user } } = await (await createClient()).auth.getUser()
@@ -36,11 +35,9 @@ export default async function HomePage() {
         </div>
         <p className="mt-8 text-xs font-semibold uppercase tracking-[.18em] text-[#78847e]">League hub</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-[-.03em] text-white">Every team, one workspace</h2>
-        <p className="mt-3 max-w-md leading-6 text-[#8c9992]">Connect multiple public ESPN leagues and keep tabs on roster syncs in one place.</p>
+        <p className="mt-3 max-w-md leading-6 text-[#8c9992]">Connect multiple public ESPN leagues and keep every roster in one place.</p>
       </Link>
     </div>
-
-    <div className="mt-7"><SyncOverview /></div>
 
     <section className="mt-7 flex flex-col justify-between gap-4 rounded-2xl border border-dashed border-white/[.09] px-6 py-5 sm:flex-row sm:items-center">
       <div><p className="text-sm font-medium text-white">Built on source data, not invented metrics</p><p className="mt-1 text-sm text-[#78847e]">Rankings are always labeled by source and freshness.</p></div>

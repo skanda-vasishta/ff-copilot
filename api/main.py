@@ -203,25 +203,56 @@ async def my_leagues(user: AuthenticatedUser = Depends(current_user), db: Supaba
     data, _ = await db.request("GET", "user_leagues", params={
         "user_id": f"eq.{user.id}", "select": "created_at,league:leagues(*)", "order": "created_at.desc"
     })
-    return data
+    preparations, _ = await db.request("GET", "sync_requests", params={
+        "requested_by": f"eq.{user.id}", "kind": "eq.league",
+        "status": "in.(pending,running)", "select": "id,provider,external_id,season,requested_at,status",
+        "order": "requested_at.desc",
+    })
+    linked_keys = {
+        (row["league"]["provider"], row["league"]["external_id"], row["league"]["season"])
+        for row in data
+    }
+    available = [{**row, "state": "available"} for row in data]
+    being_prepared = [
+        {
+            "created_at": request["requested_at"],
+            "state": "being_prepared",
+            "league": {
+                "id": f"preparation:{request['id']}",
+                "provider": request["provider"],
+                "external_id": request["external_id"],
+                "season": request["season"],
+                "name": None,
+                "status": "being_prepared",
+                "last_synced_at": None,
+            },
+        }
+        for request in preparations
+        if (request["provider"], request["external_id"], request["season"]) not in linked_keys
+    ]
+    return available + being_prepared
 
 
 @app.post("/v1/me/leagues", status_code=201)
 async def link_league(link: LeagueLink, user: AuthenticatedUser = Depends(current_user), db: SupabaseREST = Depends(db_for)):
-    leagues, _ = await db.request("GET", "leagues", params={
-        "provider": f"eq.{link.provider}", "external_id": f"eq.{link.external_id}",
-        "season": f"eq.{link.season}", "select": "*"
+    leagues, _ = await db.request("POST", "rpc/link_existing_league", json={
+        "p_provider": link.provider, "p_external_id": link.external_id, "p_season": link.season
     })
     if leagues:
         league = leagues[0]
-        await db.request("POST", "user_leagues", json={"user_id": user.id, "league_id": league["id"]},
-                         prefer="resolution=ignore-duplicates,return=minimal")
-        return league
+        return {"state": "available", "league": league}
+    existing, _ = await db.request("GET", "sync_requests", params={
+        "requested_by": f"eq.{user.id}", "kind": "eq.league", "provider": f"eq.{link.provider}",
+        "external_id": f"eq.{link.external_id}", "season": f"eq.{link.season}",
+        "status": "in.(pending,running)", "select": "id", "limit": 1,
+    })
+    if existing:
+        return {"state": "being_prepared"}
     request_row, _ = await db.request("POST", "sync_requests", json={
         "requested_by": user.id, "kind": "league", "provider": link.provider,
         "external_id": link.external_id, "season": link.season, "status": "pending"
     }, prefer="return=representation")
-    return {"status": "pending", "sync_request": request_row[0]}
+    return {"state": "being_prepared", "preparation_id": request_row[0]["id"]}
 
 
 @app.delete("/v1/me/leagues/{league_id}", status_code=204)

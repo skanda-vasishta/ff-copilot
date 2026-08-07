@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,11 @@ def now() -> str:
 def digest(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def normalize_text(value: str) -> str:
+    lines = [re.sub(r"\s+", " ", line).strip() for line in value.replace("\r", "\n").split("\n")]
+    return "\n".join(line for line in lines if line).strip()
 
 
 def clean_number(value: Any) -> float | int | None:
@@ -67,7 +73,8 @@ class SupabaseAdmin:
     def request(self, method: str, table: str, *, params=None, data=None, prefer=None):
         headers = {"Prefer": prefer} if prefer else None
         response = self.client.request(method, f"{self.url}/{table}", params=params, json=data, headers=headers)
-        response.raise_for_status()
+        if response.is_error:
+            raise RuntimeError(f"Supabase {table} returned {response.status_code}: {response.text[:1000]}")
         return response.json() if response.content else None
 
     def insert(self, table: str, data: dict | list):
@@ -206,14 +213,53 @@ def reddit_documents(name: str) -> list[dict[str, Any]]:
     documents = []
     for post in reddit.subreddit("fantasyfootball").search(name, limit=3, sort="relevance", time_filter="month"):
         post.comments.replace_more(limit=0)
-        comments = "\n".join(comment.body for comment in post.comments.list()[:5])
+        comments = "\n".join(f"- {comment.body}" for comment in post.comments.list()[:5])
         documents.append({"source": "reddit", "external_document_id": post.id, "title": post.title,
-                          "content": f"{post.selftext}\n{comments}".strip(), "source_url": post.url})
+                          "content": normalize_text(f"Post\n{post.selftext}\n\nTop comments\n{comments}"),
+                          "source_url": f"https://www.reddit.com{post.permalink}",
+                          "published_at": datetime.fromtimestamp(post.created_utc, timezone.utc).isoformat(),
+                          "metadata": {"subreddit": str(post.subreddit), "score": post.score,
+                                       "comment_count": post.num_comments, "outbound_url": post.url}})
     return documents
 
 
-def insert_documents(db: SupabaseAdmin, player_id: str, external_id: str, name: str, fetched_at: str, run: Run):
+def summarize_documents(name: str, documents: list[dict[str, Any]], model: str) -> dict[str, Any]:
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+    context = "\n\n".join(
+        f"[{document['source'].upper()}]\n{document.get('title') or ''}\n{document['content'][:6000]}"
+        for document in documents
+    )[:18000]
+    response = httpx.post("https://api.openai.com/v1/responses", timeout=90, headers={
+        "Authorization": f"Bearer {key}", "Content-Type": "application/json"
+    }, json={
+        "model": model,
+        "instructions": (
+            "Create a concise fantasy-football player brief from only the supplied sources. "
+            "Separate consensus, disagreements, injury/role news, and uncertainty. Name the sources inline. "
+            "Do not invent recommendations, rankings, statistics, or current facts. Use plain text under 180 words."
+        ),
+        "input": f"Player: {name}\n\n{context}",
+        "max_output_tokens": 300,
+    })
+    response.raise_for_status()
+    payload = response.json()
+    content = normalize_text("\n".join(
+        item.get("text", "") for output in payload.get("output", [])
+        for item in output.get("content", []) if item.get("type") == "output_text"
+    ))
+    if not content:
+        raise RuntimeError("Summary model returned no text")
+    return {"source": "openai_summary", "title": f"Cross-source brief for {name}", "content": content,
+            "metadata": {"generated": True, "model": payload.get("model", model),
+                         "source_document_hashes": [digest(document["content"]) for document in documents]}}
+
+
+def collect_documents(player_id: str, external_id: str, name: str, fetched_at: str,
+                      include_summary: bool = False, summary_model: str = "gpt-5.4-nano"):
     providers = []
+    errors = []
     for source, loader in (("fantasypros", lambda: [dict(zip(("source_url", "content"), fantasypros_text(name)))]),
                            ("espn", lambda: [dict(zip(("source_url", "content"), espn_text(external_id, name)))]),
                            ("reddit", lambda: reddit_documents(name))):
@@ -221,13 +267,20 @@ def insert_documents(db: SupabaseAdmin, player_id: str, external_id: str, name: 
             for document in loader():
                 if not document.get("content"):
                     continue
+                document["content"] = normalize_text(document["content"])
+                document.setdefault("title", f"{source.title()} update for {name}")
                 providers.append({"player_id": player_id, "source": source, "fetched_at": fetched_at,
                                   "content_hash": digest(document.get("content", "")), **document})
         except Exception as exc:
-            run.error(f"{source}:{name}", exc)
-    if providers:
-        db.upsert("source_documents", providers, "player_id,source,content_hash")
-        run.written += len(providers)
+            errors.append((f"{source}:{name}", exc))
+    if include_summary and providers:
+        try:
+            summary = summarize_documents(name, providers, summary_model)
+            providers.append({"player_id": player_id, "fetched_at": fetched_at,
+                              "content_hash": digest(summary["content"]), **summary})
+        except Exception as exc:
+            errors.append((f"summary:{name}", exc))
+    return providers, errors
 
 
 def sync_global(args):
@@ -267,8 +320,40 @@ def sync_global(args):
         run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
 
         if args.sources:
-            for external_id, player in unique.items():
-                insert_documents(db, resolved[external_id], external_id, player.name, fetched_at, run)
+            document_buffer: list[dict[str, Any]] = []
+
+            def flush_documents():
+                while document_buffer:
+                    batch = document_buffer[:20]
+                    del document_buffer[:20]
+                    try:
+                        db.upsert("source_documents", batch, "player_id,source,content_hash")
+                        run.written += len(batch)
+                    except Exception:
+                        for document in batch:
+                            try:
+                                db.upsert("source_documents", document, "player_id,source,content_hash")
+                                run.written += 1
+                            except Exception as row_exc:
+                                run.error(f"source_documents:{document['source']}:{document['player_id']}", row_exc)
+
+            with ThreadPoolExecutor(max_workers=args.source_workers) as pool:
+                futures = {
+                    pool.submit(collect_documents, resolved[external_id], external_id, player.name, fetched_at,
+                                args.summaries, args.summary_model): player.name
+                    for external_id, player in unique.items()
+                }
+                for future in as_completed(futures):
+                    try:
+                        collected, errors = future.result()
+                        document_buffer.extend(collected)
+                        for source, exc in errors:
+                            run.error(source, exc)
+                        if len(document_buffer) >= 20:
+                            flush_documents()
+                    except Exception as exc:
+                        run.error(f"sources:{futures[future]}", exc)
+            flush_documents()
 
 
 def coverage_report(args):
@@ -304,9 +389,9 @@ def coverage_report(args):
 
 
 def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int | None, request_id: str | None = None):
-    league_data = League(league_id=int(external_id), year=season)
-    fetched_at = now()
     with Run(db, "league", season, week, request_id) as run:
+        league_data = League(league_id=int(external_id), year=season)
+        fetched_at = now()
         league = db.upsert("leagues", {"provider": "espn", "external_id": external_id, "season": season,
             "name": getattr(league_data.settings, "name", None), "status": "succeeded", "last_synced_at": fetched_at},
             "provider,external_id,season")[0]
@@ -338,11 +423,27 @@ def sync_league(args):
     if args.pending:
         requests = db.request("GET", "sync_requests", params={"status": "eq.pending", "kind": "eq.league",
             "select": "*", "order": "requested_at.asc"})
+        grouped: dict[tuple[str, str, int, int | None], list[dict[str, Any]]] = {}
         for request in requests:
+            grouped.setdefault((request["provider"], request["external_id"], request["season"], request.get("week")), []).append(request)
+        for (_provider, external_id, season, week), group in grouped.items():
+            primary = group[0]
             try:
-                sync_one_league(db, request["external_id"], request["season"], request.get("week"), request["id"])
+                sync_one_league(db, external_id, season, week, primary["id"])
+                leagues = db.select("leagues", provider="espn", external_id=external_id, season=season)
+                for duplicate in group[1:]:
+                    if leagues and duplicate.get("requested_by"):
+                        db.upsert("user_leagues", {"user_id": duplicate["requested_by"], "league_id": leagues[0]["id"]},
+                                  "user_id,league_id")
+                    db.patch("sync_requests", {"id": duplicate["id"]}, {
+                        "status": "succeeded", "completed_at": now(), "error": None
+                    })
             except Exception as exc:
-                print(f"Failed request {request['id']}: {exc}", file=sys.stderr)
+                for duplicate in group[1:]:
+                    db.patch("sync_requests", {"id": duplicate["id"]}, {
+                        "status": "failed", "completed_at": now(), "error": str(exc)
+                    })
+                print(f"Failed request group {primary['id']}: {exc}", file=sys.stderr)
     elif args.league_id:
         sync_one_league(db, args.league_id, args.season, args.week)
     else:
@@ -403,6 +504,9 @@ def parser():
     global_sync.add_argument("--league-id", default=os.getenv("ESPN_SEED_LEAGUE_ID"), required=not bool(os.getenv("ESPN_SEED_LEAGUE_ID")))
     global_sync.add_argument("--free-agents", type=int, default=300)
     global_sync.add_argument("--sources", action="store_true")
+    global_sync.add_argument("--source-workers", type=int, default=6)
+    global_sync.add_argument("--summaries", action="store_true")
+    global_sync.add_argument("--summary-model", default=os.getenv("OPENAI_SUMMARY_MODEL", "gpt-5.4-nano"))
     global_sync.set_defaults(func=sync_global)
     coverage = commands.add_parser("coverage-report")
     coverage.add_argument("--season", type=int, required=True)
