@@ -506,10 +506,10 @@ export function DraftRoom() {
                         </button>
                         {player.injury_status &&
                           player.injury_status.toUpperCase() !== "ACTIVE" && (
-                          <span className="ml-2 text-[9px] text-amber-300">
-                            {player.injury_status}
-                          </span>
-                        )}
+                            <span className="ml-2 text-[9px] text-amber-300">
+                              {player.injury_status}
+                            </span>
+                          )}
                       </td>
                       <td
                         className={`font-mono text-xs ${posTone[player.position || ""] || "text-[#8c9992]"}`}
@@ -835,29 +835,47 @@ function PlayerModal({
               </div>
               <div className="mt-3 space-y-2">
                 {sourceItems.map((item) => (
-                  <div
+                  <details
                     key={item.id}
-                    className="rounded-xl border border-white/[.07] bg-black/15 p-3"
+                    className="group rounded-xl border border-white/[.07] bg-black/15"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#b7f34a]">
-                        {item.source}
+                    <summary className="focus-ring cursor-pointer list-none rounded-xl p-3">
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#b7f34a]">
+                          {item.source}
+                        </span>
+                        <span className="text-xs text-[#65716b] transition group-open:rotate-45 group-open:text-[#b7f34a]">
+                          +
+                        </span>
+                      </span>
+                      <span className="mt-2 line-clamp-2 block text-xs leading-5 text-[#aab4af] group-open:hidden">
+                        {item.title || item.content}
+                      </span>
+                      <span className="mt-2 block text-[9px] font-semibold uppercase tracking-wider text-[#65716b] group-open:hidden">
+                        Read full note
+                      </span>
+                    </summary>
+                    <div className="border-t border-white/[.07] px-3 pb-4 pt-3">
+                      {item.title && (
+                        <p className="text-xs font-semibold leading-5 text-white">
+                          {item.title}
+                        </p>
+                      )}
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[#aab4af]">
+                        {item.content}
                       </p>
                       {item.source_url && (
                         <a
                           href={item.source_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-[10px] text-[#78847e] hover:text-white"
+                          className="focus-ring mt-3 inline-flex rounded text-[10px] font-semibold text-[#b7f34a] hover:underline"
                         >
                           Original ↗
                         </a>
                       )}
                     </div>
-                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-[#aab4af]">
-                      {item.title || item.content}
-                    </p>
-                  </div>
+                  </details>
                 ))}
                 {!sourceItems.length && (
                   <p className="rounded-xl border border-dashed border-white/[.08] p-5 text-xs text-[#65716b]">
