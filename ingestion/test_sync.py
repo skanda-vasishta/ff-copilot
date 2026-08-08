@@ -29,6 +29,7 @@ def test_global_parser_is_2026_ready(monkeypatch):
     monkeypatch.setenv("ESPN_SEED_LEAGUE_ID", "123456")
     args = parser().parse_args(["sync-global", "--season", "2026", "--league-id", "123456"])
     assert args.season == 2026
+    assert args.free_agents == 2000
     assert args.sources is False
 
 

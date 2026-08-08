@@ -19,6 +19,8 @@ from espn_api.football import League
 
 load_dotenv()
 
+FANTASY_POSITIONS = frozenset({"QB", "RB", "WR", "TE"})
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -288,8 +290,13 @@ def sync_global(args):
     with Run(db, "global", args.season, args.week) as run:
         league = League(league_id=int(args.league_id), year=args.season)
         fetched_at = now()
-        unique = {str(player.playerId): player for team in league.teams for player in team.roster}
-        unique.update({str(player.playerId): player for player in league.free_agents(size=args.free_agents)})
+        candidates = [player for team in league.teams for player in team.roster]
+        candidates.extend(league.free_agents(size=args.free_agents))
+        unique = {
+            str(player.playerId): player
+            for player in candidates
+            if getattr(player, "position", None) in FANTASY_POSITIONS
+        }
         run.read = len(unique)
         external_rows = db.request("GET", "player_external_ids", params={
             "provider": "eq.espn", "select": "external_id,player_id", "limit": 1000
@@ -502,7 +509,12 @@ def parser():
     global_sync.add_argument("--season", type=int, required=True)
     global_sync.add_argument("--week", type=int)
     global_sync.add_argument("--league-id", default=os.getenv("ESPN_SEED_LEAGUE_ID"), required=not bool(os.getenv("ESPN_SEED_LEAGUE_ID")))
-    global_sync.add_argument("--free-agents", type=int, default=300)
+    global_sync.add_argument(
+        "--free-agents",
+        type=int,
+        default=2000,
+        help="Maximum ESPN free-agent pool to request before filtering to QB/RB/WR/TE (default: 2000)",
+    )
     global_sync.add_argument("--sources", action="store_true")
     global_sync.add_argument("--source-workers", type=int, default=6)
     global_sync.add_argument("--summaries", action="store_true")
