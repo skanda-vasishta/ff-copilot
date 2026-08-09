@@ -43,9 +43,10 @@ type PlayerDetail = {
   sources: SourceDocument[];
 };
 type BridgePick = {
-  playerId: number;
+  playerId?: number | null;
+  playerName?: string | null;
   teamId: number | null;
-  overallPickNumber: number;
+  overallPickNumber?: number | null;
   roundId: number | null;
   roundPickNumber: number | null;
   capturedAt: string;
@@ -76,6 +77,14 @@ function initials(name: string) {
     .map((part) => part[0])
     .slice(0, 2)
     .join("");
+}
+
+function normalizePlayerName(name: string) {
+  return name
+    .normalize("NFKD")
+    .replace(/[’']/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
 }
 
 export function DraftRoom() {
@@ -206,18 +215,36 @@ export function DraftRoom() {
       ),
     [pool.data],
   );
+  const playerByName = useMemo(
+    () =>
+      new Map(
+        (pool.data?.items || []).map((player) => [
+          normalizePlayerName(player.name),
+          player,
+        ]),
+      ),
+    [pool.data],
+  );
   const picks = useMemo(() => {
     const merged = [...(payload?.draftDetail.picks || [])].sort(
       (a, b) => a.overallPickNumber - b.overallPickNumber,
     );
     for (const live of bridge.picks) {
-      const index = merged.findIndex(
-        (pick) => pick.overallPickNumber === live.overallPickNumber,
+      const index = merged.findIndex((pick) =>
+        live.overallPickNumber
+          ? pick.overallPickNumber === live.overallPickNumber
+          : pick.roundId === live.roundId &&
+            pick.roundPickNumber === live.roundPickNumber,
       );
       if (index < 0) continue;
+      const resolved = live.playerName
+        ? playerByName.get(normalizePlayerName(live.playerName))
+        : null;
+      const playerId = live.playerId || Number(resolved?.espn_id);
+      if (!playerId) continue;
       merged[index] = {
         ...merged[index],
-        playerId: live.playerId,
+        playerId,
         teamId: live.teamId || merged[index].teamId,
         roundId: live.roundId || merged[index].roundId,
         roundPickNumber:
@@ -225,7 +252,7 @@ export function DraftRoom() {
       };
     }
     return merged;
-  }, [payload, bridge.picks]);
+  }, [payload, bridge.picks, playerByName]);
   const completed = useMemo(
     () => picks.filter((pick) => pick.playerId > 0),
     [picks],

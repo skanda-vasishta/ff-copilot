@@ -22,8 +22,33 @@ async function persist(state) {
 function mergePick(session, pick) {
   const key = pick.overallPickNumber
     ? `overall:${pick.overallPickNumber}`
+    : pick.roundId && pick.roundPickNumber
+      ? `round:${pick.roundId}:${pick.roundPickNumber}`
     : `player:${pick.playerId}`;
   session.picks[key] = { ...session.picks[key], ...pick };
+}
+
+async function acceptDomSnapshot(payload) {
+  const state = await statePromise;
+  const leagueId = String(payload.leagueId || "unknown");
+  const session = (state.sessions[leagueId] ||= {
+    leagueId: leagueId === "unknown" ? null : leagueId,
+    picks: {},
+    diagnostics: [],
+    connected: true,
+  });
+  session.connected = true;
+  session.pageUrl = payload.pageUrl;
+  session.lastFrameAt = payload.capturedAt;
+  session.transport = "dom";
+  for (const pick of payload.picks || []) mergePick(session, pick);
+  session.diagnostics.unshift({
+    capturedAt: payload.capturedAt,
+    direction: "dom",
+    parsedPicks: payload.picks?.length || 0,
+  });
+  session.diagnostics = session.diagnostics.slice(0, MAX_DIAGNOSTICS);
+  await persist(state);
 }
 
 async function acceptFrame(payload) {
@@ -96,6 +121,10 @@ async function getState(leagueId) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "FF_COPILOT_ESPN_FRAME") {
     acceptFrame(message.payload).catch(() => undefined);
+    return;
+  }
+  if (message?.type === "FF_COPILOT_ESPN_DOM_SNAPSHOT") {
+    acceptDomSnapshot(message.payload).catch(() => undefined);
     return;
   }
   if (message?.type === "FF_COPILOT_GET_DRAFT_STATE") {

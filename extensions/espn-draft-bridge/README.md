@@ -1,7 +1,8 @@
 # FF Copilot ESPN Draft Bridge
 
 This Manifest V3 extension captures the ESPN draft room's incoming WebSocket
-frames and makes normalized draft picks available to an open FF Copilot tab.
+frames and reconciles them against its visible Pick History. Normalized draft
+picks are then made available to an open FF Copilot tab.
 It does not read or transmit ESPN cookies, passwords, or account tokens.
 
 ## Install for development
@@ -21,6 +22,7 @@ captured board once per second and merges it over ESPN's public league snapshot.
 node extensions/espn-draft-bridge/parser.test.cjs
 ```
 
-ESPN's protocol is undocumented. Recent frame diagnostics remain inside
+ESPN's protocol is undocumented and may run inside a worker. The visible Pick
+History is therefore the authoritative fallback. Recent diagnostics remain inside
 `chrome.storage.local` to make upstream message-shape changes diagnosable; raw
 frame contents are not retained.
