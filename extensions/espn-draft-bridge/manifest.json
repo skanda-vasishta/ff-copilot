@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "FF Copilot ESPN Draft Bridge",
+  "version": "0.1.0",
+  "description": "Relays live ESPN draft picks from the active draft room to FF Copilot.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://fantasy.espn.com/*",
+    "https://*.fantasy.espn.com/*",
+    "https://ff-copilot.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://fantasy.espn.com/*",
+        "https://*.fantasy.espn.com/*"
+      ],
+      "js": ["espn-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://fantasy.espn.com/*",
+        "https://*.fantasy.espn.com/*"
+      ],
+      "js": ["espn-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://ff-copilot.vercel.app/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["app-bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [],
+  "action": {
+    "default_title": "FF Copilot ESPN Draft Bridge"
+  }
+}

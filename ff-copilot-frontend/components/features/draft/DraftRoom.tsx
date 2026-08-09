@@ -42,6 +42,22 @@ type PlayerDetail = {
   rankings: RankingResponse;
   sources: SourceDocument[];
 };
+type BridgePick = {
+  playerId: number;
+  teamId: number | null;
+  overallPickNumber: number;
+  roundId: number | null;
+  roundPickNumber: number | null;
+  capturedAt: string;
+};
+type BridgeState = {
+  installed: boolean;
+  connected: boolean;
+  matched?: boolean;
+  leagueId?: string | null;
+  lastFrameAt?: string | null;
+  picks: BridgePick[];
+};
 
 const STORAGE_KEY = "ff-copilot:draft-room";
 const positions = ["ALL", "QB", "RB", "WR", "TE", "K", "D/ST"];
@@ -78,6 +94,11 @@ export function DraftRoom() {
   const [selectedPlayer, setSelectedPlayer] = useState<DraftPlayer | null>(
     null,
   );
+  const [bridge, setBridge] = useState<BridgeState>({
+    installed: false,
+    connected: false,
+    picks: [],
+  });
   const payloadRef = useRef<EspnDraftPayload | null>(null);
 
   useEffect(() => {
@@ -97,6 +118,28 @@ export function DraftRoom() {
     const savedTeamId = saved ? Number(saved) : null;
     setMyTeamId(savedTeamId);
     if (savedTeamId) setTeamId(savedTeamId);
+  }, [config]);
+
+  useEffect(() => {
+    if (!config) return;
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<BridgeState>).detail;
+      if (!detail?.installed || !Array.isArray(detail.picks)) return;
+      setBridge(detail);
+    };
+    const request = () =>
+      window.dispatchEvent(
+        new CustomEvent("ff-copilot:draft-bridge-request", {
+          detail: { leagueId: config.leagueId, season: config.season },
+        }),
+      );
+    window.addEventListener("ff-copilot:draft-bridge-state", receive);
+    request();
+    const timer = window.setInterval(request, 1000);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("ff-copilot:draft-bridge-state", receive);
+    };
   }, [config]);
 
   const pool = useQuery({
@@ -163,13 +206,26 @@ export function DraftRoom() {
       ),
     [pool.data],
   );
-  const picks = useMemo(
-    () =>
-      [...(payload?.draftDetail.picks || [])].sort(
-        (a, b) => a.overallPickNumber - b.overallPickNumber,
-      ),
-    [payload],
-  );
+  const picks = useMemo(() => {
+    const merged = [...(payload?.draftDetail.picks || [])].sort(
+      (a, b) => a.overallPickNumber - b.overallPickNumber,
+    );
+    for (const live of bridge.picks) {
+      const index = merged.findIndex(
+        (pick) => pick.overallPickNumber === live.overallPickNumber,
+      );
+      if (index < 0) continue;
+      merged[index] = {
+        ...merged[index],
+        playerId: live.playerId,
+        teamId: live.teamId || merged[index].teamId,
+        roundId: live.roundId || merged[index].roundId,
+        roundPickNumber:
+          live.roundPickNumber || merged[index].roundPickNumber,
+      };
+    }
+    return merged;
+  }, [payload, bridge.picks]);
   const completed = useMemo(
     () => picks.filter((pick) => pick.playerId > 0),
     [picks],
@@ -293,8 +349,8 @@ export function DraftRoom() {
             </p>
           )}
           <p className="mt-4 text-xs text-[#637069]">
-            The league must be public. No ESPN password or account connection is
-            required.
+            The league must be public. Live picks require the FF Copilot bridge
+            and an open ESPN draft tab; ESPN credentials never enter this app.
           </p>
         </div>
       </section>
@@ -313,6 +369,15 @@ export function DraftRoom() {
               <p className="font-mono text-[10px] uppercase tracking-[.22em] text-[#78847e]">
                 ESPN feed · {feedError ? "reconnecting" : "connected"}
               </p>
+              <span
+                className={`rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-[.14em] ${bridge.connected ? "border-cyan-300/30 bg-cyan-300/[.07] text-cyan-200" : "border-white/[.08] text-[#65716b]"}`}
+              >
+                {bridge.connected
+                  ? `Live bridge · ${bridge.picks.length} picks`
+                  : bridge.installed
+                    ? "Bridge waiting for ESPN"
+                    : "Live bridge not installed"}
+              </span>
             </div>
             <h1 className="mt-3 text-3xl font-black uppercase tracking-[-.035em] text-white">
               {payload?.settings.name || `League ${config.leagueId}`}
@@ -362,6 +427,28 @@ export function DraftRoom() {
           </p>
         )}
       </header>
+
+      {status === "live" && !bridge.connected ? (
+        <div className="flex flex-col justify-between gap-3 rounded-xl border border-amber-300/20 bg-amber-300/[.055] px-4 py-3 sm:flex-row sm:items-center">
+          <div>
+            <strong className="text-sm text-amber-100">
+              ESPN&apos;s public feed does not publish live picks.
+            </strong>
+            <p className="mt-1 text-xs text-[#a99f82]">
+              Load the FF Copilot ESPN Draft Bridge, then reload and keep your
+              ESPN draft tab open.
+            </p>
+          </div>
+          <a
+            href="https://github.com/skanda-vasishta/ff-copilot/tree/main/extensions/espn-draft-bridge"
+            target="_blank"
+            rel="noreferrer"
+            className="focus-ring shrink-0 rounded-lg border border-amber-200/20 px-3 py-2 text-center text-xs font-bold text-amber-100 hover:bg-amber-200/10"
+          >
+            Bridge setup →
+          </a>
+        </div>
+      ) : null}
 
       {status === "scheduled" && myTeamId == null && payload?.teams.length ? (
         <button

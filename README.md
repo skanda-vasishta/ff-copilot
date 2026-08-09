@@ -12,6 +12,14 @@ FF Copilot is an authenticated fantasy-football data workspace. Supabase owns fa
 
 Legacy CSVs remain under `data/` only as rollback/import inputs. They are not used by the running app.
 
+## Live ESPN drafts
+
+ESPN's public `mDraftDetail` response supplies league settings and the draft
+order, but does not publish picks while a mock draft is running. Install the
+Manifest V3 bridge under `extensions/espn-draft-bridge` to relay the active ESPN
+draft room's WebSocket picks into FF Copilot. The bridge keeps ESPN credentials
+inside ESPN and stores only normalized picks plus non-content diagnostics.
+
 ## Bootstrap Supabase
 
 1. Create a Supabase project and run `supabase/migrations/0001_foundation.sql` in the SQL editor.
