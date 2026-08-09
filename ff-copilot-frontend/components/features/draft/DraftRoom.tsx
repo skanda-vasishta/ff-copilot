@@ -6,7 +6,6 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api, Player } from "@/lib/api";
 import {
   draftStatus,
-  espnDraftUrl,
   EspnDraftPayload,
   parseEspnLeagueInput,
 } from "@/lib/espn-draft";
@@ -79,7 +78,7 @@ export function DraftRoom() {
   const [selectedPlayer, setSelectedPlayer] = useState<DraftPlayer | null>(
     null,
   );
-  const etag = useRef<string | null>(null);
+  const payloadRef = useRef<EspnDraftPayload | null>(null);
 
   useEffect(() => {
     try {
@@ -113,28 +112,26 @@ export function DraftRoom() {
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const response = await fetch(
-          espnDraftUrl(config.leagueId, config.season),
-          {
-            headers: etag.current
-              ? { "If-None-Match": etag.current }
-              : undefined,
-          },
-        );
-        if (response.status !== 304) {
-          if (!response.ok)
-            throw new Error(
-              response.status === 404
-                ? "League not found. Confirm it is public and the season is correct."
-                : `ESPN returned ${response.status}.`,
-            );
-          etag.current = response.headers.get("etag");
-          const next = (await response.json()) as EspnDraftPayload;
-          if (!stopped) {
-            setPayload(next);
-            setFeedError("");
-            setTeamId((current) => current ?? next.teams[0]?.id ?? null);
-          }
+        const params = new URLSearchParams({
+          leagueId: config.leagueId,
+          season: String(config.season),
+          poll: String(Date.now()),
+        });
+        const response = await fetch(`/api/espn/draft?${params}`, {
+          cache: "no-store",
+        });
+        if (!response.ok)
+          throw new Error(
+            response.status === 404
+              ? "League not found. Confirm it is public and the season is correct."
+              : `ESPN returned ${response.status}.`,
+          );
+        const next = (await response.json()) as EspnDraftPayload;
+        if (!stopped) {
+          payloadRef.current = next;
+          setPayload(next);
+          setFeedError("");
+          setTeamId((current) => current ?? next.teams[0]?.id ?? null);
         }
         if (!stopped) setLastChecked(new Date());
       } catch (error) {
@@ -146,7 +143,7 @@ export function DraftRoom() {
         if (!stopped)
           timer = setTimeout(
             poll,
-            payload?.draftDetail.inProgress ? 2000 : 5000,
+            payloadRef.current?.draftDetail.inProgress ? 2000 : 5000,
           );
       }
     };
@@ -155,7 +152,7 @@ export function DraftRoom() {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [config, payload?.draftDetail.inProgress]);
+  }, [config]);
 
   const playerByEspnId = useMemo(
     () =>
@@ -222,7 +219,7 @@ export function DraftRoom() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     setPayload(null);
     setFeedError("");
-    etag.current = null;
+    payloadRef.current = null;
     setConfig(next);
   }
   function reset() {
@@ -230,7 +227,7 @@ export function DraftRoom() {
     setConfig(null);
     setPayload(null);
     setFeedError("");
-    etag.current = null;
+    payloadRef.current = null;
   }
   function saveMyTeam(nextTeamId: number | null) {
     if (!config) return;
