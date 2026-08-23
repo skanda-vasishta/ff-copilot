@@ -89,5 +89,14 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
     const roster = await api<{ snapshot: Record<string, unknown> | null; players: unknown[] }>(`/v1/teams/${teamId}/roster`);
     return { team, snapshot: roster.snapshot, players: roster.players };
   }
+  if (call.name === "get_league_free_agents") {
+    if (!thread.league_id) return { error: "No league is attached to this conversation." };
+    return api(`/v1/leagues/${thread.league_id}/free-agents?${queryString({
+      season,
+      position: typeof input.position === "string" ? input.position : undefined,
+      limit: Math.min(Number(input.limit) || 25, 50),
+      sort: typeof input.sort === "string" ? input.sort : "median_rank",
+    })}`);
+  }
   throw new Error(`Unknown tool: ${call.name}`);
 }

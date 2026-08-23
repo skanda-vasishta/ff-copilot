@@ -44,6 +44,14 @@ export const TOOL_REGISTRY = {
     description: "Retrieve the latest stored roster for one other team in this conversation's league. The server verifies that the requested team belongs to the thread's locked league.",
     schema: z.object({ team_id: z.uuid().describe("Fantasy team UUID returned by get_league_standings") }).strict(),
   },
+  get_league_free_agents: {
+    description: "Retrieve players who are absent from every team's latest stored roster in this conversation's ESPN league. Use this for waiver, add/drop, and best-available-player questions. Results include projections, injuries, ranking summaries, and the roster snapshot timestamp that availability is based on; never infer league availability from search_players.",
+    schema: z.object({
+      position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional position filter"),
+      limit: z.number().int().min(1).max(50).optional().describe("Maximum results; defaults to 25"),
+      sort: z.enum(["median_rank", "average_rank", "projected_total_points", "name"]).optional().describe("How to order available players; defaults to best median rank"),
+    }).strict(),
+  },
 } as const;
 
 export type ToolName = keyof typeof TOOL_REGISTRY;

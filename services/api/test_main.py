@@ -66,6 +66,42 @@ def test_draft_pool_includes_espn_ids():
         app.dependency_overrides.clear()
 
 
+class FreeAgentDB:
+    async def request(self, method, table, **kwargs):
+        assert method == "GET"
+        rows = {
+            "fantasy_teams": [{"id": "team-1"}, {"id": "team-2"}],
+            "roster_snapshots": [
+                {"id": "new-1", "team_id": "team-1", "fetched_at": "2026-08-23T12:00:00Z"},
+                {"id": "old-1", "team_id": "team-1", "fetched_at": "2026-08-20T12:00:00Z"},
+                {"id": "new-2", "team_id": "team-2", "fetched_at": "2026-08-23T13:00:00Z"},
+            ],
+            "roster_players": [{"player_id": "rostered"}],
+            "player_directory": [
+                {"id": "rostered", "name": "Rostered Player", "median_rank": 1},
+                {"id": "available", "name": "Available Player", "median_rank": 2},
+            ],
+        }
+        if table == "roster_players":
+            assert kwargs["params"]["roster_snapshot_id"] == "in.(new-1,new-2)"
+        return rows[table], {}
+
+
+def test_league_free_agents_exclude_players_on_latest_rosters():
+    app.dependency_overrides[db_for] = lambda: FreeAgentDB()
+    try:
+        response = client.get("/v1/leagues/league-1/free-agents?season=2026")
+        assert response.status_code == 200
+        body = response.json()
+        assert [player["id"] for player in body["items"]] == ["available"]
+        assert body["rostered_player_count"] == 1
+        assert body["roster_snapshots_found"] == 2
+        assert body["league_team_count"] == 2
+        assert body["availability_as_of"] == "2026-08-23T13:00:00Z"
+    finally:
+        app.dependency_overrides.clear()
+
+
 class PlayerDetailDB:
     async def request(self, method, table, **kwargs):
         rows = {

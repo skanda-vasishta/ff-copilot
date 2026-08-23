@@ -349,6 +349,59 @@ async def league_seasons(league_id: str, db: SupabaseREST = Depends(db_for)):
     return sorted(data, key=lambda league: league["season"], reverse=True)
 
 
+@app.get("/v1/leagues/{league_id}/free-agents")
+async def league_free_agents(
+    league_id: str,
+    season: int = Query(2026, ge=2000, le=2100),
+    position: Literal["QB", "RB", "WR", "TE"] | None = None,
+    limit: int = Query(25, ge=1, le=100),
+    sort: Literal["median_rank", "average_rank", "projected_total_points", "name"] = "median_rank",
+    db: SupabaseREST = Depends(db_for),
+):
+    teams, _ = await db.request("GET", "fantasy_teams", params={
+        "league_id": f"eq.{league_id}", "select": "id", "order": "id.asc"
+    })
+    if not teams:
+        raise HTTPException(status_code=404, detail="League not found or unavailable")
+
+    team_ids = [team["id"] for team in teams]
+    snapshots, _ = await db.request("GET", "roster_snapshots", params={
+        "team_id": f"in.({','.join(team_ids)})", "season": f"eq.{season}",
+        "select": "id,team_id,fetched_at", "order": "fetched_at.desc", "limit": 1000,
+    })
+    latest_by_team: dict[str, dict[str, Any]] = {}
+    for snapshot in snapshots:
+        latest_by_team.setdefault(snapshot["team_id"], snapshot)
+
+    rostered_ids: set[str] = set()
+    latest_snapshots = list(latest_by_team.values())
+    if latest_snapshots:
+        snapshot_ids = [snapshot["id"] for snapshot in latest_snapshots]
+        roster_rows, _ = await db.request("GET", "roster_players", params={
+            "roster_snapshot_id": f"in.({','.join(snapshot_ids)})", "select": "player_id", "limit": 2000,
+        })
+        rostered_ids = {row["player_id"] for row in roster_rows}
+
+    directory_params: dict[str, Any] = {
+        "season": f"eq.{season}", "select": "*", "limit": 1000,
+        "order": f"{sort}.asc.nullslast",
+    }
+    if position:
+        directory_params["position"] = f"eq.{position}"
+    players, _ = await db.request("GET", "player_directory", params=directory_params)
+    available = [player for player in players if player["id"] not in rostered_ids][:limit]
+    refreshed_at = max((snapshot["fetched_at"] for snapshot in latest_snapshots), default=None)
+    return {
+        "items": available,
+        "season": season,
+        "league_id": league_id,
+        "rostered_player_count": len(rostered_ids),
+        "roster_snapshots_found": len(latest_snapshots),
+        "league_team_count": len(teams),
+        "availability_as_of": refreshed_at,
+    }
+
+
 @app.get("/v1/teams/{team_id}/roster")
 async def team_roster(team_id: str, db: SupabaseREST = Depends(db_for)):
     snapshots, _ = await db.request("GET", "roster_snapshots", params={
