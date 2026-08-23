@@ -11,7 +11,7 @@ export async function runAgentLoop(options: {
 }) {
   const seen = new Map<string, number>();
   let events = [options.initialEvent];
-  for (let step = 0; step < 8; step += 1) {
+  for (let step = 0; step < 5; step += 1) {
     options.onStatus("responding");
     const response = await requestModelStep(options.thread.id, events, options.signal);
     options.onMessage(response.message);

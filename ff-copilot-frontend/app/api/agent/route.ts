@@ -96,6 +96,22 @@ export async function POST(request: Request) {
   if (messagesError) return NextResponse.json({ error: "Could not load thread" }, { status: 500 });
   if (!messages?.length) return NextResponse.json({ error: "The thread has no messages" }, { status: 400 });
 
+  const serializedContextSize = JSON.stringify(messages).length;
+  if (serializedContextSize > 150_000) {
+    return NextResponse.json({ error: "This conversation is too long. Start a new conversation to continue." }, { status: 413 });
+  }
+
+  const { error: quotaError } = await supabase.rpc("consume_agent_quota");
+  if (quotaError) {
+    const quotaMessages: Record<string, string> = {
+      agent_rate_limit: "You're sending requests too quickly. Wait a second and try again.",
+      agent_user_daily_limit: "You've reached today's Copilot usage limit. It resets at 00:00 UTC.",
+      agent_global_daily_limit: "FF Copilot has reached its daily inference limit. It resets at 00:00 UTC.",
+    };
+    const key = Object.keys(quotaMessages).find((candidate) => quotaError.message.includes(candidate));
+    return NextResponse.json({ error: key ? quotaMessages[key] : "Copilot usage is temporarily limited." }, { status: 429 });
+  }
+
   const team = thread.team as unknown as { name?: string; league?: { name?: string; season?: number } } | null;
   const context = team
     ? `\n\nConversation context: the user's selected fantasy team is ${team.name || "unnamed"} in ${team.league?.name || "their selected league"} for the ${team.league?.season || 2026} season. Use get_my_team when roster details are relevant.`
@@ -114,6 +130,7 @@ export async function POST(request: Request) {
       ],
       tools: [...AGENT_TOOLS] as OpenAI.Chat.Completions.ChatCompletionTool[],
       tool_choice: "auto",
+      max_completion_tokens: 700,
     });
     const answer = completion.choices[0]?.message;
     if (!answer) throw new Error("The model returned no response");
