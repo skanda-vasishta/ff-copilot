@@ -11,8 +11,9 @@ export type ToolResultPart = {
   name: string;
   output: unknown;
 };
+export type ProviderStatePart = { type: "provider-state"; item: unknown };
 
-export type MessagePart = TextPart | ToolCallPart | ToolResultPart;
+export type MessagePart = TextPart | ToolCallPart | ToolResultPart | ProviderStatePart;
 
 export type AgentMessage = {
   id: number;

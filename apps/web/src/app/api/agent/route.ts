@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AGENT_TOOLS, IN_SEASON_SYSTEM_PROMPT, validateToolInput } from "@/features/copilot/harness";
-import type { AgentEvent, AgentMessage, MessagePart, ToolCallPart } from "@ff-copilot/agent-runtime";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type { AgentEvent, AgentMessage, MessagePart } from "@ff-copilot/agent-runtime";
 import { ensureThreadContext, THREAD_CONTEXT_SELECT, type ContextThread } from "@/features/copilot/server/context";
 import { completeAgentStep } from "@/features/copilot/server/model-provider";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
@@ -10,45 +9,6 @@ import { resolveAgentModelSettings } from "@/features/copilot/server/model-acces
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-function text(parts: MessagePart[]) {
-  return parts.filter((part) => part.type === "text").map((part) => part.text).join("\n");
-}
-
-function toModelMessages(messages: AgentMessage[]): ChatCompletionMessageParam[] {
-  const output: ChatCompletionMessageParam[] = [];
-  for (const message of messages) {
-    if (message.role === "user") {
-      output.push({ role: "user", content: text(message.parts) });
-      continue;
-    }
-    if (message.role === "assistant") {
-      const calls = message.parts.filter((part): part is ToolCallPart => part.type === "tool-call");
-      output.push({
-        role: "assistant",
-        content: text(message.parts) || null,
-        ...(calls.length ? {
-          tool_calls: calls.map((call) => ({
-            id: call.id,
-            type: "function" as const,
-            function: { name: call.name, arguments: JSON.stringify(call.input) },
-          })),
-        } : {}),
-      });
-      continue;
-    }
-    for (const part of message.parts) {
-      if (part.type === "tool-result") {
-        output.push({
-          role: "tool",
-          tool_call_id: part.callId,
-          content: JSON.stringify(part.output),
-        });
-      }
-    }
-  }
-  return output;
-}
 
 function validEvent(event: AgentEvent) {
   if ((event.role !== "user" && event.role !== "tool") || !Array.isArray(event.parts) || event.parts.length !== 1) return false;
@@ -128,47 +88,44 @@ export async function POST(request: Request) {
     const completion = await completeAgentStep({
       model: modelSettings.model,
       reasoningEffort: modelSettings.reasoningEffort,
-      messages: [
-        { role: "system", content: IN_SEASON_SYSTEM_PROMPT + context },
-        ...toModelMessages(messages as AgentMessage[]),
-      ],
+      instructions: IN_SEASON_SYSTEM_PROMPT + context,
+      messages: messages as AgentMessage[],
       tools: [...AGENT_TOOLS] as ChatCompletionTool[],
     });
     if (completion.usage) {
       const { error: usageError } = await supabase.rpc("record_agent_usage", {
-        p_input_tokens: completion.usage.prompt_tokens,
-        p_output_tokens: completion.usage.completion_tokens,
+        p_input_tokens: completion.usage.inputTokens,
+        p_output_tokens: completion.usage.outputTokens,
       });
       if (usageError) console.error("Could not record agent token usage", usageError.message);
     }
-    const answer = completion.choices[0]?.message;
-    if (!answer) throw new Error("The model returned no response");
-    if (answer.tool_calls?.length) {
-      const calls = answer.tool_calls.filter((call) => call.type === "function").map((call) => {
-        const input = validateToolInput(call.function.name, JSON.parse(call.function.arguments || "{}"));
-        return { type: "tool-call" as const, id: call.id, name: call.function.name, input };
+    if (completion.calls.length) {
+      const calls = completion.calls.map((call) => {
+        const input = validateToolInput(call.name, JSON.parse(call.arguments || "{}"));
+        return { type: "tool-call" as const, id: call.id, name: call.name, input };
       });
       const parts: MessagePart[] = [
-        ...(answer.content ? [{ type: "text" as const, text: answer.content }] : []),
+        ...completion.providerState.map((item) => ({ type: "provider-state" as const, item })),
+        ...(completion.text ? [{ type: "text" as const, text: completion.text }] : []),
         ...calls,
       ];
       const { data: saved, error: saveError } = await supabase.from("agent_messages").insert({ thread_id: thread.id, role: "assistant", parts }).select().single();
       if (saveError) throw new Error("Could not persist the assistant response");
       return NextResponse.json({
         type: "tool-calls",
-        text: answer.content || undefined,
+        text: completion.text,
         calls,
         message: saved,
       });
     }
-    const finalText = answer.content?.trim();
+    const finalText = completion.text?.trim();
     if (!finalText) {
-      throw new Error(answer.refusal || "The model returned an empty response. Please retry.");
+      throw new Error(completion.refusal || "The model returned an empty response. Please retry.");
     }
     const { data: saved, error: saveError } = await supabase.from("agent_messages").insert({
       thread_id: thread.id,
       role: "assistant",
-      parts: [{ type: "text", text: finalText }],
+      parts: [...completion.providerState.map((item) => ({ type: "provider-state" as const, item })), { type: "text", text: finalText }],
     }).select().single();
     if (saveError) throw new Error("Could not persist the assistant response");
     return NextResponse.json({ type: "final", text: finalText, message: saved });
