@@ -1,8 +1,10 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type { ReasoningEffort } from "openai/resources/shared";
 
 export type AgentModelRequest = {
   model: string;
+  reasoningEffort: ReasoningEffort;
   messages: ChatCompletionMessageParam[];
   tools: ChatCompletionTool[];
 };
@@ -20,6 +22,6 @@ export async function completeAgentStep(request: AgentModelRequest) {
     messages: request.messages,
     tools: request.tools,
     tool_choice: "auto",
-    reasoning_effort: "minimal",
+    reasoning_effort: request.reasoningEffort,
   });
 }

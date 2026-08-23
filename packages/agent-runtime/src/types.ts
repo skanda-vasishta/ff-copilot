@@ -33,7 +33,6 @@ export type AgentThread = {
   season?: number;
   context_date_utc?: string | null;
   context_refreshed_at?: string | null;
-  model_id?: string | null;
 };
 
 export type ModelStep =

@@ -6,7 +6,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { ensureThreadContext, THREAD_CONTEXT_SELECT, type ContextThread } from "@/features/copilot/server/context";
 import { completeAgentStep } from "@/features/copilot/server/model-provider";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { resolveThreadModel } from "@/features/copilot/server/model-access";
+import { resolveAgentModelSettings } from "@/features/copilot/server/model-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -124,9 +124,10 @@ export async function POST(request: Request) {
   const context = `\n\nAuthoritative daily league context (do not ask the user for facts present here):\n${JSON.stringify(contextSnapshot)}\nAll team names and compact rosters are already present. Use player tools for deeper rankings, projections, news, and source documents. Zero records and points before games are played mean preseason, not missing context.`;
 
   try {
-    const model = await resolveThreadModel(supabase, thread.model_id);
+    const modelSettings = await resolveAgentModelSettings(supabase);
     const completion = await completeAgentStep({
-      model,
+      model: modelSettings.model,
+      reasoningEffort: modelSettings.reasoningEffort,
       messages: [
         { role: "system", content: IN_SEASON_SYSTEM_PROMPT + context },
         ...toModelMessages(messages as AgentMessage[]),

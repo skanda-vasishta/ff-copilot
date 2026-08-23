@@ -2,15 +2,12 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 import { useAgent } from "@/features/copilot/client/useAgent";
 import { createThread, deleteThread, listThreads, updateThread } from "@/features/copilot/client/threads";
 import type { AgentThread } from "@ff-copilot/agent-runtime";
 import { AgentMessage } from "./AgentMessage";
 import { useActiveScope } from "@/lib/scope";
-import { getAgentModels, refreshThreadContext, setThreadModel } from "@/features/copilot/client/api";
-
-type TeamSelection = { team: { id: string; name: string; league_id: string; league: { name: string | null; season: number } } };
+import { getAgentModels, refreshThreadContext, setAgentPreferences } from "@/features/copilot/client/api";
 
 export function AgentPanel() {
   const [threads, setThreads] = useState<AgentThread[]>([]);
@@ -21,7 +18,6 @@ export function AgentPanel() {
   const [contextNotice, setContextNotice] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const { scope, isLoading: loadingScope } = useActiveScope();
-  const teams = useQuery({ queryKey: ["my-teams"], queryFn: () => api<TeamSelection[]>("/v1/me/teams") });
   const models = useQuery({ queryKey: ["agent-models"], queryFn: getAgentModels });
   const thread = useMemo(() => {
     const found = threads.find((item) => item.id === threadId);
@@ -68,9 +64,19 @@ export function AgentPanel() {
   }
 
   async function chooseModel(model: string) {
-    if (!thread) return;
-    const { thread: updated } = await setThreadModel(thread.id, model);
-    setThreads((current) => current.map((item) => item.id === updated.id ? { ...item, model_id: updated.model_id } : item));
+    const option = models.data?.models.find((candidate) => candidate.id === model);
+    if (!option) return;
+    const currentEffort = models.data?.selected?.reasoningEffort;
+    const effort = currentEffort && option.efforts.includes(currentEffort) ? currentEffort : option.efforts[0];
+    await setAgentPreferences(model, effort);
+    await models.refetch();
+  }
+
+  async function chooseReasoning(reasoningEffort: string) {
+    const model = models.data?.selected?.model;
+    if (!model) return;
+    await setAgentPreferences(model, reasoningEffort);
+    await models.refetch();
   }
 
   async function submit(event: FormEvent) {
@@ -100,8 +106,10 @@ export function AgentPanel() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] px-5 py-4 sm:px-6">
         <div><h1 className="font-semibold text-white">In-season Copilot</h1><p className="mt-1 text-xs text-[#65716b]">Grounded in your stored player and league data</p></div>
         <div className="flex items-center gap-2">
-          {thread && models.data?.models.length ? <select aria-label="Model" value={thread.model_id || models.data.models[0].id} onChange={(event) => chooseModel(event.target.value)} disabled={agent.status !== "idle"} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af] disabled:opacity-40">{models.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select> : null}
-          {thread && <span className="max-w-64 truncate rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af]">{teams.data?.find((row) => row.team.id === thread.team_id)?.team.name || "Legacy unscoped thread"}<span className="ml-1 text-[#58635d]">· locked</span></span>}
+          {models.data?.models.length && models.data.selected ? <>
+            <select aria-label="Model" value={models.data.selected.model} onChange={(event) => chooseModel(event.target.value)} disabled={agent.status !== "idle"} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af] disabled:opacity-40">{models.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
+            <select aria-label="Reasoning effort" value={models.data.selected.reasoningEffort} onChange={(event) => chooseReasoning(event.target.value)} disabled={agent.status !== "idle"} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs capitalize text-[#aab4af] disabled:opacity-40">{models.data.models.find((model) => model.id === models.data?.selected?.model)?.efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select>
+          </> : null}
           {thread && <button disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#78847e] hover:text-white disabled:opacity-40">{refreshingContext ? "Refreshing…" : "Refresh context"}</button>}
           {thread && <button onClick={removeThread} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#65716b] hover:border-red-300/20 hover:text-red-200">Delete</button>}
         </div>
