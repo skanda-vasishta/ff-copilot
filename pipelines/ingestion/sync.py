@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -236,23 +237,47 @@ def reddit_documents(name: str) -> list[dict[str, Any]]:
     return documents
 
 
-def collect_documents(player_id: str, external_id: str, name: str, fetched_at: str):
+def collect_documents(
+    player_id: str,
+    external_id: str,
+    name: str,
+    fetched_at: str,
+    requested_sources: set[str],
+):
     providers = []
     errors = []
-    for source, loader in (("fantasypros", lambda: [dict(zip(("source_url", "content"), fantasypros_text(name)))]),
-                           ("espn", lambda: [dict(zip(("source_url", "content"), espn_text(external_id, name)))]),
-                           ("reddit", lambda: reddit_documents(name))):
-        try:
-            for document in loader():
-                if not document.get("content"):
+    loaders = {
+        "fantasypros": lambda: [dict(zip(("source_url", "content"), fantasypros_text(name)))],
+        "espn": lambda: [dict(zip(("source_url", "content"), espn_text(external_id, name)))],
+        "reddit": lambda: reddit_documents(name),
+    }
+    for source in requested_sources:
+        attempts = 3 if source == "reddit" else 1
+        for attempt in range(attempts):
+            try:
+                for document in loaders[source]():
+                    if not document.get("content"):
+                        continue
+                    document["content"] = normalize_text(document["content"])
+                    document.setdefault("title", f"{source.title()} update for {name}")
+                    providers.append({"player_id": player_id, "source": source, "fetched_at": fetched_at,
+                                      "content_hash": digest(document.get("content", "")), **document})
+                break
+            except Exception as exc:
+                rate_limited = "429" in str(exc) or "rate limit" in str(exc).lower()
+                if source == "reddit" and rate_limited and attempt < attempts - 1:
+                    time.sleep(10 * (attempt + 1))
                     continue
-                document["content"] = normalize_text(document["content"])
-                document.setdefault("title", f"{source.title()} update for {name}")
-                providers.append({"player_id": player_id, "source": source, "fetched_at": fetched_at,
-                                  "content_hash": digest(document.get("content", "")), **document})
-        except Exception as exc:
-            errors.append((f"{source}:{name}", exc))
+                errors.append((f"{source}:{name}", exc))
+                break
     return providers, errors
+
+
+def source_priority(item: tuple[str, Any]) -> tuple[float, float, str]:
+    _external_id, player = item
+    owned = clean_number(getattr(player, "percent_owned", None)) or 0
+    position_rank = clean_number(getattr(player, "posRank", None))
+    return (-float(owned), float(position_rank or 10_000), player.name)
 
 
 def sync_global(args):
@@ -303,6 +328,8 @@ def sync_global(args):
         run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
 
         if args.sources:
+            source_candidates = sorted(unique.items(), key=source_priority)[:args.source_player_limit]
+            requested_sources = set(args.document_sources)
             document_buffer: list[dict[str, Any]] = []
 
             def flush_documents():
@@ -322,8 +349,15 @@ def sync_global(args):
 
             with ThreadPoolExecutor(max_workers=args.source_workers) as pool:
                 futures = {
-                    pool.submit(collect_documents, resolved[external_id], external_id, player.name, fetched_at): player.name
-                    for external_id, player in unique.items()
+                    pool.submit(
+                        collect_documents,
+                        resolved[external_id],
+                        external_id,
+                        player.name,
+                        fetched_at,
+                        requested_sources,
+                    ): player.name
+                    for external_id, player in source_candidates
                 }
                 for future in as_completed(futures):
                     try:
@@ -542,7 +576,16 @@ def parser():
         help="Maximum ESPN free-agent pool to request before filtering to QB/RB/WR/TE (default: 2000)",
     )
     global_sync.add_argument("--sources", action="store_true")
-    global_sync.add_argument("--source-workers", type=int, default=6)
+    global_sync.add_argument("--source-workers", type=int, default=4)
+    global_sync.add_argument(
+        "--source-player-limit", type=int, default=450,
+        help="Maximum high-ownership/ranked players to enrich with source documents (default: 450)",
+    )
+    global_sync.add_argument(
+        "--document-sources", nargs="+", choices=("espn", "fantasypros", "reddit"),
+        default=("espn", "fantasypros", "reddit"),
+        help="Source document providers to refresh",
+    )
     global_sync.set_defaults(func=sync_global)
     coverage = commands.add_parser("coverage-report")
     coverage.add_argument("--season", type=int, required=True)
