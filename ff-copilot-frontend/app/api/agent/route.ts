@@ -107,7 +107,7 @@ export async function POST(request: Request) {
 
   try {
     const completion = await new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat.completions.create({
-      model: process.env.AGENT_MODEL || "gpt-4o-mini",
+      model: process.env.AGENT_MODEL?.trim() || "gpt-5-nano",
       messages: [
         { role: "system", content: IN_SEASON_SYSTEM_PROMPT + context },
         ...toModelMessages(messages as AgentMessage[]),
