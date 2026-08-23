@@ -1,4 +1,6 @@
 unnecessary/
+.DS_Store
+dist/
 .venv/
 .env
 .env.*

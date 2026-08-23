@@ -1,5 +1,7 @@
 name: Sync global player data
 on:
+  schedule:
+    - cron: "17 8 * * *"
   workflow_dispatch:
     inputs:
       season:
@@ -13,10 +15,9 @@ on:
         description: Scrape source documents
         type: boolean
         default: false
-      include_summaries:
-        description: Generate labeled cross-source player briefs
-        type: boolean
-        default: false
+concurrency:
+  group: daily-global-ingestion
+  cancel-in-progress: false
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -26,7 +27,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r ingestion/requirements.txt
+      - run: pip install -r pipelines/ingestion/requirements.txt
       - name: Run sync
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -34,19 +35,17 @@ jobs:
           ESPN_SEED_LEAGUE_ID: ${{ secrets.ESPN_SEED_LEAGUE_ID }}
           REDDIT_CLIENT: ${{ secrets.REDDIT_CLIENT }}
           REDDIT_SECRET: ${{ secrets.REDDIT_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SEASON: ${{ inputs.season || '2026' }}
           WEEK: ${{ inputs.week }}
-          SOURCES: ${{ inputs.include_sources }}
-          SUMMARIES: ${{ inputs.include_summaries }}
+          SOURCES: ${{ github.event_name == 'schedule' || inputs.include_sources }}
         run: |
-          args=(sync-global --season "${{ inputs.season }}")
+          args=(sync-global --season "$SEASON")
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
           if [ "$SOURCES" = "true" ]; then args+=(--sources); fi
-          if [ "$SUMMARIES" = "true" ]; then args+=(--summaries); fi
-          python -m ingestion.sync "${args[@]}"
+          python -m pipelines.ingestion.sync "${args[@]}"
       - name: Verify 2026 coverage
-        if: ${{ inputs.season == '2026' }}
+        if: ${{ (inputs.season || '2026') == '2026' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m ingestion.sync coverage-report --season 2026 --minimum-players 250
+        run: python -m pipelines.ingestion.sync coverage-report --season 2026 --minimum-players 250

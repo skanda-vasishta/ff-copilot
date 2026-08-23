@@ -1,0 +1,10 @@
+{
+  "name": "ff-copilot",
+  "private": true,
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "typecheck": "npm --prefix apps/web run typecheck",
+    "test:bridge": "node --test archive/experiments/espn-draft-bridge/parser.test.cjs"
+  }
+}

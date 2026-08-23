@@ -1,5 +1,7 @@
 name: Sync fantasy leagues
 on:
+  schedule:
+    - cron: "47 10 * * *"
   workflow_dispatch:
     inputs:
       season:
@@ -21,15 +23,22 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r ingestion/requirements.txt
+      - run: pip install -r pipelines/ingestion/requirements.txt
       - name: Run sync
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          SEASON: ${{ inputs.season || '2026' }}
           WEEK: ${{ inputs.week }}
           LEAGUE_ID: ${{ inputs.league_id }}
         run: |
-          args=(sync-league --season "${{ inputs.season }}")
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            python -m pipelines.ingestion.sync sync-league --season "$SEASON" --all-linked
+            python -m pipelines.ingestion.sync sync-league --season "$SEASON" --pending
+            exit 0
+          fi
+          args=(sync-league --season "$SEASON")
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
           if [ -n "$LEAGUE_ID" ]; then args+=(--league-id "$LEAGUE_ID"); else args+=(--pending); fi
-          python -m ingestion.sync "${args[@]}"
+          python -m pipelines.ingestion.sync "${args[@]}"
