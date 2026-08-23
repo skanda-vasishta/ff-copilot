@@ -1,5 +1,6 @@
 import { api, queryString } from "@/lib/api";
 import type { AgentThread, ToolCallPart } from "@ff-copilot/agent-runtime";
+import { validateToolInput } from "@/features/copilot/harness";
 
 type PlayerDetail = {
   player: Record<string, unknown>;
@@ -9,7 +10,7 @@ type PlayerDetail = {
 };
 
 export async function executeTool(call: ToolCallPart, thread: AgentThread) {
-  const input = call.input;
+  const input = validateToolInput(call.name, call.input) as Record<string, unknown>;
   const season = thread.season || 2026;
   if (call.name === "search_players") {
     return api(`/v1/players?${queryString({

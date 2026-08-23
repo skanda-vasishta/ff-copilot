@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { AGENT_TOOLS, IN_SEASON_SYSTEM_PROMPT } from "@/features/copilot/harness";
+import { AGENT_TOOLS, IN_SEASON_SYSTEM_PROMPT, validateToolInput } from "@/features/copilot/harness";
 import type { AgentEvent, AgentMessage, MessagePart, ToolCallPart } from "@ff-copilot/agent-runtime";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { ensureThreadContext, THREAD_CONTEXT_SELECT, type ContextThread } from "@/features/copilot/server/context";
 import { completeAgentStep } from "@/features/copilot/server/model-provider";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { resolveThreadModel } from "@/features/copilot/server/model-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -123,7 +124,9 @@ export async function POST(request: Request) {
   const context = `\n\nAuthoritative daily league context (do not ask the user for facts present here):\n${JSON.stringify(contextSnapshot)}\nAll team names and compact rosters are already present. Use player tools for deeper rankings, projections, news, and source documents. Zero records and points before games are played mean preseason, not missing context.`;
 
   try {
+    const model = await resolveThreadModel(supabase, thread.model_id);
     const completion = await completeAgentStep({
+      model,
       messages: [
         { role: "system", content: IN_SEASON_SYSTEM_PROMPT + context },
         ...toModelMessages(messages as AgentMessage[]),
@@ -140,12 +143,10 @@ export async function POST(request: Request) {
     const answer = completion.choices[0]?.message;
     if (!answer) throw new Error("The model returned no response");
     if (answer.tool_calls?.length) {
-      const calls = answer.tool_calls.filter((call) => call.type === "function").map((call) => ({
-        type: "tool-call" as const,
-        id: call.id,
-        name: call.function.name,
-        input: JSON.parse(call.function.arguments || "{}") as Record<string, unknown>,
-      }));
+      const calls = answer.tool_calls.filter((call) => call.type === "function").map((call) => {
+        const input = validateToolInput(call.function.name, JSON.parse(call.function.arguments || "{}"));
+        return { type: "tool-call" as const, id: call.id, name: call.function.name, input };
+      });
       const parts: MessagePart[] = [
         ...(answer.content ? [{ type: "text" as const, text: answer.content }] : []),
         ...calls,

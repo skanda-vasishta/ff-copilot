@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 
 export type AgentModelRequest = {
+  model: string;
   messages: ChatCompletionMessageParam[];
   tools: ChatCompletionTool[];
 };
@@ -15,7 +16,7 @@ export async function completeAgentStep(request: AgentModelRequest) {
     baseURL: process.env.AGENT_PROVIDER_BASE_URL?.trim() || undefined,
   });
   return client.chat.completions.create({
-    model: process.env.AGENT_MODEL?.trim() || "gpt-5-nano",
+    model: request.model,
     messages: request.messages,
     tools: request.tools,
     tool_choice: "auto",

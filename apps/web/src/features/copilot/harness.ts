@@ -1,78 +1,64 @@
+import { z } from "zod";
+
 export const IN_SEASON_SYSTEM_PROMPT = `You are FF Copilot, an in-season fantasy football assistant.
 
 Help the user make waiver, lineup, roster, and trade decisions using the factual tools provided. Retrieve facts before making player-specific claims. Clearly distinguish source facts from your analysis, mention important uncertainty and data freshness, and never invent injuries, rankings, projections, roster status, or news. Ask one concise question when league or roster context is required but unavailable. Keep answers focused and practical.`;
 
-export const AGENT_TOOLS = [
-  {
-    type: "function" as const,
-    function: {
-      name: "search_players",
-      description: "Search the player directory and retrieve current projections and cross-source ranking aggregates.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Player name or partial name" },
-          position: { type: "string", enum: ["QB", "RB", "WR", "TE"] },
-          limit: { type: "integer", minimum: 1, maximum: 20 },
-        },
-        required: ["query"],
-        additionalProperties: false,
-      },
-    },
+const playerId = z.uuid().describe("Internal player UUID returned by search_players or another player tool");
+const noInput = z.object({}).strict();
+
+export const TOOL_REGISTRY = {
+  search_players: {
+    description: "Find NFL fantasy players by full or partial name. Returns internal player IDs plus current projection and cross-source ranking summaries. Use this before player-specific tools when an ID is unknown.",
+    schema: z.object({
+      query: z.string().trim().min(1).describe("Player name or partial name, such as 'Bijan Robinson' or 'Bijan'"),
+      position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional fantasy position filter"),
+      limit: z.number().int().min(1).max(20).optional().describe("Maximum results; defaults to 8"),
+    }).strict(),
   },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_player_overview",
-      description: "Get a player's identity, ESPN snapshot, projections, injury status, ranking aggregates, and available source labels.",
-      parameters: {
-        type: "object",
-        properties: { player_id: { type: "string", description: "Internal player UUID returned by search_players" } },
-        required: ["player_id"],
-        additionalProperties: false,
-      },
-    },
+  get_player_overview: {
+    description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, projections, injury status, ownership, individual rankings, aggregate rankings, and which news sources are available. Use source-specific tools for the underlying article text.",
+    schema: z.object({ player_id: playerId }).strict(),
   },
-  ...["espn", "fantasypros", "reddit"].map((source) => ({
-    type: "function" as const,
-    function: {
-      name: `get_player_${source}`,
-      description: `Get stored ${source === "fantasypros" ? "FantasyPros" : source.toUpperCase()} source documents for a player.`,
-      parameters: {
-        type: "object",
-        properties: { player_id: { type: "string", description: "Internal player UUID returned by search_players" } },
-        required: ["player_id"],
-        additionalProperties: false,
-      },
-    },
-  })),
-  {
-    type: "function" as const,
-    function: {
-      name: "get_my_team",
-      description: "Get the roster for the team attached to this conversation.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
-    },
+  get_player_espn: {
+    description: "Retrieve stored ESPN news and analysis documents for one player, including source URL and publication/fetch timestamps. This returns provider text, not a generated summary.",
+    schema: z.object({ player_id: playerId }).strict(),
   },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_league_standings",
-      description: "Get every team and the current standings for the league attached to this conversation.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
-    },
+  get_player_fantasypros: {
+    description: "Retrieve stored FantasyPros notes for one player, including source URL and publication/fetch timestamps. This returns provider text, not a generated summary.",
+    schema: z.object({ player_id: playerId }).strict(),
   },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_league_team_roster",
-      description: "Get the current roster of any team in this conversation's league. Use a team_id from get_league_standings.",
-      parameters: {
-        type: "object",
-        properties: { team_id: { type: "string", description: "Internal fantasy team UUID returned by get_league_standings" } },
-        required: ["team_id"],
-        additionalProperties: false,
-      },
-    },
+  get_player_reddit: {
+    description: "Retrieve recent stored r/fantasyfootball posts and selected comments associated with one player. Treat community opinions as anecdotal and mention their source and freshness.",
+    schema: z.object({ player_id: playerId }).strict(),
   },
-] as const;
+  get_my_team: {
+    description: "Retrieve the latest stored roster snapshot for the team permanently attached to this conversation. Use for lineup, roster construction, waiver, and trade analysis.",
+    schema: noInput,
+  },
+  get_league_standings: {
+    description: "Retrieve every team in this conversation's league with records, points, and standing. Returns team_id values that can be passed to get_league_team_roster.",
+    schema: noInput,
+  },
+  get_league_team_roster: {
+    description: "Retrieve the latest stored roster for one other team in this conversation's league. The server verifies that the requested team belongs to the thread's locked league.",
+    schema: z.object({ team_id: z.uuid().describe("Fantasy team UUID returned by get_league_standings") }).strict(),
+  },
+} as const;
+
+export type ToolName = keyof typeof TOOL_REGISTRY;
+
+export const AGENT_TOOLS = Object.entries(TOOL_REGISTRY).map(([name, definition]) => ({
+  type: "function" as const,
+  function: {
+    name,
+    description: definition.description,
+    parameters: z.toJSONSchema(definition.schema),
+  },
+}));
+
+export function validateToolInput(name: string, input: unknown) {
+  const definition = TOOL_REGISTRY[name as ToolName];
+  if (!definition) throw new Error(`Unknown tool: ${name}`);
+  return definition.schema.parse(input);
+}

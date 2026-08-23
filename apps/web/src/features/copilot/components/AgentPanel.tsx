@@ -8,7 +8,7 @@ import { createThread, deleteThread, listThreads, updateThread } from "@/feature
 import type { AgentThread } from "@ff-copilot/agent-runtime";
 import { AgentMessage } from "./AgentMessage";
 import { useActiveScope } from "@/lib/scope";
-import { refreshThreadContext } from "@/features/copilot/client/api";
+import { getAgentModels, refreshThreadContext, setThreadModel } from "@/features/copilot/client/api";
 
 type TeamSelection = { team: { id: string; name: string; league_id: string; league: { name: string | null; season: number } } };
 
@@ -22,6 +22,7 @@ export function AgentPanel() {
   const end = useRef<HTMLDivElement>(null);
   const { scope, isLoading: loadingScope } = useActiveScope();
   const teams = useQuery({ queryKey: ["my-teams"], queryFn: () => api<TeamSelection[]>("/v1/me/teams") });
+  const models = useQuery({ queryKey: ["agent-models"], queryFn: getAgentModels });
   const thread = useMemo(() => {
     const found = threads.find((item) => item.id === threadId);
     return found ? { ...found, season: scope?.team.league.season } : null;
@@ -66,6 +67,12 @@ export function AgentPanel() {
     } finally { setRefreshingContext(false); }
   }
 
+  async function chooseModel(model: string) {
+    if (!thread) return;
+    const { thread: updated } = await setThreadModel(thread.id, model);
+    setThreads((current) => current.map((item) => item.id === updated.id ? { ...item, model_id: updated.model_id } : item));
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     const value = input;
@@ -93,6 +100,7 @@ export function AgentPanel() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] px-5 py-4 sm:px-6">
         <div><h1 className="font-semibold text-white">In-season Copilot</h1><p className="mt-1 text-xs text-[#65716b]">Grounded in your stored player and league data</p></div>
         <div className="flex items-center gap-2">
+          {thread && models.data?.models.length ? <select aria-label="Model" value={thread.model_id || models.data.models[0].id} onChange={(event) => chooseModel(event.target.value)} disabled={agent.status !== "idle"} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af] disabled:opacity-40">{models.data.models.map((model) => <option key={model.id} value={model.id}>{model.label} — {model.description}</option>)}</select> : null}
           {thread && <span className="max-w-64 truncate rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af]">{teams.data?.find((row) => row.team.id === thread.team_id)?.team.name || "Legacy unscoped thread"}<span className="ml-1 text-[#58635d]">· locked</span></span>}
           {thread && <button disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#78847e] hover:text-white disabled:opacity-40">{refreshingContext ? "Refreshing…" : "Refresh context"}</button>}
           {thread && <button onClick={removeThread} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#65716b] hover:border-red-300/20 hover:text-red-200">Delete</button>}
