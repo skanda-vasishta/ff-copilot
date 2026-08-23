@@ -43,7 +43,15 @@ export async function POST(request: Request) {
   // Models may fan out one lookup per player. Keep a bounded batch, but do not
   // reject normal comparison requests containing more than eight tool calls.
   const validEvents = events.length > 0 && events.length <= 32 && events.every(validEvent);
-  if (!validEvents) return NextResponse.json({ error: "Invalid agent events" }, { status: 400 });
+  if (!validEvents) {
+    console.warn("Rejected invalid agent event batch", {
+      threadId: body.threadId,
+      userId: user.id,
+      eventCount: events.length,
+      contentLength,
+    });
+    return NextResponse.json({ error: "Invalid agent events" }, { status: 400 });
+  }
   if (events.length) {
     const { error: eventError } = await supabase.from("agent_messages").insert(events.map((event) => ({
       thread_id: thread.id,
@@ -134,6 +142,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ type: "final", text: finalText, message: saved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Inference failed";
+    console.error("Agent inference failed", {
+      threadId: thread.id,
+      userId: user.id,
+      error: message,
+    });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

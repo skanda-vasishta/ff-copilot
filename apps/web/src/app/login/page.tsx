@@ -3,6 +3,16 @@
 import { FormEvent, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+function authErrorMessage(error: { code?: string; message: string }) {
+  if (error.code === 'over_email_send_rate_limit' || error.message.toLowerCase().includes('email rate limit')) {
+    return 'Confirmation emails are temporarily limited. Try creating your account again in about an hour.'
+  }
+  if (error.message.toLowerCase().includes('email address not authorized')) {
+    return 'This email cannot receive confirmation messages yet.'
+  }
+  return error.message
+}
+
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -17,7 +27,7 @@ export default function LoginPage() {
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/auth/callback` } })
     setLoading(false)
-    if (result.error) return setMessage(result.error.message)
+    if (result.error) return setMessage(authErrorMessage(result.error))
     if (mode === 'register' && !result.data.session) return setMessage('Check your inbox to confirm your account.')
     location.assign('/')
   }
