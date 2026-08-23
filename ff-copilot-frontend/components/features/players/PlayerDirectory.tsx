@@ -4,18 +4,23 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import Link from 'next/link'
 import { api, Player, Paginated, queryString } from '@/lib/api'
+import { useActiveScope } from '@/lib/scope'
 
 const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']
 const positionTone: Record<string, string> = { QB: 'bg-violet-400/10 text-violet-300', RB: 'bg-sky-400/10 text-sky-300', WR: 'bg-amber-300/10 text-amber-200', TE: 'bg-rose-400/10 text-rose-300', K: 'bg-white/[.06] text-[#bbc4bf]', 'D/ST': 'bg-emerald-400/10 text-emerald-300' }
 
 export function PlayerDirectory() {
+  const { scope, isLoading } = useActiveScope()
   const [search, setSearch] = useState('')
   const [position, setPosition] = useState('')
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState<'name' | 'projected_total_points' | 'median_rank'>('name')
-  const query = queryString({ search, position, season: 2026, page, page_size: 25, sort, direction: sort === 'projected_total_points' ? 'desc' : 'asc' })
-  const players = useQuery({ queryKey: ['players', query], queryFn: () => api<Paginated<Player>>(`/v1/players?${query}`) })
+  const query = queryString({ search, position, season: scope?.team.league.season, page, page_size: 25, sort, direction: sort === 'projected_total_points' ? 'desc' : 'asc' })
+  const players = useQuery({ queryKey: ['players', query], queryFn: () => api<Paginated<Player>>(`/v1/players?${query}`), enabled: Boolean(scope) })
   const totalPages = Math.max(1, Math.ceil((players.data?.total || 0) / 25))
+
+  if (isLoading) return <p className="text-sm text-[#78847e]">Loading your workspace…</p>
+  if (!scope) return <div className="rounded-2xl border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#78847e]">Use settings in the top-right corner. The player season and scoring context follow that selection.</p></div>
 
   return <div>
     <div className="panel rounded-2xl p-3 sm:p-4">

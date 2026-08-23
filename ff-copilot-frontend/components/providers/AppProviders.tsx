@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { ScopeProvider } from "@/lib/scope";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -18,5 +19,5 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         },
       }),
   );
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return <QueryClientProvider client={client}><ScopeProvider>{children}</ScopeProvider></QueryClientProvider>;
 }

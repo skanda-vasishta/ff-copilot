@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useActiveScope } from "@/lib/scope";
 
 type PlayerRecord = {
   id: string;
@@ -81,23 +82,27 @@ function date(value: string | null) {
 }
 
 export function PlayerProfile({ playerId }: { playerId: string }) {
+  const { scope, isLoading: loadingScope } = useActiveScope();
+  const season = scope?.team.league.season;
   const detail = useQuery({
-    queryKey: ["player-detail", playerId, 2026],
+    queryKey: ["player-detail", playerId, season],
     queryFn: () =>
-      api<PlayerDetail>(`/v1/players/${playerId}/detail?season=2026`),
+      api<PlayerDetail>(`/v1/players/${playerId}/detail?season=${season}`),
+    enabled: Boolean(season),
   });
   const player = detail.data?.player;
   const rankings = detail.data?.rankings;
   const sources = detail.data?.sources || [];
   const latest = detail.data?.snapshots[0];
 
-  if (detail.isLoading)
+  if (loadingScope || detail.isLoading)
     return (
       <div className="mt-6 space-y-4">
         <div className="h-44 animate-pulse rounded-3xl bg-white/[.03]" />
         <div className="h-72 animate-pulse rounded-2xl bg-white/[.03]" />
       </div>
     );
+  if (!scope) return <div className="mt-6 rounded-2xl border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#78847e]">Use workspace settings in the top-right corner.</p></div>;
   if (detail.error || !player)
     return (
       <div
@@ -137,7 +142,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
               {player.name}
             </h1>
             <p className="mt-3 text-sm text-[#78847e]">
-              Cross-source player file · 2026 season
+              Cross-source player file · {season} season
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-white/[.08] bg-black/20 px-3 py-2 text-xs text-[#9da7a2]">
@@ -299,7 +304,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
           </section>
           <section className="panel rounded-2xl p-5">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">
-              2026 facts
+              {season} facts
             </p>
             <dl className="mt-4 space-y-3 text-sm">
               {[

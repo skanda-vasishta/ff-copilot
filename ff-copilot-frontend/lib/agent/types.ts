@@ -30,6 +30,7 @@ export type AgentThread = {
   team_id: string | null;
   created_at: string;
   updated_at: string;
+  season?: number;
 };
 
 export type ModelStep =

@@ -10,17 +10,18 @@ type PlayerDetail = {
 
 export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   const input = call.input;
+  const season = thread.season || 2026;
   if (call.name === "search_players") {
     return api(`/v1/players?${queryString({
       search: String(input.query || ""),
       position: typeof input.position === "string" ? input.position : undefined,
-      season: 2026,
+      season,
       page_size: Math.min(Number(input.limit) || 8, 20),
       sort: "median_rank",
     })}`);
   }
   if (call.name === "get_player_overview") {
-    const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=2026`);
+    const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
     const snapshot = detail.snapshots[0];
     return {
       player: detail.player,

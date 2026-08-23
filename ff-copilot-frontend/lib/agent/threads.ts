@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 import type { AgentMessage, AgentThread } from "./types";
 
-export async function listThreads() {
+export async function listThreads(teamId: string) {
   const { data, error } = await createClient()
     .from("agent_threads")
     .select("*")
+    .eq("team_id", teamId)
     .order("updated_at", { ascending: false });
   if (error) throw error;
   return data as AgentThread[];
