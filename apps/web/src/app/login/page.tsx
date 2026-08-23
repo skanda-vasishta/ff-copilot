@@ -27,8 +27,8 @@ export default function LoginPage() {
     <section className="relative hidden flex-col justify-between border-r border-white/[.07] p-12 lg:flex xl:p-16">
       <div className="flex items-center gap-2.5"><span className="grid size-9 place-items-center rounded-[11px] bg-[#b7f34a] text-xs font-black tracking-[-.05em] text-[#10140a]">FF</span><span className="font-semibold text-white">Copilot</span></div>
       <div className="max-w-xl">
-        <h1 className="text-5xl font-semibold leading-[1.04] tracking-[-.055em] text-white xl:text-7xl">Your fantasy leagues, in one place.</h1>
-        <p className="mt-6 max-w-lg text-lg leading-8 text-[#8c9992]">Connect an ESPN league to view teams, rosters, player rankings, and ask questions using that data.</p>
+        <h1 className="text-5xl font-semibold leading-[1.04] tracking-[-.055em] text-white xl:text-7xl">An agent that knows your league.</h1>
+        <p className="mt-6 max-w-lg text-lg leading-8 text-[#8c9992]">Ask about your roster, opponents, trades, or waivers. Copilot reasons across current player data, expert rankings, and what fantasy communities are saying.</p>
       </div>
       <div />
     </section>
