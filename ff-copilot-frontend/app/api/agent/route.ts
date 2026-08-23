@@ -143,10 +143,14 @@ export async function POST(request: Request) {
       tools: [...AGENT_TOOLS] as OpenAI.Chat.Completions.ChatCompletionTool[],
       tool_choice: "auto",
       reasoning_effort: "minimal",
-      // This budget includes hidden reasoning tokens. Real roster/tool results can
-      // exhaust a smaller budget before the model emits any visible answer.
-      max_completion_tokens: 1600,
     });
+    if (completion.usage) {
+      const { error: usageError } = await supabase.rpc("record_agent_usage", {
+        p_input_tokens: completion.usage.prompt_tokens,
+        p_output_tokens: completion.usage.completion_tokens,
+      });
+      if (usageError) console.error("Could not record agent token usage", usageError.message);
+    }
     const answer = completion.choices[0]?.message;
     if (!answer) throw new Error("The model returned no response");
     if (answer.tool_calls?.length) {
