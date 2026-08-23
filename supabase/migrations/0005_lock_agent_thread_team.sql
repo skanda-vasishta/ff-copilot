@@ -16,3 +16,6 @@ $$;
 create trigger agent_thread_team_is_immutable
 before update of team_id, league_id on public.agent_threads
 for each row execute function public.lock_agent_thread_team();
+
+grant all privileges on public.agent_threads, public.agent_messages to service_role;
+grant all privileges on sequence public.agent_messages_id_seq to service_role;
