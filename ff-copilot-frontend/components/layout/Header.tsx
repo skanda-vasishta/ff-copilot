@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 
 const links = [
   { href: '/', label: 'Overview', icon: '▦' },
+  { href: '/copilot', label: 'Copilot', icon: '✦' },
   { href: '/player-lookup', label: 'Players', icon: '⌕' },
   { href: '/leagues', label: 'My leagues', icon: '◉' },
   { href: '/draft-room', label: 'Draft room', icon: '◆' },

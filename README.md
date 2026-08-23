@@ -1,6 +1,6 @@
 # FF Copilot
 
-FF Copilot is an authenticated fantasy-football data workspace. Supabase owns factual player, source, league, team, and roster data; FastAPI exposes stable tool-ready APIs; Next.js provides the product UI. AI is intentionally not part of ingestion or request handling yet.
+FF Copilot is an authenticated fantasy-football data workspace. Supabase owns factual player, source, league, team, roster, and Copilot thread data; FastAPI exposes stable factual APIs; Next.js provides the product UI and an in-season assistant backed by server-side OpenAI inference.
 
 ## Architecture
 
@@ -9,6 +9,17 @@ FF Copilot is an authenticated fantasy-football data workspace. Supabase owns fa
 - `api`: authenticated FastAPI `/v1` data API. It forwards the caller token to Supabase so RLS applies.
 - `ff-copilot-frontend`: Supabase Auth, protected Next.js shell, player directory, and league manager.
 - `.github/workflows`: manually dispatched global and league sync jobs, designed to accept a cron trigger later.
+
+## In-season Copilot
+
+Apply `supabase/migrations/0004_agent_threads.sql`, then configure these server-only frontend environment variables:
+
+```env
+OPENAI_API_KEY=...
+AGENT_MODEL=gpt-4.1-mini
+```
+
+The browser owns the bounded tool loop, but never calls OpenAI directly. Each user or tool event is sent to `/api/agent`; the authenticated server persists it, reloads the user-owned thread, calls OpenAI once, persists the model response, and returns that response to the browser. Threads and messages are protected by Supabase Row Level Security.
 
 Legacy CSVs remain under `data/` only as rollback/import inputs. They are not used by the running app.
 
