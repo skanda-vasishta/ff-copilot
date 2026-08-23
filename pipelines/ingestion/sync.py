@@ -351,6 +351,17 @@ def coverage_report(args):
     print(json.dumps(report, indent=2, sort_keys=True))
     if args.minimum_players and len({row["player_id"] for row in snapshots}) < args.minimum_players:
         raise SystemExit(f"Coverage below minimum of {args.minimum_players} players")
+    if args.maximum_snapshot_age_hours:
+        latest_snapshot = report["snapshots"]["latest_fetched_at"]
+        if not latest_snapshot:
+            raise SystemExit("No player snapshot freshness timestamp is available")
+        fetched_at = datetime.fromisoformat(latest_snapshot.replace("Z", "+00:00"))
+        age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+        if age_hours > args.maximum_snapshot_age_hours:
+            raise SystemExit(
+                f"Latest player snapshot is {age_hours:.1f} hours old; "
+                f"maximum is {args.maximum_snapshot_age_hours:.1f}"
+            )
 
 
 def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int | None, request_id: str | None = None):
@@ -519,6 +530,12 @@ def parser():
     coverage = commands.add_parser("coverage-report")
     coverage.add_argument("--season", type=int, required=True)
     coverage.add_argument("--minimum-players", type=int, default=0)
+    coverage.add_argument(
+        "--maximum-snapshot-age-hours",
+        type=float,
+        default=0,
+        help="Fail when the newest player snapshot is older than this many hours (0 disables the check)",
+    )
     coverage.set_defaults(func=coverage_report)
     league_sync = commands.add_parser("sync-league")
     league_sync.add_argument("--season", type=int, default=datetime.now().year)
