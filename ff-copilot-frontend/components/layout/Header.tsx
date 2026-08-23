@@ -18,8 +18,9 @@ export function Header() {
   const { scope } = useActiveScope()
   if (pathname === '/login') return null
 
-  return <header className="sticky top-0 z-30 border-b border-white/[.07] bg-[#080b0e]/85 backdrop-blur-xl">
-    <div className="mx-auto flex h-16 max-w-[1440px] items-center px-4 sm:px-6 lg:px-8">
+  return <>
+    <header className="sticky top-0 z-30 border-b border-white/[.07] bg-[#080b0e]/85 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-[1440px] items-center px-4 sm:px-6 lg:px-8">
       <Link href="/team" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FF Copilot home">
         <span className="grid size-8 place-items-center rounded-[10px] bg-[#b7f34a] text-[11px] font-black tracking-[-.05em] text-[#10140a] shadow-[0_0_25px_rgba(183,243,74,.16)]">FF</span>
         <span className="text-sm font-semibold tracking-[-.02em] text-white">Copilot</span>
@@ -33,7 +34,8 @@ export function Header() {
         })}
       </nav>
       <button onClick={() => setSettingsOpen(true)} className="focus-ring flex max-w-56 items-center gap-2 rounded-lg border border-white/[.09] px-3 py-2 text-left text-xs text-[#a8b2ad] transition hover:border-white/[.18] hover:bg-white/[.04] hover:text-white"><span className="hidden min-w-0 sm:block"><span className="block truncate font-medium">{scope?.team.name || 'Select team'}</span><span className="block truncate text-[10px] text-[#58635d]">{scope ? `${scope.team.league.name || 'League'} · ${scope.team.league.season}` : 'Workspace settings'}</span></span><span className="text-base">⚙</span></button>
-    </div>
+      </div>
+    </header>
     <ScopeSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-  </header>
+  </>
 }
