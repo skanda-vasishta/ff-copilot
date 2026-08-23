@@ -95,6 +95,17 @@ class SupabaseAdmin:
         return self.request("PATCH", table, params={key: f"eq.{value}" for key, value in filters.items()}, data=data,
                             prefer="return=representation")
 
+    def touch(self, table: str, ids: list[str], fetched_at: str):
+        if not ids:
+            return []
+        return self.request(
+            "PATCH",
+            table,
+            params={"id": f"in.({','.join(ids)})"},
+            data={"fetched_at": fetched_at},
+            prefer="return=representation",
+        )
+
 
 class ProviderContractError(RuntimeError):
     pass
@@ -279,10 +290,16 @@ def sync_global(args):
         for batch in chunks(id_rows):
             db.upsert("player_external_ids", batch, "provider,external_id")
         for batch in chunks(snapshots, 50):
-            db.upsert("player_snapshots", batch, "player_id,source,season,week,data_hash")
+            persisted = db.upsert("player_snapshots", batch, "player_id,source,season,week,data_hash")
+            # A matching data hash means the facts are unchanged, not that they
+            # were last checked on the original insert date. PostgREST can return
+            # the existing row without advancing fetched_at for this nullable
+            # conflict key, so touch every successfully observed snapshot.
+            db.touch("player_snapshots", [row["id"] for row in persisted], fetched_at)
         for batch in chunks(rankings):
-            db.upsert("player_rankings", batch,
-                      "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank")
+            persisted = db.upsert("player_rankings", batch,
+                                  "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank")
+            db.touch("player_rankings", [row["id"] for row in persisted], fetched_at)
         run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
 
         if args.sources:
