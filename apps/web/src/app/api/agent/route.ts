@@ -40,7 +40,9 @@ export async function POST(request: Request) {
   if (threadError || !thread) return NextResponse.json({ error: "Thread not found" }, { status: 404 });
 
   const events = Array.isArray(body.events) ? body.events as AgentEvent[] : [];
-  const validEvents = events.length > 0 && events.length <= 8 && events.every(validEvent);
+  // Models may fan out one lookup per player. Keep a bounded batch, but do not
+  // reject normal comparison requests containing more than eight tool calls.
+  const validEvents = events.length > 0 && events.length <= 32 && events.every(validEvent);
   if (!validEvents) return NextResponse.json({ error: "Invalid agent events" }, { status: 400 });
   if (events.length) {
     const { error: eventError } = await supabase.from("agent_messages").insert(events.map((event) => ({

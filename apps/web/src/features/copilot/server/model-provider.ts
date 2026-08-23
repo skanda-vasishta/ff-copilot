@@ -24,6 +24,53 @@ function text(parts: MessagePart[]) {
   return parts.filter((part) => part.type === "text").map((part) => part.text).join("\n");
 }
 
+/**
+ * Make persisted history safe to replay after a browser cancellation or failed
+ * tool-result request. OpenAI requires every function call to have an output.
+ * Missing outputs are inserted before the next user/assistant message, while
+ * late orphaned outputs from a cancelled client are ignored.
+ */
+export function repairInterruptedToolCalls(messages: AgentMessage[]): AgentMessage[] {
+  const repaired: AgentMessage[] = [];
+  const pending = new Map<string, ToolCallPart>();
+  let syntheticId = -1;
+
+  const flushPending = () => {
+    if (!pending.size) return;
+    repaired.push({
+      id: syntheticId--,
+      thread_id: messages[0]?.thread_id || "",
+      role: "tool",
+      created_at: new Date(0).toISOString(),
+      parts: [...pending.values()].map((call) => ({
+        type: "tool-result" as const,
+        callId: call.id,
+        name: call.name,
+        output: { error: "Tool execution was interrupted before its result was saved." },
+      })),
+    });
+    pending.clear();
+  };
+
+  for (const message of messages) {
+    if (pending.size && message.role !== "tool") flushPending();
+
+    if (message.role === "tool") {
+      const matched = message.parts.filter((part) => part.type === "tool-result" && pending.has(part.callId));
+      if (matched.length) repaired.push({ ...message, parts: matched });
+      for (const part of matched) if (part.type === "tool-result") pending.delete(part.callId);
+      continue;
+    }
+
+    repaired.push(message);
+    if (message.role === "assistant") {
+      for (const part of message.parts) if (part.type === "tool-call") pending.set(part.id, part);
+    }
+  }
+  flushPending();
+  return repaired;
+}
+
 function toChatMessages(instructions: string, messages: AgentMessage[]): ChatCompletionMessageParam[] {
   const output: ChatCompletionMessageParam[] = [{ role: "system", content: instructions }];
   for (const message of messages) {
@@ -134,7 +181,8 @@ export async function completeAgentStep(request: AgentModelRequest) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured on the server");
   const client = new OpenAI({ apiKey, baseURL: process.env.AGENT_PROVIDER_BASE_URL?.trim() || undefined });
+  const repairedRequest = { ...request, messages: repairInterruptedToolCalls(request.messages) };
   return request.model.startsWith("gpt-5.6-")
-    ? completeWithResponses(client, request)
-    : completeWithChat(client, request);
+    ? completeWithResponses(client, repairedRequest)
+    : completeWithChat(client, repairedRequest);
 }
