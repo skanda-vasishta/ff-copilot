@@ -142,6 +142,7 @@ export async function POST(request: Request) {
       ],
       tools: [...AGENT_TOOLS] as OpenAI.Chat.Completions.ChatCompletionTool[],
       tool_choice: "auto",
+      reasoning_effort: "minimal",
       max_completion_tokens: 700,
     });
     const answer = completion.choices[0]?.message;
@@ -166,7 +167,10 @@ export async function POST(request: Request) {
         message: saved,
       });
     }
-    const finalText = answer.content || "I couldn't produce a response.";
+    const finalText = answer.content?.trim();
+    if (!finalText) {
+      throw new Error(answer.refusal || "The model returned an empty response. Please retry.");
+    }
     const { data: saved, error: saveError } = await supabase.from("agent_messages").insert({
       thread_id: thread.id,
       role: "assistant",
