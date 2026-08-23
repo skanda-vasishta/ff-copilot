@@ -8,9 +8,16 @@ export const OWNER_MODELS = [
   { id: "gpt-5-nano", label: "GPT-5 Nano", efforts: ["minimal", "low", "medium", "high"] },
 ] as const;
 
+export const STANDARD_MODELS = [
+  { id: "gpt-5.6-luna", label: "GPT-5.6 Luna", efforts: ["none", "low"] },
+  { id: "gpt-5-nano", label: "GPT-5 Nano", efforts: ["minimal", "low"] },
+] as const;
+
 export type OwnerModelId = typeof OWNER_MODELS[number]["id"];
 export const DEFAULT_OWNER_MODEL: OwnerModelId = "gpt-5.6-luna";
 export const DEFAULT_OWNER_EFFORT = "low";
+export const DEFAULT_STANDARD_MODEL = "gpt-5.6-luna";
+export const DEFAULT_STANDARD_EFFORT = "low";
 
 export async function hasOwnerModelAccess(supabase: SupabaseClient) {
   const { data, error } = await supabase.rpc("has_agent_model_access");
@@ -25,14 +32,17 @@ export function validateOwnerSettings(modelId: unknown, effort: unknown) {
   return { model: model.id, reasoningEffort: effort as ReasoningEffort };
 }
 
+export function validateStandardSettings(modelId: unknown, effort: unknown) {
+  const model = STANDARD_MODELS.find((candidate) => candidate.id === modelId);
+  if (!model || !model.efforts.some((candidate) => candidate === effort)) return null;
+  return { model: model.id, reasoningEffort: effort as ReasoningEffort };
+}
+
 export async function resolveAgentModelSettings(supabase: SupabaseClient) {
-  if (!await hasOwnerModelAccess(supabase)) {
-    return {
-      model: process.env.AGENT_MODEL?.trim() || "gpt-5-nano",
-      reasoningEffort: (process.env.AGENT_REASONING_EFFORT?.trim() || "low") as ReasoningEffort,
-    };
-  }
+  const expanded = await hasOwnerModelAccess(supabase);
   const { data } = await supabase.from("agent_preferences").select("model_id,reasoning_effort").maybeSingle();
-  return validateOwnerSettings(data?.model_id, data?.reasoning_effort)
+  if (expanded) return validateOwnerSettings(data?.model_id, data?.reasoning_effort)
     || { model: DEFAULT_OWNER_MODEL, reasoningEffort: DEFAULT_OWNER_EFFORT as ReasoningEffort };
+  return validateStandardSettings(data?.model_id, data?.reasoning_effort)
+    || { model: DEFAULT_STANDARD_MODEL, reasoningEffort: DEFAULT_STANDARD_EFFORT as ReasoningEffort };
 }

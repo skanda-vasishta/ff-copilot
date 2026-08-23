@@ -9,7 +9,7 @@ const noInput = z.object({}).strict();
 
 export const TOOL_REGISTRY = {
   search_players: {
-    description: "Find NFL fantasy players by full or partial name. Returns internal player IDs plus current projection and cross-source ranking summaries. Use this before player-specific tools when an ID is unknown.",
+    description: "Find NFL fantasy players by full or partial name. Returns internal player IDs, current projections, and an explicitly labeled previous-season ESPN positional finish. Use this before player-specific tools when an ID is unknown; never describe the previous-season finish as a current draft rank.",
     schema: z.object({
       query: z.string().trim().min(1).describe("Player name or partial name, such as 'Bijan Robinson' or 'Bijan'"),
       position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional fantasy position filter"),
@@ -17,7 +17,7 @@ export const TOOL_REGISTRY = {
     }).strict(),
   },
   get_player_overview: {
-    description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, projections, injury status, ownership, individual rankings, aggregate rankings, and which news sources are available. Use source-specific tools for the underlying article text.",
+    description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, projections, injury status, ownership, explicitly labeled ranking basis, and available news sources. In preseason, ESPN position_rank is the previous season's positional finish, not a current draft rank. Use source-specific tools for underlying article text.",
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_player_espn: {
@@ -49,7 +49,7 @@ export const TOOL_REGISTRY = {
     schema: z.object({
       position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional position filter"),
       limit: z.number().int().min(1).max(50).optional().describe("Maximum results; defaults to 25"),
-      sort: z.enum(["median_rank", "average_rank", "projected_total_points", "name"]).optional().describe("How to order available players; defaults to best median rank"),
+      sort: z.enum(["median_rank", "average_rank", "projected_total_points", "name"]).optional().describe("How to order available players; defaults to highest projected points. Median/average currently reflect the explicitly labeled previous-season ESPN positional finish, not current consensus ranks"),
     }).strict(),
   },
 } as const;

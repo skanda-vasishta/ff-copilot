@@ -83,7 +83,8 @@ export async function POST(request: Request) {
   } catch (cause) {
     return NextResponse.json({ error: cause instanceof Error ? cause.message : "Could not prepare league context" }, { status: 500 });
   }
-  const context = `\n\nAuthoritative daily league context (do not ask the user for facts present here):\n${JSON.stringify(contextSnapshot)}\nAll team names and compact rosters are already present. Use player tools for deeper rankings, projections, news, and source documents. Zero records and points before games are played mean preseason, not missing context.`;
+  const previousSeason = thread.team.league.season - 1;
+  const context = `\n\nAuthoritative daily league context (do not ask the user for facts present here):\n${JSON.stringify(contextSnapshot)}\nAll team names and compact rosters are already present. Use player tools for deeper rankings, projections, news, and source documents. Zero records and points before games are played mean preseason, not missing context. During preseason, ESPN position_rank is the ${previousSeason} positional finish—not a ${thread.team.league.season} draft, projection, or consensus rank. State that basis whenever using it.`;
 
   try {
     const modelSettings = await resolveAgentModelSettings(supabase);

@@ -306,8 +306,10 @@ def sync_global(args):
             id_rows.append({"player_id": player_id, "provider": "espn", "external_id": external_id})
             snapshots.append(snapshot_payload(player_id, player, args.season, args.week, fetched_at))
             if getattr(player, "posRank", None) is not None:
+                preseason = not (clean_number(getattr(player, "total_points", None)) or 0)
                 rankings.append({"player_id": player_id, "source": "espn", "season": args.season,
-                    "week": args.week, "scoring_format": "league", "ranking_type": "position",
+                    "week": args.week, "scoring_format": "league",
+                    "ranking_type": "previous_season_position_finish" if preseason else "season_to_date_position_rank",
                     "position_rank": player.posRank, "fetched_at": fetched_at})
 
         for batch in chunks(player_rows):

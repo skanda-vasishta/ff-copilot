@@ -13,13 +13,22 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   const input = validateToolInput(call.name, call.input) as Record<string, unknown>;
   const season = thread.season || 2026;
   if (call.name === "search_players") {
-    return api(`/v1/players?${queryString({
+    const result = await api<{ items: Array<Record<string, unknown>>; [key: string]: unknown }>(`/v1/players?${queryString({
       search: String(input.query || ""),
       position: typeof input.position === "string" ? input.position : undefined,
       season,
       page_size: Math.min(Number(input.limit) || 8, 20),
-      sort: "median_rank",
+      sort: "projected_total_points",
+      direction: "desc",
     })}`);
+    return {
+      ...result,
+      items: result.items.map(({ average_rank: _average, median_rank, minimum_rank: _minimum, maximum_rank: _maximum, ...player }) => ({
+        ...player,
+        previous_season_position_finish: median_rank,
+        ranking_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
+      })),
+    };
   }
   if (call.name === "get_player_overview") {
     const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
@@ -31,6 +40,7 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
         week: snapshot.week,
         source: snapshot.source,
         position_rank: snapshot.position_rank,
+        position_rank_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
         injury_status: snapshot.injury_status,
         total_points: snapshot.total_points,
         average_points: snapshot.average_points,
@@ -48,6 +58,9 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
         overall_rank: ranking.overall_rank,
         position_rank: ranking.position_rank,
         fetched_at: ranking.fetched_at,
+        basis: ranking.ranking_type === "previous_season_position_finish" || ranking.ranking_type === "position"
+          ? `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`
+          : `${season} season-to-date rank`,
       })),
       sources: [...new Set(detail.sources.map((source) => source.source))],
     };
@@ -91,12 +104,20 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   }
   if (call.name === "get_league_free_agents") {
     if (!thread.league_id) return { error: "No league is attached to this conversation." };
-    return api(`/v1/leagues/${thread.league_id}/free-agents?${queryString({
+    const result = await api<{ items: Array<Record<string, unknown>>; [key: string]: unknown }>(`/v1/leagues/${thread.league_id}/free-agents?${queryString({
       season,
       position: typeof input.position === "string" ? input.position : undefined,
       limit: Math.min(Number(input.limit) || 25, 50),
-      sort: typeof input.sort === "string" ? input.sort : "median_rank",
+      sort: typeof input.sort === "string" ? input.sort : "projected_total_points",
     })}`);
+    return {
+      ...result,
+      items: result.items.map(({ average_rank: _average, median_rank, minimum_rank: _minimum, maximum_rank: _maximum, ...player }) => ({
+        ...player,
+        previous_season_position_finish: median_rank,
+        ranking_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
+      })),
+    };
   }
   throw new Error(`Unknown tool: ${call.name}`);
 }

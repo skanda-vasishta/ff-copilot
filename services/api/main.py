@@ -355,7 +355,7 @@ async def league_free_agents(
     season: int = Query(2026, ge=2000, le=2100),
     position: Literal["QB", "RB", "WR", "TE"] | None = None,
     limit: int = Query(25, ge=1, le=100),
-    sort: Literal["median_rank", "average_rank", "projected_total_points", "name"] = "median_rank",
+    sort: Literal["median_rank", "average_rank", "projected_total_points", "name"] = "projected_total_points",
     db: SupabaseREST = Depends(db_for),
 ):
     teams, _ = await db.request("GET", "fantasy_teams", params={
@@ -384,7 +384,7 @@ async def league_free_agents(
 
     directory_params: dict[str, Any] = {
         "season": f"eq.{season}", "select": "*", "limit": 1000,
-        "order": f"{sort}.asc.nullslast",
+        "order": f"{sort}.{'desc' if sort == 'projected_total_points' else 'asc'}.nullslast",
     }
     if position:
         directory_params["position"] = f"eq.{position}"

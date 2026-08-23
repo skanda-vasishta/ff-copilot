@@ -156,7 +156,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
           ["Projected points", number(latest?.projected_total_points)],
           ["Projected / game", number(latest?.projected_average_points)],
           [
-            "Position rank",
+            `${scope.team.league.season - 1} position finish`,
             latest?.position_rank == null ? "—" : `#${latest.position_rank}`,
           ],
           [
