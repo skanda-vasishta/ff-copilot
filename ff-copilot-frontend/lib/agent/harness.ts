@@ -54,4 +54,25 @@ export const AGENT_TOOLS = [
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_league_standings",
+      description: "Get every team and the current standings for the league attached to this conversation.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_league_team_roster",
+      description: "Get the current roster of any team in this conversation's league. Use a team_id from get_league_standings.",
+      parameters: {
+        type: "object",
+        properties: { team_id: { type: "string", description: "Internal fantasy team UUID returned by get_league_standings" } },
+        required: ["team_id"],
+        additionalProperties: false,
+      },
+    },
+  },
 ] as const;

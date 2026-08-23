@@ -399,12 +399,38 @@ def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int 
     with Run(db, "league", season, week, request_id) as run:
         league_data = League(league_id=int(external_id), year=season)
         fetched_at = now()
+        settings = league_data.settings
+        raw_settings = json.loads(json.dumps(vars(settings), default=str))
+        scoring_rules = getattr(settings, "scoring_format", []) or []
+        reception_points = next((rule.get("points") for rule in scoring_rules if rule.get("abbr") == "REC"), None)
+        scoring_label = (
+            "ppr" if reception_points == 1 else
+            "half_ppr" if reception_points == 0.5 else
+            "standard" if reception_points == 0 else
+            "custom"
+        )
+        lineup_counts = {
+            str(slot): count for slot, count in (getattr(settings, "position_slot_counts", {}) or {}).items()
+            if count
+        }
         league = db.upsert("leagues", {"provider": "espn", "external_id": external_id, "season": season,
-            "name": getattr(league_data.settings, "name", None), "status": "succeeded", "last_synced_at": fetched_at},
+            "name": getattr(settings, "name", None), "status": "succeeded", "last_synced_at": fetched_at,
+            "team_count": getattr(settings, "team_count", None),
+            "playoff_team_count": getattr(settings, "playoff_team_count", None),
+            "regular_season_weeks": getattr(settings, "reg_season_count", None),
+            "scoring_type": getattr(settings, "scoring_type", None),
+            "reception_points": reception_points, "scoring_format_label": scoring_label,
+            "lineup_slot_counts": lineup_counts, "league_settings": raw_settings},
             "provider,external_id,season")[0]
         for team in league_data.teams:
             db_team = db.upsert("fantasy_teams", {"league_id": league["id"], "external_id": str(team.team_id),
-                "name": team.team_name, "updated_at": fetched_at}, "league_id,external_id")[0]
+                "name": team.team_name, "updated_at": fetched_at,
+                "wins": getattr(team, "wins", None), "losses": getattr(team, "losses", None),
+                "ties": getattr(team, "ties", None), "points_for": getattr(team, "points_for", None),
+                "points_against": getattr(team, "points_against", None),
+                "standing": getattr(team, "standing", None),
+                "final_standing": getattr(team, "final_standing", None),
+                "playoff_pct": getattr(team, "playoff_pct", None)}, "league_id,external_id")[0]
             roster_key = [{"id": str(player.playerId), "slot": getattr(player, "lineupSlot", None)} for player in team.roster]
             roster = db.upsert("roster_snapshots", {"team_id": db_team["id"], "season": season, "week": week,
                 "fetched_at": fetched_at, "data_hash": digest(roster_key)}, "team_id,season,week,data_hash")[0]

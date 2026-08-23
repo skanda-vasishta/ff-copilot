@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
   const { data: thread, error: threadError } = await supabase
     .from("agent_threads")
-    .select("*, team:fantasy_teams(id,name,external_id,league:leagues(id,name,season,provider,external_id))")
+    .select("*, team:fantasy_teams(id,name,external_id,wins,losses,ties,points_for,points_against,standing,league:leagues(id,name,season,provider,external_id,team_count,playoff_team_count,regular_season_weeks,scoring_type,reception_points,scoring_format_label,lineup_slot_counts,last_synced_at))")
     .eq("id", body.threadId)
     .eq("user_id", user.id)
     .single();
@@ -112,9 +112,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: key ? quotaMessages[key] : "Copilot usage is temporarily limited." }, { status: 429 });
   }
 
-  const team = thread.team as unknown as { name?: string; league?: { name?: string; season?: number } } | null;
+  const team = thread.team as unknown as { name?: string; league?: Record<string, unknown> } | null;
+  let standings: Record<string, unknown>[] = [];
+  if (thread.league_id) {
+    const { data } = await supabase.from("fantasy_teams")
+      .select("id,name,wins,losses,ties,points_for,points_against,standing,final_standing,playoff_pct")
+      .eq("league_id", thread.league_id)
+      .order("standing");
+    standings = data || [];
+  }
   const context = team
-    ? `\n\nConversation context: the user's selected fantasy team is ${team.name || "unnamed"} in ${team.league?.name || "their selected league"} for the ${team.league?.season || 2026} season. Use get_my_team when roster details are relevant.`
+    ? `\n\nAuthoritative conversation context (do not ask the user for facts present here):\n${JSON.stringify({
+        selected_team: { id: thread.team_id, name: team.name },
+        league: team.league,
+        standings,
+      })}\nUse get_my_team for the selected roster, get_league_standings for refreshed standings, and get_league_team_roster for any opponent roster. Zero records and points before games are played mean preseason, not missing context.`
     : "\n\nConversation context: no fantasy team is attached to this thread. Ask the user to select one when personalized roster context is necessary.";
 
   if (!process.env.OPENAI_API_KEY) {

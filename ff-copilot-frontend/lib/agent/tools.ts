@@ -73,5 +73,19 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       players: roster.players,
     };
   }
+  if (call.name === "get_league_standings") {
+    if (!thread.league_id) return { error: "No league is attached to this conversation." };
+    const teams = await api<Array<Record<string, unknown>>>(`/v1/leagues/${thread.league_id}/teams`);
+    return teams.sort((a, b) => Number(a.standing || 999) - Number(b.standing || 999));
+  }
+  if (call.name === "get_league_team_roster") {
+    if (!thread.league_id) return { error: "No league is attached to this conversation." };
+    const teamId = String(input.team_id || "");
+    const teams = await api<Array<Record<string, unknown>>>(`/v1/leagues/${thread.league_id}/teams`);
+    const team = teams.find((candidate) => candidate.id === teamId);
+    if (!team) return { error: "That team is not in this conversation's league." };
+    const roster = await api<{ snapshot: Record<string, unknown> | null; players: unknown[] }>(`/v1/teams/${teamId}/roster`);
+    return { team, snapshot: roster.snapshot, players: roster.players };
+  }
   throw new Error(`Unknown tool: ${call.name}`);
 }
