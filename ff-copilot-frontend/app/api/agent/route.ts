@@ -143,7 +143,9 @@ export async function POST(request: Request) {
       tools: [...AGENT_TOOLS] as OpenAI.Chat.Completions.ChatCompletionTool[],
       tool_choice: "auto",
       reasoning_effort: "minimal",
-      max_completion_tokens: 700,
+      // This budget includes hidden reasoning tokens. Real roster/tool results can
+      // exhaust a smaller budget before the model emits any visible answer.
+      max_completion_tokens: 1600,
     });
     const answer = completion.choices[0]?.message;
     if (!answer) throw new Error("The model returned no response");
