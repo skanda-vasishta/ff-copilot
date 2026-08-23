@@ -8,6 +8,7 @@ import type { AgentThread } from "@ff-copilot/agent-runtime";
 import { AgentMessage } from "./AgentMessage";
 import { useActiveScope } from "@/lib/scope";
 import { getAgentModels, refreshThreadContext, setAgentPreferences } from "@/features/copilot/client/api";
+import type { AgentModelSelection } from "@/features/copilot/client/api";
 
 export function AgentPanel() {
   const [threads, setThreads] = useState<AgentThread[]>([]);
@@ -16,6 +17,8 @@ export function AgentPanel() {
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [refreshingContext, setRefreshingContext] = useState(false);
   const [contextNotice, setContextNotice] = useState<string | null>(null);
+  const [modelSelection, setModelSelection] = useState<AgentModelSelection | null>(null);
+  const [savingModel, setSavingModel] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const { scope, isLoading: loadingScope } = useActiveScope();
   const models = useQuery({ queryKey: ["agent-models"], queryFn: getAgentModels });
@@ -35,6 +38,9 @@ export function AgentPanel() {
     }).finally(() => setLoadingThreads(false));
   }, [loadingScope, scope?.team.id]);
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [agent.messages, agent.status]);
+  useEffect(() => {
+    if (models.data?.selected && !savingModel) setModelSelection(models.data.selected);
+  }, [models.data?.selected, savingModel]);
 
   async function newThread() {
     if (!scope) return;
@@ -66,17 +72,43 @@ export function AgentPanel() {
   async function chooseModel(model: string) {
     const option = models.data?.models.find((candidate) => candidate.id === model);
     if (!option) return;
-    const currentEffort = models.data?.selected?.reasoningEffort;
+    const previous = modelSelection;
+    const currentEffort = modelSelection?.reasoningEffort;
     const effort = currentEffort && option.efforts.includes(currentEffort) ? currentEffort : option.efforts[0];
-    await setAgentPreferences(model, effort);
-    await models.refetch();
+    const next = { model, reasoningEffort: effort };
+    setModelSelection(next);
+    setSavingModel(true);
+    setContextNotice(null);
+    try {
+      const saved = await setAgentPreferences(model, effort);
+      setModelSelection(saved.selected);
+      await models.refetch();
+    } catch (cause) {
+      setModelSelection(previous);
+      setContextNotice(cause instanceof Error ? cause.message : "Could not save model preference");
+    } finally {
+      setSavingModel(false);
+    }
   }
 
   async function chooseReasoning(reasoningEffort: string) {
-    const model = models.data?.selected?.model;
+    const previous = modelSelection;
+    const model = modelSelection?.model;
     if (!model) return;
-    await setAgentPreferences(model, reasoningEffort);
-    await models.refetch();
+    const next = { model, reasoningEffort };
+    setModelSelection(next);
+    setSavingModel(true);
+    setContextNotice(null);
+    try {
+      const saved = await setAgentPreferences(model, reasoningEffort);
+      setModelSelection(saved.selected);
+      await models.refetch();
+    } catch (cause) {
+      setModelSelection(previous);
+      setContextNotice(cause instanceof Error ? cause.message : "Could not save reasoning preference");
+    } finally {
+      setSavingModel(false);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -106,9 +138,9 @@ export function AgentPanel() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] px-5 py-4 sm:px-6">
         <div><h1 className="font-semibold text-white">In-season Copilot</h1><p className="mt-1 text-xs text-[#65716b]">Grounded in your stored player and league data</p></div>
         <div className="flex items-center gap-2">
-          {models.data?.models.length && models.data.selected ? <>
-            <select aria-label="Model" value={models.data.selected.model} onChange={(event) => chooseModel(event.target.value)} disabled={agent.status !== "idle"} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af] disabled:opacity-40">{models.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
-            <select aria-label="Reasoning effort" value={models.data.selected.reasoningEffort} onChange={(event) => chooseReasoning(event.target.value)} disabled={agent.status !== "idle"} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs capitalize text-[#aab4af] disabled:opacity-40">{models.data.models.find((model) => model.id === models.data?.selected?.model)?.efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select>
+          {models.data?.models.length && modelSelection ? <>
+            <select aria-label="Model" value={modelSelection.model} onChange={(event) => chooseModel(event.target.value)} disabled={agent.status !== "idle" || savingModel} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af] disabled:opacity-40">{models.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
+            <select aria-label="Reasoning effort" value={modelSelection.reasoningEffort} onChange={(event) => chooseReasoning(event.target.value)} disabled={agent.status !== "idle" || savingModel} className="focus-ring rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs capitalize text-[#aab4af] disabled:opacity-40">{models.data.models.find((model) => model.id === modelSelection.model)?.efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select>
           </> : null}
           {thread && <button disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#78847e] hover:text-white disabled:opacity-40">{refreshingContext ? "Refreshing…" : "Refresh context"}</button>}
           {thread && <button onClick={removeThread} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#65716b] hover:border-red-300/20 hover:text-red-200">Delete</button>}
