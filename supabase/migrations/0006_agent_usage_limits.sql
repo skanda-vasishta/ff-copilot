@@ -51,13 +51,13 @@ begin
   if current_minute_start > now() - interval '1 minute' and current_minute_count >= 10 then
     raise exception using errcode = 'P0001', message = 'agent_rate_limit';
   end if;
-  if coalesce(current_user_count, 0) >= 40 then
+  if coalesce(current_user_count, 0) >= 20 then
     raise exception using errcode = 'P0001', message = 'agent_user_daily_limit';
   end if;
 
   select model_requests into current_global_count
   from public.agent_global_daily_usage where usage_date = today;
-  if coalesce(current_global_count, 0) >= 500 then
+  if coalesce(current_global_count, 0) >= 100 then
     raise exception using errcode = 'P0001', message = 'agent_global_daily_limit';
   end if;
 
@@ -85,7 +85,7 @@ begin
     set model_requests = agent_global_daily_usage.model_requests + 1
   returning model_requests into current_global_count;
 
-  return query select 40 - current_user_count, 500 - current_global_count;
+  return query select 20 - current_user_count, 100 - current_global_count;
 end;
 $$;
 
