@@ -16,7 +16,7 @@ Apply `supabase/migrations/0004_agent_threads.sql`, then configure these server-
 
 ```env
 OPENAI_API_KEY=...
-AGENT_MODEL=gpt-5-nano
+AGENT_MODEL=gpt-4o-mini
 ```
 
 The browser owns the bounded tool loop, but never calls OpenAI directly. Each user or tool event is sent to `/api/agent`; the authenticated server persists it, reloads the user-owned thread, calls OpenAI once, persists the model response, and returns that response to the browser. Threads and messages are protected by Supabase Row Level Security.

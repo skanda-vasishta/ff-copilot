@@ -15,6 +15,8 @@ export function AgentPanel() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loadingThreads, setLoadingThreads] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [newTeamId, setNewTeamId] = useState("");
   const end = useRef<HTMLDivElement>(null);
   const teams = useQuery({ queryKey: ["my-teams"], queryFn: () => api<TeamSelection[]>("/v1/me/teams") });
   const thread = useMemo(() => threads.find((item) => item.id === threadId) || null, [threadId, threads]);
@@ -29,10 +31,13 @@ export function AgentPanel() {
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [agent.messages, agent.status]);
 
   async function newThread() {
-    const selected = teams.data?.[0]?.team;
-    const created = await createThread({ teamId: selected?.id, leagueId: selected?.league_id });
+    const selected = teams.data?.find((row) => row.team.id === newTeamId)?.team;
+    if (!selected) return;
+    const created = await createThread({ teamId: selected.id, leagueId: selected.league_id });
     setThreads((current) => [created, ...current]);
     setThreadId(created.id);
+    setCreating(false);
+    setNewTeamId("");
   }
 
   async function removeThread() {
@@ -41,13 +46,6 @@ export function AgentPanel() {
     const remaining = threads.filter((item) => item.id !== thread.id);
     setThreads(remaining);
     setThreadId(remaining[0]?.id || null);
-  }
-
-  async function selectTeam(teamId: string) {
-    if (!thread) return;
-    const team = teams.data?.find((row) => row.team.id === teamId)?.team;
-    const updated = await updateThread(thread.id, { team_id: team?.id || null, league_id: team?.league_id || null });
-    setThreads((current) => current.map((item) => item.id === updated.id ? updated : item));
   }
 
   async function submit(event: FormEvent) {
@@ -64,7 +62,7 @@ export function AgentPanel() {
 
   return <div className="grid min-h-[calc(100vh-9rem)] overflow-hidden rounded-3xl border border-white/[.07] bg-[#0d1114] lg:grid-cols-[270px_minmax(0,1fr)]">
     <aside className="border-b border-white/[.07] bg-[#090c0f] p-4 lg:border-b-0 lg:border-r">
-      <button onClick={newThread} className="focus-ring w-full rounded-xl bg-[#b7f34a] px-4 py-3 text-sm font-bold text-[#10140a] hover:bg-[#c7ff5e]">+ New conversation</button>
+      {!creating ? <button onClick={() => setCreating(true)} className="focus-ring w-full rounded-xl bg-[#b7f34a] px-4 py-3 text-sm font-bold text-[#10140a] hover:bg-[#c7ff5e]">+ New conversation</button> : <div className="rounded-xl border border-[#b7f34a]/20 bg-[#b7f34a]/[.045] p-3"><label className="block text-[10px] font-semibold uppercase tracking-[.14em] text-[#8c9992]">Choose team</label><select autoFocus value={newTeamId} onChange={(event) => setNewTeamId(event.target.value)} className="focus-ring mt-2 w-full rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af]"><option value="">Select a team…</option>{teams.data?.map(({ team }) => <option key={team.id} value={team.id}>{team.name} · {team.league.name || "League"} · {team.league.season}</option>)}</select><p className="mt-2 text-[10px] leading-4 text-[#65716b]">This conversation will stay permanently scoped to this team.</p><div className="mt-3 flex gap-2"><button disabled={!newTeamId} onClick={newThread} className="focus-ring flex-1 rounded-lg bg-[#b7f34a] px-3 py-2 text-xs font-bold text-[#10140a] disabled:opacity-30">Start</button><button onClick={() => { setCreating(false); setNewTeamId(""); }} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#78847e]">Cancel</button></div></div>}
       <p className="mb-2 mt-6 px-2 text-[10px] font-semibold uppercase tracking-[.15em] text-[#58635d]">History</p>
       <div className="flex gap-2 overflow-x-auto lg:block lg:space-y-1">
         {threads.map((item) => <button key={item.id} onClick={() => setThreadId(item.id)} className={`focus-ring min-w-52 rounded-xl px-3 py-3 text-left text-sm transition lg:w-full ${item.id === threadId ? "bg-white/[.075] text-white" : "text-[#78847e] hover:bg-white/[.035] hover:text-white"}`}><span className="block truncate">{item.title}</span><span className="mt-1 block text-[10px] text-[#4f5a54]">{new Date(item.updated_at).toLocaleDateString()}</span></button>)}
@@ -76,13 +74,13 @@ export function AgentPanel() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] px-5 py-4 sm:px-6">
         <div><h1 className="font-semibold text-white">In-season Copilot</h1><p className="mt-1 text-xs text-[#65716b]">Grounded in your stored player and league data</p></div>
         <div className="flex items-center gap-2">
-          {thread && <select value={thread.team_id || ""} onChange={(event) => selectTeam(event.target.value)} className="focus-ring max-w-52 rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af]"><option value="">No team selected</option>{teams.data?.map(({ team }) => <option key={team.id} value={team.id}>{team.name} · {team.league.season}</option>)}</select>}
+          {thread && <span className="max-w-64 truncate rounded-lg border border-white/[.09] bg-[#090d10] px-3 py-2 text-xs text-[#aab4af]">{teams.data?.find((row) => row.team.id === thread.team_id)?.team.name || "Legacy unscoped thread"}<span className="ml-1 text-[#58635d]">· locked</span></span>}
           {thread && <button onClick={removeThread} className="focus-ring rounded-lg border border-white/[.08] px-3 py-2 text-xs text-[#65716b] hover:border-red-300/20 hover:text-red-200">Delete</button>}
         </div>
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-8">
-        {!thread && !loadingThreads && <div className="mx-auto max-w-lg py-24 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#b7f34a]/[.08] text-2xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Ask about your season</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Compare players, inspect source reports, or reason through a roster decision. Create a conversation to begin.</p><button onClick={newThread} className="focus-ring mt-6 rounded-xl bg-[#b7f34a] px-5 py-3 text-sm font-bold text-[#10140a]">Start a conversation</button></div>}
+        {!thread && !loadingThreads && <div className="mx-auto max-w-lg py-24 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#b7f34a]/[.08] text-2xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Ask about your season</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to one team in one league, so roster advice never crosses contexts.</p><button onClick={() => setCreating(true)} className="focus-ring mt-6 rounded-xl bg-[#b7f34a] px-5 py-3 text-sm font-bold text-[#10140a]">Choose a team</button></div>}
         {thread && !agent.messages.length && <div className="mx-auto max-w-xl py-20 text-center"><h2 className="text-2xl font-semibold tracking-[-.03em] text-white">What are you deciding?</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Try “Compare my running backs using the latest injury and ranking data” or ask about a specific player.</p></div>}
         {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
         {agent.status !== "idle" && agent.status !== "error" && <div className="flex items-center gap-2 text-xs text-[#78847e]"><span className="size-2 animate-pulse rounded-full bg-[#b7f34a]" />{agent.status === "running-tool" ? "Checking the data…" : "Thinking…"}</div>}
