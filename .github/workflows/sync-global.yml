@@ -47,10 +47,10 @@ jobs:
         run: |
           args=(sync-global --season "$SEASON")
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
-          # Provider pages and Reddit are substantially heavier than ESPN's factual
-          # player feed, so refresh them once daily (08:17 UTC) or when requested.
+          # FFToday and source pages are refreshed once daily (08:17 UTC).
+          # FFToday is fetched only once per position and visibly attributed in-product.
           if [ "$SCHEDULE" = "17 8 * * *" ] || [ "$INCLUDE_SOURCES" = "true" ]; then
-            args+=(--sources --source-player-limit 450)
+            args+=(--fftoday --fantasypros-rankings --sources --source-player-limit 450)
           fi
           python -m pipelines.ingestion.sync "${args[@]}"
       - name: Verify 2026 coverage

@@ -21,6 +21,10 @@ from espn_api.football import League
 load_dotenv()
 
 FANTASY_POSITIONS = frozenset({"QB", "RB", "WR", "TE"})
+FFTODAY_POSITION_IDS = {"QB": 10, "RB": 20, "WR": 30, "TE": 40}
+FFTODAY_PPR_LEAGUE_ID = 107644
+FFTODAY_PROJECTIONS_URL = "https://www.fftoday.com/rankings/playerproj.php"
+FANTASYPROS_PPR_RANKINGS_URL = "https://www.fantasypros.com/nfl/rankings/ppr-cheatsheets.php"
 
 
 def now() -> str:
@@ -35,6 +39,12 @@ def digest(value: Any) -> str:
 def normalize_text(value: str) -> str:
     lines = [re.sub(r"\s+", " ", line).strip() for line in value.replace("\r", "\n").split("\n")]
     return "\n".join(line for line in lines if line).strip()
+
+
+def normalize_player_name(value: str) -> str:
+    """Normalize provider spelling without making unsafe fuzzy matches."""
+    value = value.casefold().replace("’", "'")
+    return re.sub(r"[^a-z0-9]", "", value)
 
 
 def clean_number(value: Any) -> float | int | None:
@@ -216,6 +226,109 @@ def parse_espn_draft_rank(player: dict[str, Any], scoring_format: str = "PPR") -
     return clean_number(requested.get("rank"))
 
 
+def parse_fftoday_projections(html: str, position: str, source_url: str) -> list[dict[str, Any]]:
+    soup = BeautifulSoup(html, "html.parser")
+    expected_title = f"{position}" if position == "QB" else None
+    update_node = soup.find(class_="update")
+    updated_match = re.search(r"Updated:\s*(\d{1,2}/\d{1,2}/\d{4})", update_node.get_text(" ", strip=True) if update_node else "")
+    source_updated_at = None
+    if updated_match:
+        source_updated_at = datetime.strptime(updated_match.group(1), "%m/%d/%Y").replace(tzinfo=timezone.utc).isoformat()
+
+    rows = []
+    for link in soup.select('a[href^="/stats/players/"]'):
+        match = re.search(r"/stats/players/(\d+)/", link.get("href", ""))
+        cells = link.find_parent("tr").find_all("td") if link.find_parent("tr") else []
+        if not match or len(cells) < 7:
+            continue
+        values = [cell.get_text(" ", strip=True).replace(",", "") for cell in cells]
+        points = clean_number(values[-1])
+        if points is None:
+            raise ProviderContractError(f"FFToday {position} row for {link.get_text(strip=True)} has no fantasy points")
+        rows.append({
+            "external_id": match.group(1),
+            "name": link.get_text(" ", strip=True),
+            "position": position,
+            "nfl_team": values[2] or None,
+            "position_rank": len(rows) + 1,
+            "projected_total_points": points,
+            "source_updated_at": source_updated_at,
+            "source_url": source_url,
+            "raw_values": values[4:-1],
+        })
+    if len(rows) < 10:
+        detail = f" for {expected_title}" if expected_title else ""
+        raise ProviderContractError(f"FFToday projection markup returned only {len(rows)} player rows{detail}")
+    return rows
+
+
+def fftoday_projections(season: int) -> list[dict[str, Any]]:
+    rows = []
+    headers = {"User-Agent": "ff-copilot/1.0 (open-source fantasy football app; once-daily attributed fetch)"}
+    with httpx.Client(timeout=30, follow_redirects=True, headers=headers) as client:
+        for position, position_id in FFTODAY_POSITION_IDS.items():
+            params = {"Season": season, "PosID": position_id, "LeagueID": FFTODAY_PPR_LEAGUE_ID}
+            response = client.get(FFTODAY_PROJECTIONS_URL, params=params)
+            response.raise_for_status()
+            rows.extend(parse_fftoday_projections(response.text, position, str(response.url)))
+    for overall_rank, row in enumerate(
+        sorted(rows, key=lambda item: (-float(item["projected_total_points"]), item["name"])), start=1
+    ):
+        row["overall_rank"] = overall_rank
+    return rows
+
+
+def parse_fantasypros_rankings(html: str, season: int, source_url: str) -> list[dict[str, Any]]:
+    match = re.search(r"\bvar\s+ecrData\s*=\s*(\{.*?\});\s*\n", html, re.DOTALL)
+    if not match:
+        raise ProviderContractError("FantasyPros rankings page is missing ecrData")
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError as exc:
+        raise ProviderContractError("FantasyPros ecrData is not valid JSON") from exc
+    if str(payload.get("year")) != str(season) or payload.get("scoring") != "PPR":
+        raise ProviderContractError(
+            f"FantasyPros returned {payload.get('year')} {payload.get('scoring')} instead of {season} PPR"
+        )
+    source_updated_at = None
+    updated_match = re.fullmatch(r"(\d{1,2})/(\d{1,2})", str(payload.get("last_updated", "")))
+    if updated_match:
+        source_updated_at = datetime(
+            season, int(updated_match.group(1)), int(updated_match.group(2)), tzinfo=timezone.utc
+        ).isoformat()
+    rows = []
+    for player in payload.get("players", []):
+        position = player.get("player_position_id")
+        overall_rank = clean_number(player.get("rank_ecr"))
+        position_match = re.search(r"(\d+)$", str(player.get("pos_rank", "")))
+        if position not in FANTASY_POSITIONS or overall_rank is None or not position_match:
+            continue
+        rows.append({
+            "external_id": str(player["player_id"]),
+            "name": player["player_name"],
+            "position": position,
+            "nfl_team": player.get("player_team_id"),
+            "overall_rank": overall_rank,
+            "position_rank": int(position_match.group(1)),
+            "source_updated_at": source_updated_at,
+            "source_url": player.get("player_page_url") or source_url,
+        })
+    if len(rows) < 100:
+        raise ProviderContractError(f"FantasyPros rankings returned only {len(rows)} offensive players")
+    return rows
+
+
+def fantasypros_rankings(season: int) -> list[dict[str, Any]]:
+    response = httpx.get(
+        FANTASYPROS_PPR_RANKINGS_URL,
+        timeout=30,
+        follow_redirects=True,
+        headers={"User-Agent": "ff-copilot/1.0 (open-source fantasy football app; once-daily attributed fetch)"},
+    )
+    response.raise_for_status()
+    return parse_fantasypros_rankings(response.text, season, str(response.url))
+
+
 def espn_draft_ranks(league: League, size: int, scoring_format: str = "PPR") -> dict[str, int]:
     filters = {"players": {
         "filterStatus": {"value": ["FREEAGENT", "WAIVERS", "ONTEAM"]},
@@ -360,6 +473,112 @@ def sync_global(args):
                                   "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank")
             db.touch("player_rankings", [row["id"] for row in persisted], fetched_at)
         run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
+
+        if args.fantasypros_rankings:
+            try:
+                fantasypros_rows = fantasypros_rankings(args.season)
+                player_lookup = {
+                    (normalize_player_name(row["name"]), row.get("position")): row["id"]
+                    for row in player_rows
+                }
+                fantasypros_ids, fantasypros_ranking_rows = [], []
+                unmatched = []
+                for row in fantasypros_rows:
+                    player_id = player_lookup.get((normalize_player_name(row["name"]), row["position"]))
+                    if not player_id:
+                        unmatched.append(f"{row['name']} ({row['position']})")
+                        continue
+                    fantasypros_ids.append({
+                        "player_id": player_id, "provider": "fantasypros", "external_id": row["external_id"]
+                    })
+                    fantasypros_ranking_rows.append({
+                        "player_id": player_id, "source": "fantasypros", "season": args.season,
+                        "week": args.week, "scoring_format": "ppr", "ranking_type": "expert_consensus_rank",
+                        "overall_rank": row["overall_rank"], "position_rank": row["position_rank"],
+                        "fetched_at": fetched_at,
+                    })
+                if len(fantasypros_ranking_rows) < 100:
+                    raise ProviderContractError(
+                        f"FantasyPros matched only {len(fantasypros_ranking_rows)} players; refusing partial import"
+                    )
+                for batch in chunks(fantasypros_ids):
+                    db.upsert("player_external_ids", batch, "provider,external_id")
+                for batch in chunks(fantasypros_ranking_rows):
+                    persisted = db.upsert(
+                        "player_rankings", batch,
+                        "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank",
+                    )
+                    db.touch("player_rankings", [item["id"] for item in persisted], fetched_at)
+                run.read += len(fantasypros_rows)
+                run.written += len(fantasypros_ids) + len(fantasypros_ranking_rows)
+                if unmatched:
+                    run.error(
+                        "fantasypros_rankings:unmatched",
+                        f"{len(unmatched)} unmatched players: {', '.join(unmatched[:20])}",
+                    )
+            except Exception as exc:
+                run.error("fantasypros_rankings", exc)
+
+        if args.fftoday:
+            try:
+                fftoday_rows = fftoday_projections(args.season)
+                player_lookup = {
+                    (normalize_player_name(row["name"]), row.get("position")): row["id"]
+                    for row in player_rows
+                }
+                fftoday_ids, fftoday_snapshots, fftoday_rankings = [], [], []
+                unmatched = []
+                for row in fftoday_rows:
+                    player_id = player_lookup.get((normalize_player_name(row["name"]), row["position"]))
+                    if not player_id:
+                        unmatched.append(f"{row['name']} ({row['position']})")
+                        continue
+                    fftoday_ids.append({
+                        "player_id": player_id, "provider": "fftoday", "external_id": row["external_id"]
+                    })
+                    raw_payload = {
+                        "attribution": "FFToday",
+                        "source_url": row["source_url"],
+                        "scoring_format": "ppr",
+                        "position": row["position"],
+                        "nfl_team": row["nfl_team"],
+                        "stat_values": row["raw_values"],
+                    }
+                    snapshot = {
+                        "player_id": player_id, "source": "fftoday", "season": args.season, "week": args.week,
+                        "projected_total_points": row["projected_total_points"],
+                        "raw_payload": raw_payload, "source_updated_at": row["source_updated_at"],
+                        "fetched_at": fetched_at,
+                    }
+                    snapshot["data_hash"] = digest({key: value for key, value in snapshot.items() if key != "fetched_at"})
+                    fftoday_snapshots.append(snapshot)
+                    fftoday_rankings.append({
+                        "player_id": player_id, "source": "fftoday", "season": args.season, "week": args.week,
+                        "scoring_format": "ppr", "ranking_type": "projected_position_rank",
+                        "overall_rank": None, "position_rank": row["position_rank"], "fetched_at": fetched_at,
+                    })
+                if len(fftoday_snapshots) < 100:
+                    raise ProviderContractError(
+                        f"FFToday matched only {len(fftoday_snapshots)} players; refusing partial provider import"
+                    )
+                for batch in chunks(fftoday_ids):
+                    db.upsert("player_external_ids", batch, "provider,external_id")
+                for batch in chunks(fftoday_snapshots, 50):
+                    persisted = db.upsert("player_snapshots", batch, "player_id,source,season,week,data_hash")
+                    db.touch("player_snapshots", [item["id"] for item in persisted], fetched_at)
+                for batch in chunks(fftoday_rankings):
+                    persisted = db.upsert(
+                        "player_rankings", batch,
+                        "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank",
+                    )
+                    db.touch("player_rankings", [item["id"] for item in persisted], fetched_at)
+                run.read += len(fftoday_rows)
+                run.written += len(fftoday_ids) + len(fftoday_snapshots) + len(fftoday_rankings)
+                if unmatched:
+                    run.error("fftoday:unmatched", f"{len(unmatched)} unmatched players: {', '.join(unmatched[:20])}")
+            except Exception as exc:
+                # Keep the last successful FFToday snapshot when its page or network fails.
+                run.error("fftoday", exc)
 
         if args.sources:
             source_candidates = sorted(unique.items(), key=source_priority)[:args.source_player_limit]
@@ -610,6 +829,14 @@ def parser():
         help="Maximum ESPN free-agent pool to request before filtering to QB/RB/WR/TE (default: 2000)",
     )
     global_sync.add_argument("--sources", action="store_true")
+    global_sync.add_argument(
+        "--fftoday", action="store_true",
+        help="Refresh attributed FFToday full-PPR projections and projected positional ranks",
+    )
+    global_sync.add_argument(
+        "--fantasypros-rankings", action="store_true",
+        help="Refresh attributed FantasyPros full-PPR overall and positional ECR",
+    )
     global_sync.add_argument("--source-workers", type=int, default=4)
     global_sync.add_argument(
         "--source-player-limit", type=int, default=450,

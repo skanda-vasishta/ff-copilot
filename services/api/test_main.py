@@ -108,8 +108,10 @@ class PlayerDetailDB:
             "players": [{"id": "player-1", "name": "Test Player"}],
             "player_snapshots": [{"id": "snapshot-1", "season": 2026}],
             "player_rankings": [
-                {"id": "rank-1", "source": "espn", "overall_rank": 10},
-                {"id": "rank-2", "source": "fantasypros", "overall_rank": 20},
+                {"id": "rank-1", "source": "espn", "overall_rank": 10, "scoring_format": "ppr",
+                 "ranking_type": "current_draft_rank", "fetched_at": "2026-08-23T00:00:00Z"},
+                {"id": "rank-2", "source": "fantasypros", "overall_rank": 20, "scoring_format": "ppr",
+                 "ranking_type": "expert_consensus_rank", "fetched_at": "2026-08-23T00:00:00Z"},
             ],
             "source_documents": [{"id": "source-1", "source": "reddit"}],
         }

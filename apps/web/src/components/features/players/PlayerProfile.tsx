@@ -64,6 +64,7 @@ type PlayerDetail = {
 
 const sourceNames: Record<string, string> = {
   espn: "ESPN",
+  fftoday: "FFToday",
   fantasypros: "FantasyPros",
   reddit: "Reddit",
 };
@@ -93,7 +94,8 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
   const player = detail.data?.player;
   const rankings = detail.data?.rankings;
   const sources = detail.data?.sources || [];
-  const latest = detail.data?.snapshots[0];
+  const latest = detail.data?.snapshots.find((snapshot) => snapshot.source === "espn");
+  const fftoday = detail.data?.snapshots.find((snapshot) => snapshot.source === "fftoday");
 
   if (loadingScope || detail.isLoading)
     return (
@@ -122,6 +124,15 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
       return groups;
     },
     {},
+  );
+  const currentRanks = Array.from(
+    (rankings?.items || []).reduce((items, ranking) => {
+      const key = `${ranking.source}:${ranking.ranking_type}:${ranking.scoring_format}`;
+      if (!items.has(key)) items.set(key, ranking);
+      return items;
+    }, new Map<string, Ranking>()).values(),
+  ).filter((ranking) =>
+    ["current_draft_rank", "expert_consensus_rank", "projected_position_rank"].includes(ranking.ranking_type),
   );
 
   return (
@@ -179,6 +190,31 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
           </div>
         ))}
       </section>
+
+      {fftoday && (
+        <section className="panel flex flex-col justify-between gap-4 rounded-2xl p-5 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">
+              FFToday · Full PPR
+            </p>
+            <p className="mt-2 text-sm text-[#9da7a2]">
+              Projected points <span className="font-mono font-semibold text-white">{number(fftoday.projected_total_points)}</span>
+              {rankings?.items.find((ranking) => ranking.source === "fftoday")?.position_rank != null && (
+                <> · projected {player.position} rank <span className="font-mono font-semibold text-white">#{rankings.items.find((ranking) => ranking.source === "fftoday")?.position_rank}</span></>
+              )}
+            </p>
+            <p className="mt-1 text-[10px] text-[#58635d]">Fetched {date(fftoday.fetched_at)} · updated once daily</p>
+          </div>
+          <a
+            href="https://www.fftoday.com/rankings/playerproj.php"
+            target="_blank"
+            rel="noreferrer"
+            className="focus-ring shrink-0 rounded-lg border border-white/[.08] px-3 py-2 text-xs font-medium text-[#b7f34a] hover:bg-white/[.04]"
+          >
+            View source at FFToday ↗
+          </a>
+        </section>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="panel overflow-hidden rounded-2xl">
@@ -276,9 +312,21 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
               ))}
             </div>
             <p className="mt-3 text-[10px] text-[#58635d]">
-              {rankings?.summary.source_count || 0} source rankings with an
-              overall rank
+              Latest comparable full-PPR overall ranks from {rankings?.summary.source_count || 0} sources
             </p>
+            <div className="mt-4 space-y-2 border-t border-white/[.06] pt-4">
+              {currentRanks.map((ranking) => (
+                <div key={`${ranking.source}:${ranking.ranking_type}`} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="text-[#9da7a2]">{sourceNames[ranking.source] || ranking.source}</span>
+                  <span className="font-mono text-white">
+                    {ranking.overall_rank != null ? `Overall #${number(ranking.overall_rank, 0)}` : ""}
+                    {ranking.overall_rank != null && ranking.position_rank != null ? " · " : ""}
+                    {ranking.position_rank != null ? `${player.position} #${number(ranking.position_rank, 0)}` : ""}
+                  </span>
+                </div>
+              ))}
+              {!currentRanks.length && <p className="text-xs text-[#58635d]">No current source rankings.</p>}
+            </div>
           </section>
           <section className="panel rounded-2xl p-5">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">

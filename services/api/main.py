@@ -176,14 +176,23 @@ async def require_player(player_id: str, db: SupabaseREST) -> dict[str, Any]:
 
 
 def ranking_summary(data: list[dict[str, Any]]) -> dict[str, float | int | None]:
-    ranks = sorted(float(row["overall_rank"]) for row in data if row.get("overall_rank") is not None)
+    comparable_types = {"current_draft_rank", "expert_consensus_rank"}
+    latest_by_source: dict[str, dict[str, Any]] = {}
+    for row in sorted(data, key=lambda item: item.get("fetched_at") or "", reverse=True):
+        if (
+            row.get("overall_rank") is not None
+            and str(row.get("scoring_format", "")).lower() == "ppr"
+            and row.get("ranking_type") in comparable_types
+        ):
+            latest_by_source.setdefault(row["source"], row)
+    ranks = sorted(float(row["overall_rank"]) for row in latest_by_source.values())
     median = None if not ranks else (ranks[len(ranks)//2] if len(ranks) % 2 else sum(ranks[len(ranks)//2-1:len(ranks)//2+1]) / 2)
     return {
         "average": sum(ranks) / len(ranks) if ranks else None,
         "median": median,
         "minimum": min(ranks) if ranks else None,
         "maximum": max(ranks) if ranks else None,
-        "source_count": len({row["source"] for row in data if row.get("overall_rank") is not None}),
+        "source_count": len(latest_by_source),
     }
 
 
