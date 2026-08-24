@@ -25,6 +25,8 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       ...result,
       items: result.items.map(({ average_rank: _average, median_rank, minimum_rank: _minimum, maximum_rank: _maximum, ...player }) => ({
         ...player,
+        projection_season: season,
+        projection_basis: `${season} ESPN projection`,
         previous_season_position_finish: median_rank,
         ranking_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
       })),
@@ -46,6 +48,8 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
         average_points: snapshot.average_points,
         projected_total_points: snapshot.projected_total_points,
         projected_average_points: snapshot.projected_average_points,
+        projection_season: snapshot.season,
+        projection_basis: `${snapshot.season} ESPN projection`,
         percent_owned: snapshot.percent_owned,
         percent_started: snapshot.percent_started,
         fetched_at: snapshot.fetched_at,
@@ -114,6 +118,8 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       ...result,
       items: result.items.map(({ average_rank: _average, median_rank, minimum_rank: _minimum, maximum_rank: _maximum, ...player }) => ({
         ...player,
+        projection_season: season,
+        projection_basis: `${season} ESPN projection`,
         previous_season_position_finish: median_rank,
         ranking_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
       })),
