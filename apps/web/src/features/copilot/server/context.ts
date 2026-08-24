@@ -27,7 +27,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-player-pool-v2";
+const CONTEXT_VERSION = "league-rosters-espn-rankings-v3";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 
 export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false) {
@@ -66,21 +66,41 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     rosters.set(teamId, entries);
   }
 
+  const { data: espnRankings, error: espnRankingsError } = await supabase.from("player_rankings")
+    .select("player_id,overall_rank,position_rank,fetched_at")
+    .eq("source", "espn")
+    .eq("season", thread.team.league.season)
+    .eq("scoring_format", "ppr")
+    .eq("ranking_type", "current_draft_rank")
+    .order("overall_rank", { ascending: true, nullsFirst: false })
+    .limit(500);
+  if (espnRankingsError) throw new Error("Could not load current ESPN rankings for context");
+  const rankedPlayerIds = (espnRankings || []).map((ranking) => ranking.player_id);
+  if (!rankedPlayerIds.length) throw new Error("Current ESPN rankings are not available for context");
+
   const { data: projectedPlayers, error: projectedPlayersError } = await supabase.from("player_directory")
     .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,median_rank,fetched_at")
     .eq("season", thread.team.league.season)
+    .in("id", rankedPlayerIds)
     .in("position", [...CONTEXT_POSITIONS])
-    .order("projected_total_points", { ascending: false, nullsFirst: false })
     .limit(500);
   if (projectedPlayersError) throw new Error("Could not load the projected player pool for context");
+  const rankingsByPlayer = new Map((espnRankings || []).map((ranking) => [ranking.player_id, ranking]));
+  const rankedPlayers = (projectedPlayers || []).filter((player) => rankingsByPlayer.has(player.id)).sort((left, right) =>
+    Number(rankingsByPlayer.get(left.id)?.overall_rank ?? Number.MAX_SAFE_INTEGER)
+      - Number(rankingsByPlayer.get(right.id)?.overall_rank ?? Number.MAX_SAFE_INTEGER));
   const topPlayersByPosition = Object.fromEntries(CONTEXT_POSITIONS.map((position) => [
     position,
-    (projectedPlayers || []).filter((player) => player.position === position).slice(0, 20).map((player) => ({
+    rankedPlayers.filter((player) => player.position === position).slice(0, 20).map((player) => ({
       ...player,
+      espn_overall_rank: rankingsByPlayer.get(player.id)?.overall_rank,
+      ranking_season: thread.team.league.season,
+      ranking_basis: `${thread.team.league.season} ESPN PPR draft rank`,
+      ranking_fetched_at: rankingsByPlayer.get(player.id)?.fetched_at,
       projection_season: thread.team.league.season,
       projection_basis: `${thread.team.league.season} ESPN projection`,
       previous_season_position_finish: player.median_rank,
-      ranking_basis: `${thread.team.league.season - 1} ESPN positional finish; not a ${thread.team.league.season} projection or consensus rank`,
+      previous_season_finish_basis: `${thread.team.league.season - 1} ESPN positional finish; not a ${thread.team.league.season} projection or consensus rank`,
     })),
   ]));
 
@@ -91,7 +111,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     refreshed_at: refreshedAt,
     selected_team: { id: thread.team.id, name: thread.team.name },
     league: thread.team.league,
-    top_projected_players_by_position: topPlayersByPosition,
+    top_espn_ranked_players_by_position: topPlayersByPosition,
     teams: (teams || []).map((team) => ({
       ...team,
       is_user_team: team.id === thread.team_id,

@@ -8,6 +8,7 @@ from pipelines.ingestion.sync import (
     clean_number,
     digest,
     parse_espn_html,
+    parse_espn_draft_rank,
     parse_fantasypros_html,
     parse_json,
     parser,
@@ -48,6 +49,13 @@ def test_provider_contract_fixtures_extract_content():
     espn = parse_espn_html((FIXTURES / "espn_player.html").read_text())
     assert "healthy" in fantasypros
     assert "practice" in espn
+
+
+def test_espn_draft_rank_uses_requested_format_with_fallback():
+    player = {"draftRanksByRankType": {"PPR": {"rank": 12}, "STANDARD": {"rank": 18}}}
+    assert parse_espn_draft_rank(player, "PPR") == 12
+    assert parse_espn_draft_rank(player, "STANDARD") == 18
+    assert parse_espn_draft_rank(player, "SUPERFLEX") == 12
 
 
 @pytest.mark.parametrize("parser", [parse_fantasypros_html, parse_espn_html])

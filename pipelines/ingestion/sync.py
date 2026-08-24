@@ -210,6 +210,33 @@ def parse_espn_html(html: str) -> str:
     return content
 
 
+def parse_espn_draft_rank(player: dict[str, Any], scoring_format: str = "PPR") -> int | None:
+    ranks = player.get("draftRanksByRankType") or {}
+    requested = ranks.get(scoring_format.upper()) or ranks.get("PPR") or ranks.get("STANDARD") or {}
+    return clean_number(requested.get("rank"))
+
+
+def espn_draft_ranks(league: League, size: int, scoring_format: str = "PPR") -> dict[str, int]:
+    filters = {"players": {
+        "filterStatus": {"value": ["FREEAGENT", "WAIVERS", "ONTEAM"]},
+        "limit": size,
+        "sortDraftRanks": {"sortPriority": 1, "sortAsc": True, "value": scoring_format.upper()},
+    }}
+    data = league.espn_request.league_get(
+        params={"view": "kona_player_info", "scoringPeriodId": league.current_week},
+        headers={"x-fantasy-filter": json.dumps(filters)},
+    )
+    result = {}
+    for entry in data.get("players", []):
+        player = entry.get("playerPoolEntry", {}).get("player") or entry.get("player") or {}
+        rank = parse_espn_draft_rank(player, scoring_format)
+        if player.get("id") is not None and rank is not None:
+            result[str(player["id"])] = int(rank)
+    if not result:
+        raise ProviderContractError("ESPN player pool returned no current draft rankings")
+    return result
+
+
 def espn_text(external_id: str, name: str) -> tuple[str, str]:
     slug = re.sub(r"[^a-zA-Z0-9\s]", "", name).replace(" ", "-").lower()
     url = f"https://www.espn.com/nfl/player/_/id/{external_id}/{slug}"
@@ -292,6 +319,7 @@ def sync_global(args):
             for player in candidates
             if getattr(player, "position", None) in FANTASY_POSITIONS
         }
+        draft_ranks = espn_draft_ranks(league, args.free_agents, "PPR")
         run.read = len(unique)
         external_rows = db.request("GET", "player_external_ids", params={
             "provider": "eq.espn", "select": "external_id,player_id", "limit": 1000
@@ -305,12 +333,16 @@ def sync_global(args):
             player_rows.append({"id": player_id, **player_payload(player)})
             id_rows.append({"player_id": player_id, "provider": "espn", "external_id": external_id})
             snapshots.append(snapshot_payload(player_id, player, args.season, args.week, fetched_at))
+            if external_id in draft_ranks:
+                rankings.append({"player_id": player_id, "source": "espn", "season": args.season,
+                    "week": args.week, "scoring_format": "ppr", "ranking_type": "current_draft_rank",
+                    "overall_rank": draft_ranks[external_id], "position_rank": None, "fetched_at": fetched_at})
             if getattr(player, "posRank", None) is not None:
                 preseason = not (clean_number(getattr(player, "total_points", None)) or 0)
                 rankings.append({"player_id": player_id, "source": "espn", "season": args.season,
                     "week": args.week, "scoring_format": "league",
                     "ranking_type": "previous_season_position_finish" if preseason else "season_to_date_position_rank",
-                    "position_rank": player.posRank, "fetched_at": fetched_at})
+                    "overall_rank": None, "position_rank": player.posRank, "fetched_at": fetched_at})
 
         for batch in chunks(player_rows):
             db.upsert("players", batch, "id")
