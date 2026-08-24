@@ -6,7 +6,7 @@ export async function runAgentLoop(options: {
   onMessage: (message: AgentMessage) => void;
   onStatus: (status: AgentStatus) => void;
   initialEvent: AgentEvent;
-  requestStep: (threadId: string, events: AgentEvent[], signal: AbortSignal) => Promise<import("./types").ModelStep>;
+  requestStep: (threadId: string, events: AgentEvent[], runId: string | undefined, signal: AbortSignal) => Promise<import("./types").ModelStep>;
   executeTool: (call: import("./types").ToolCallPart, thread: AgentThread) => Promise<unknown>;
 }) {
   const throwIfAborted = () => {
@@ -14,10 +14,12 @@ export async function runAgentLoop(options: {
   };
   const seen = new Map<string, number>();
   let events = [options.initialEvent];
-  for (let step = 0; step < 5; step += 1) {
+  let runId: string | undefined;
+  for (let step = 0; step < 20; step += 1) {
     throwIfAborted();
     options.onStatus("responding");
-    const response = await options.requestStep(options.thread.id, events, options.signal);
+    const response = await options.requestStep(options.thread.id, events, runId, options.signal);
+    runId = response.runId;
     throwIfAborted();
     options.onMessage(response.message);
     if (response.type === "final") {
@@ -40,5 +42,5 @@ export async function runAgentLoop(options: {
     }
     events = toolEvents;
   }
-  throw new Error("The assistant reached its maximum number of tool steps.");
+  throw new Error("The assistant reached its maximum number of tool rounds for one run.");
 }

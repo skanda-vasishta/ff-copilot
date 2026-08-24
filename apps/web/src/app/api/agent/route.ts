@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { AGENT_TOOLS, IN_SEASON_SYSTEM_PROMPT, validateToolInput } from "@/features/copilot/harness";
 import type { AgentEvent, AgentMessage, MessagePart } from "@ff-copilot/agent-runtime";
@@ -16,20 +17,26 @@ export const maxDuration = 300;
 const INFERENCE_HISTORY_BUDGET = 140_000;
 
 function recentInferenceHistory(messages: AgentMessage[]) {
+  const visibleMessages = messages.map((message) => ({
+    ...message,
+    parts: message.parts.filter((part) => part.type !== "provider-state"),
+  })).filter((message) => message.parts.length > 0);
   let size = 2;
-  let start = messages.length;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const messageSize = JSON.stringify(messages[index]).length + 1;
+  let start = visibleMessages.length;
+  for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
+    const messageSize = JSON.stringify(visibleMessages[index]).length + 1;
     if (size + messageSize > INFERENCE_HISTORY_BUDGET) break;
     size += messageSize;
     start = index;
   }
 
-  // Avoid beginning the provider context halfway through an older tool-call
-  // sequence when a user-turn boundary exists in the retained window.
-  const firstUserOffset = messages.slice(start).findIndex((message) => message.role === "user");
-  if (firstUserOffset > 0) start += firstUserOffset;
-  return messages.slice(start);
+  const retained = visibleMessages.slice(start);
+  if (retained.some((message) => message.role === "user")) return retained;
+
+  // A single large run can fill the window with tool results. Preserve its
+  // initiating user request even when the middle of that run is compacted out.
+  const precedingUser = visibleMessages.slice(0, start).findLast((message) => message.role === "user");
+  return precedingUser ? [precedingUser, ...retained] : retained;
 }
 
 function validEvent(event: AgentEvent) {
@@ -41,6 +48,39 @@ function validEvent(event: AgentEvent) {
   return typeof serialized === "string" && serialized.length <= 200_000;
 }
 
+type AgentRunCheckpoint = {
+  type: "agent-run";
+  id: string;
+  modelId: string;
+  reasoningEffort: string;
+  instructions: string;
+  providerResponseId: string;
+  stepCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  status: "running" | "completed";
+  signature: string;
+};
+
+function runSignature(run: Omit<AgentRunCheckpoint, "signature">, threadId: string, userId: string) {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is not configured on the server");
+  return createHmac("sha256", secret)
+    .update([run.id, threadId, userId, run.modelId, run.reasoningEffort, run.instructions, run.providerResponseId, run.stepCount, run.inputTokens, run.outputTokens, run.status].join("\u0000"))
+    .digest("hex");
+}
+
+function validRunSignature(run: AgentRunCheckpoint, threadId: string, userId: string) {
+  const { signature: _signature, ...unsigned } = run;
+  const expected = Buffer.from(runSignature(unsigned, threadId, userId), "hex");
+  const actual = Buffer.from(run.signature || "", "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function checkpointPart(run: Omit<AgentRunCheckpoint, "signature">, threadId: string, userId: string): MessagePart {
+  return { type: "provider-state", item: { ...run, signature: runSignature(run, threadId, userId) } };
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -48,7 +88,7 @@ export async function POST(request: Request) {
 
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 250_000) return NextResponse.json({ error: "Request is too large" }, { status: 413 });
-  const body = await request.json().catch(() => null) as { threadId?: unknown; events?: unknown } | null;
+  const body = await request.json().catch(() => null) as { threadId?: unknown; runId?: unknown; events?: unknown } | null;
   if (!body || typeof body.threadId !== "string") {
     return NextResponse.json({ error: "threadId is required" }, { status: 400 });
   }
@@ -72,55 +112,92 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: "Invalid agent events" }, { status: 400 });
   }
-  if (events.length) {
-    const { error: eventError } = await supabase.from("agent_messages").insert(events.map((event) => ({
-      thread_id: thread.id,
-      role: event.role,
-      parts: event.parts,
-    })));
-    if (eventError) return NextResponse.json({ error: "Could not persist the thread event" }, { status: 500 });
+  const continuing = typeof body.runId === "string";
+  if (continuing ? events.some((event) => event.role !== "tool") : events.length !== 1 || events[0].role !== "user") {
+    return NextResponse.json({ error: continuing ? "A run continuation requires tool results" : "A new run requires one user message" }, { status: 400 });
   }
 
-  const { data: messages, error: messagesError } = await supabase
-    .from("agent_messages")
-    .select("*")
-    .eq("thread_id", thread.id)
-    .order("id");
-  if (messagesError) return NextResponse.json({ error: "Could not load thread" }, { status: 500 });
-  if (!messages?.length) return NextResponse.json({ error: "The thread has no messages" }, { status: 400 });
-
-  // The complete thread remains persisted. Only the provider-facing history is
-  // windowed, so a long-running conversation never becomes unusable.
-  const inferenceMessages = recentInferenceHistory(messages as AgentMessage[]);
-
-  const { error: quotaError } = await supabase.rpc("consume_agent_quota");
-  if (quotaError) {
-    const quotaMessages: Record<string, string> = {
-      agent_rate_limit: "You're sending requests too quickly. Wait a second and try again.",
-      agent_user_daily_limit: "You've reached today's Copilot usage limit. It resets at 00:00 UTC.",
-      agent_global_daily_limit: "FF Copilot has reached its daily inference limit. It resets at 00:00 UTC.",
-    };
-    const key = Object.keys(quotaMessages).find((candidate) => quotaError.message.includes(candidate));
-    return NextResponse.json({ error: key ? quotaMessages[key] : "Copilot usage is temporarily limited." }, { status: 429 });
-  }
-
-  let contextSnapshot: Record<string, unknown>;
-  try {
-    contextSnapshot = await ensureThreadContext(supabase, thread as unknown as ContextThread);
-  } catch (cause) {
-    return NextResponse.json({ error: cause instanceof Error ? cause.message : "Could not prepare league context" }, { status: 500 });
-  }
-  const previousSeason = thread.team.league.season - 1;
-  const context = `\n\nAuthoritative daily league context (do not ask the user for facts present here):\n${JSON.stringify(contextSnapshot)}\nAll team names and compact rosters are already present. Use player tools for deeper rankings, projections, news, and source documents. Zero records and points before games are played mean preseason, not missing context. During preseason, ESPN position_rank is the ${previousSeason} positional finish—not a ${thread.team.league.season} draft, projection, or consensus rank. State that basis whenever using it.`;
+  let run: Omit<AgentRunCheckpoint, "signature">;
+  let inferenceMessages: AgentMessage[];
+  let previousResponseId: string | undefined;
 
   try {
-    const modelSettings = await resolveAgentModelSettings(supabase);
+    if (continuing) {
+      const { data: assistantMessages, error } = await supabase.from("agent_messages")
+        .select("parts")
+        .eq("thread_id", thread.id)
+        .eq("role", "assistant")
+        .order("id", { ascending: false })
+        .limit(100);
+      const checkpoint = assistantMessages?.flatMap((message) => message.parts as MessagePart[])
+        .filter((part) => part.type === "provider-state")
+        .map((part) => part.type === "provider-state" ? part.item as AgentRunCheckpoint : null)
+        .find((item) => item?.type === "agent-run" && item.id === body.runId);
+      if (error || !checkpoint?.providerResponseId || checkpoint.status !== "running") {
+        return NextResponse.json({ error: "This agent run can no longer be continued" }, { status: 409 });
+      }
+      if (!validRunSignature(checkpoint, thread.id, user.id)) {
+        return NextResponse.json({ error: "This agent run is invalid" }, { status: 409 });
+      }
+      const { signature: _signature, ...unsignedCheckpoint } = checkpoint;
+      run = unsignedCheckpoint;
+      previousResponseId = run.providerResponseId;
+      const { data: savedEvents, error: eventError } = await supabase.from("agent_messages").insert(events.map((event) => ({
+        thread_id: thread.id,
+        role: event.role,
+        parts: event.parts,
+      }))).select();
+      if (eventError || !savedEvents) throw new Error("Could not persist the tool results");
+      inferenceMessages = savedEvents as AgentMessage[];
+    } else {
+      const { error: quotaError } = await supabase.rpc("consume_agent_quota");
+      if (quotaError) {
+        const quotaMessages: Record<string, string> = {
+          agent_rate_limit: "You're sending requests too quickly. Wait a second and try again.",
+          agent_user_daily_limit: "You've reached today's Copilot usage limit. It resets at 00:00 UTC.",
+          agent_global_daily_limit: "FF Copilot has reached its daily inference limit. It resets at 00:00 UTC.",
+        };
+        const key = Object.keys(quotaMessages).find((candidate) => quotaError.message.includes(candidate));
+        return NextResponse.json({ error: key ? quotaMessages[key] : "Copilot usage is temporarily limited." }, { status: 429 });
+      }
+
+      const { error: eventError } = await supabase.from("agent_messages").insert({
+        thread_id: thread.id,
+        role: events[0].role,
+        parts: events[0].parts,
+      });
+      if (eventError) throw new Error("Could not persist the user message");
+
+      const { data: messages, error: messagesError } = await supabase.from("agent_messages")
+        .select("*").eq("thread_id", thread.id).order("id");
+      if (messagesError || !messages?.length) throw new Error("Could not load the thread");
+      inferenceMessages = recentInferenceHistory(messages as AgentMessage[]);
+
+      const contextSnapshot = await ensureThreadContext(supabase, thread as unknown as ContextThread);
+      const previousSeason = thread.team.league.season - 1;
+      const context = `\n\nAuthoritative daily league context (do not ask the user for facts present here):\n${JSON.stringify(contextSnapshot)}\nAll team names and compact rosters are already present. Use player tools for deeper rankings, projections, news, and source documents. Zero records and points before games are played mean preseason, not missing context. During preseason, ESPN position_rank is the ${previousSeason} positional finish—not a ${thread.team.league.season} draft, projection, or consensus rank. State that basis whenever using it.`;
+      const modelSettings = await resolveAgentModelSettings(supabase);
+      run = {
+        type: "agent-run",
+        id: randomUUID(),
+        modelId: modelSettings.model,
+        reasoningEffort: modelSettings.reasoningEffort || "none",
+        instructions: IN_SEASON_SYSTEM_PROMPT + context,
+        providerResponseId: "",
+        stepCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        status: "running",
+      };
+    }
+
     const completion = await completeAgentStep({
-      model: modelSettings.model,
-      reasoningEffort: modelSettings.reasoningEffort,
-      instructions: IN_SEASON_SYSTEM_PROMPT + context,
+      model: run.modelId,
+      reasoningEffort: run.reasoningEffort as Parameters<typeof completeAgentStep>[0]["reasoningEffort"],
+      instructions: run.instructions,
       messages: inferenceMessages,
       tools: [...AGENT_TOOLS] as ChatCompletionTool[],
+      previousResponseId,
     });
     if (completion.usage) {
       const { error: usageError } = await supabase.rpc("record_agent_usage", {
@@ -129,13 +206,22 @@ export async function POST(request: Request) {
       });
       if (usageError) console.error("Could not record agent token usage", usageError.message);
     }
+    run = {
+      ...run,
+      providerResponseId: completion.providerResponseId,
+      stepCount: run.stepCount + 1,
+      inputTokens: run.inputTokens + (completion.usage?.inputTokens || 0),
+      outputTokens: run.outputTokens + (completion.usage?.outputTokens || 0),
+      status: completion.calls.length ? "running" : "completed",
+    };
+
     if (completion.calls.length) {
       const calls = completion.calls.map((call) => {
         const input = validateToolInput(call.name, JSON.parse(call.arguments || "{}"));
         return { type: "tool-call" as const, id: call.id, name: call.name, input };
       });
       const parts: MessagePart[] = [
-        ...completion.providerState.map((item) => ({ type: "provider-state" as const, item })),
+        checkpointPart(run, thread.id, user.id),
         ...(completion.text ? [{ type: "text" as const, text: completion.text }] : []),
         ...calls,
       ];
@@ -143,6 +229,7 @@ export async function POST(request: Request) {
       if (saveError) throw new Error("Could not persist the assistant response");
       return NextResponse.json({
         type: "tool-calls",
+        runId: run.id,
         text: completion.text,
         calls,
         message: saved,
@@ -155,10 +242,10 @@ export async function POST(request: Request) {
     const { data: saved, error: saveError } = await supabase.from("agent_messages").insert({
       thread_id: thread.id,
       role: "assistant",
-      parts: [...completion.providerState.map((item) => ({ type: "provider-state" as const, item })), { type: "text", text: finalText }],
+      parts: [checkpointPart(run, thread.id, user.id), { type: "text", text: finalText }],
     }).select().single();
     if (saveError) throw new Error("Could not persist the assistant response");
-    return NextResponse.json({ type: "final", text: finalText, message: saved });
+    return NextResponse.json({ type: "final", runId: run.id, text: finalText, message: saved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Inference failed";
     console.error("Agent inference failed", {

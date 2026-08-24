@@ -37,8 +37,8 @@ export type AgentThread = {
 };
 
 export type ModelStep =
-  | { type: "final"; text: string; message: AgentMessage }
-  | { type: "tool-calls"; calls: ToolCallPart[]; text?: string; message: AgentMessage };
+  | { type: "final"; runId: string; text: string; message: AgentMessage }
+  | { type: "tool-calls"; runId: string; calls: ToolCallPart[]; text?: string; message: AgentMessage };
 
 export type AgentEvent = {
   role: "user" | "tool";
