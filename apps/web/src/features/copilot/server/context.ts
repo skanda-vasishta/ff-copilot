@@ -27,8 +27,9 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-espn-rankings-v3";
+const CONTEXT_VERSION = "league-rosters-espn-rankings-v4";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+const CONTEXT_PLAYERS_PER_POSITION = 30;
 
 const present = (value: unknown) => value !== null && value !== undefined && value !== "";
 
@@ -65,7 +66,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
   }
 
-  lines.push("", `## ${String(league.season)} ESPN PPR rankings`, "Top 20 within each position, ordered by ESPN's current overall PPR draft rank. Projections are ESPN current-season projections, not rankings.");
+  lines.push("", `## ${String(league.season)} ESPN PPR rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by ESPN's current overall PPR draft rank. Projections are ESPN current-season projections, not rankings.`);
   for (const position of CONTEXT_POSITIONS) {
     lines.push("", `### ${position}`);
     const players = rankings?.[position] || [];
@@ -143,7 +144,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
       - Number(rankingsByPlayer.get(right.id)?.overall_rank ?? Number.MAX_SAFE_INTEGER));
   const topPlayersByPosition = Object.fromEntries(CONTEXT_POSITIONS.map((position) => [
     position,
-    rankedPlayers.filter((player) => player.position === position).slice(0, 20).map((player) => ({
+    rankedPlayers.filter((player) => player.position === position).slice(0, CONTEXT_PLAYERS_PER_POSITION).map((player) => ({
       ...player,
       espn_overall_rank: rankingsByPlayer.get(player.id)?.overall_rank,
       ranking_season: thread.team.league.season,
