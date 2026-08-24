@@ -14,29 +14,12 @@ export const runtime = "nodejs";
 // production ceiling so the route returns the provider result instead of a
 // platform-generated timeout.
 export const maxDuration = 300;
-const INFERENCE_HISTORY_BUDGET = 140_000;
 
-function recentInferenceHistory(messages: AgentMessage[]) {
-  const visibleMessages = messages.map((message) => ({
+function inferenceHistory(messages: AgentMessage[]) {
+  return messages.map((message) => ({
     ...message,
     parts: message.parts.filter((part) => part.type !== "provider-state"),
   })).filter((message) => message.parts.length > 0);
-  let size = 2;
-  let start = visibleMessages.length;
-  for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
-    const messageSize = JSON.stringify(visibleMessages[index]).length + 1;
-    if (size + messageSize > INFERENCE_HISTORY_BUDGET) break;
-    size += messageSize;
-    start = index;
-  }
-
-  const retained = visibleMessages.slice(start);
-  if (retained.some((message) => message.role === "user")) return retained;
-
-  // A single large run can fill the window with tool results. Preserve its
-  // initiating user request even when the middle of that run is compacted out.
-  const precedingUser = visibleMessages.slice(0, start).findLast((message) => message.role === "user");
-  return precedingUser ? [precedingUser, ...retained] : retained;
 }
 
 function validEvent(event: AgentEvent) {
@@ -171,7 +154,7 @@ export async function POST(request: Request) {
       const { data: messages, error: messagesError } = await supabase.from("agent_messages")
         .select("*").eq("thread_id", thread.id).order("id");
       if (messagesError || !messages?.length) throw new Error("Could not load the thread");
-      inferenceMessages = recentInferenceHistory(messages as AgentMessage[]);
+      inferenceMessages = inferenceHistory(messages as AgentMessage[]);
 
       const contextSnapshot = await ensureThreadContext(supabase, thread as unknown as ContextThread);
       const previousSeason = thread.team.league.season - 1;
