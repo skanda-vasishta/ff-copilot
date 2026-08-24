@@ -8,7 +8,11 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { resolveAgentModelSettings } from "@/features/copilot/server/model-access";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Reasoning models can legitimately take longer than one minute, especially
+// when a large persisted league context is supplied. Keep this below Vercel's
+// production ceiling so the route returns the provider result instead of a
+// platform-generated timeout.
+export const maxDuration = 300;
 
 function validEvent(event: AgentEvent) {
   if ((event.role !== "user" && event.role !== "tool") || !Array.isArray(event.parts) || event.parts.length !== 1) return false;
