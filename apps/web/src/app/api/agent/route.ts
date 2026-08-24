@@ -13,6 +13,24 @@ export const runtime = "nodejs";
 // production ceiling so the route returns the provider result instead of a
 // platform-generated timeout.
 export const maxDuration = 300;
+const INFERENCE_HISTORY_BUDGET = 140_000;
+
+function recentInferenceHistory(messages: AgentMessage[]) {
+  let size = 2;
+  let start = messages.length;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const messageSize = JSON.stringify(messages[index]).length + 1;
+    if (size + messageSize > INFERENCE_HISTORY_BUDGET) break;
+    size += messageSize;
+    start = index;
+  }
+
+  // Avoid beginning the provider context halfway through an older tool-call
+  // sequence when a user-turn boundary exists in the retained window.
+  const firstUserOffset = messages.slice(start).findIndex((message) => message.role === "user");
+  if (firstUserOffset > 0) start += firstUserOffset;
+  return messages.slice(start);
+}
 
 function validEvent(event: AgentEvent) {
   if ((event.role !== "user" && event.role !== "tool") || !Array.isArray(event.parts) || event.parts.length !== 1) return false;
@@ -44,9 +62,7 @@ export async function POST(request: Request) {
   if (threadError || !thread) return NextResponse.json({ error: "Thread not found" }, { status: 404 });
 
   const events = Array.isArray(body.events) ? body.events as AgentEvent[] : [];
-  // Models may fan out one lookup per player. Keep a bounded batch, but do not
-  // reject normal comparison requests containing more than eight tool calls.
-  const validEvents = events.length > 0 && events.length <= 32 && events.every(validEvent);
+  const validEvents = events.length > 0 && events.every(validEvent);
   if (!validEvents) {
     console.warn("Rejected invalid agent event batch", {
       threadId: body.threadId,
@@ -73,10 +89,9 @@ export async function POST(request: Request) {
   if (messagesError) return NextResponse.json({ error: "Could not load thread" }, { status: 500 });
   if (!messages?.length) return NextResponse.json({ error: "The thread has no messages" }, { status: 400 });
 
-  const serializedContextSize = JSON.stringify(messages).length;
-  if (serializedContextSize > 150_000) {
-    return NextResponse.json({ error: "This conversation is too long. Start a new conversation to continue." }, { status: 413 });
-  }
+  // The complete thread remains persisted. Only the provider-facing history is
+  // windowed, so a long-running conversation never becomes unusable.
+  const inferenceMessages = recentInferenceHistory(messages as AgentMessage[]);
 
   const { error: quotaError } = await supabase.rpc("consume_agent_quota");
   if (quotaError) {
@@ -104,7 +119,7 @@ export async function POST(request: Request) {
       model: modelSettings.model,
       reasoningEffort: modelSettings.reasoningEffort,
       instructions: IN_SEASON_SYSTEM_PROMPT + context,
-      messages: messages as AgentMessage[],
+      messages: inferenceMessages,
       tools: [...AGENT_TOOLS] as ChatCompletionTool[],
     });
     if (completion.usage) {
