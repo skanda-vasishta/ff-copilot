@@ -95,7 +95,10 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: "Invalid agent events" }, { status: 400 });
   }
-  const continuing = typeof body.runId === "string";
+  // Event role defines the protocol phase. A just-deployed server may receive
+  // tool results from a tab running the previous client bundle, which does not
+  // yet send runId; recover the latest signed checkpoint in that case.
+  const continuing = events.every((event) => event.role === "tool");
   if (continuing ? events.some((event) => event.role !== "tool") : events.length !== 1 || events[0].role !== "user") {
     return NextResponse.json({ error: continuing ? "A run continuation requires tool results" : "A new run requires one user message" }, { status: 400 });
   }
@@ -112,10 +115,11 @@ export async function POST(request: Request) {
         .eq("role", "assistant")
         .order("id", { ascending: false })
         .limit(100);
+      const requestedRunId = typeof body.runId === "string" ? body.runId : undefined;
       const checkpoint = assistantMessages?.flatMap((message) => message.parts as MessagePart[])
         .filter((part) => part.type === "provider-state")
         .map((part) => part.type === "provider-state" ? part.item as AgentRunCheckpoint : null)
-        .find((item) => item?.type === "agent-run" && item.id === body.runId);
+        .find((item) => item?.type === "agent-run" && item.status === "running" && (!requestedRunId || item.id === requestedRunId));
       if (error || !checkpoint?.providerResponseId || checkpoint.status !== "running") {
         return NextResponse.json({ error: "This agent run can no longer be continued" }, { status: 409 });
       }
