@@ -28,18 +28,23 @@ export async function runAgentLoop(options: {
     }
 
     options.onStatus("running-tool");
-    const toolEvents: AgentEvent[] = [];
-    for (const call of response.calls) {
+    const executions = new Map<string, Promise<unknown>>();
+    const toolEvents = await Promise.all(response.calls.map(async (call): Promise<AgentEvent> => {
       throwIfAborted();
       const signature = `${call.name}:${JSON.stringify(call.input)}`;
       const repeats = (seen.get(signature) || 0) + 1;
       seen.set(signature, repeats);
-      const output = repeats > 2
-        ? { error: "This identical tool call was stopped after repeated attempts." }
-        : await options.executeTool(call, options.thread).catch((error) => ({ error: error instanceof Error ? error.message : "Tool failed" }));
+      let execution = executions.get(signature);
+      if (!execution) {
+        execution = repeats > 2
+          ? Promise.resolve({ error: "This identical tool call was stopped after repeated attempts." })
+          : options.executeTool(call, options.thread).catch((error) => ({ error: error instanceof Error ? error.message : "Tool failed" }));
+        executions.set(signature, execution);
+      }
+      const output = await execution;
       throwIfAborted();
-      toolEvents.push({ role: "tool", parts: [{ type: "tool-result", callId: call.id, name: call.name, output }] });
-    }
+      return { role: "tool", parts: [{ type: "tool-result", callId: call.id, name: call.name, output }] };
+    }));
     events = toolEvents;
   }
   throw new Error("The assistant reached its maximum number of tool rounds for one run.");

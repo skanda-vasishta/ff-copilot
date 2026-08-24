@@ -30,6 +30,58 @@ const utcDate = () => new Date().toISOString().slice(0, 10);
 const CONTEXT_VERSION = "league-rosters-espn-rankings-v3";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 
+const present = (value: unknown) => value !== null && value !== undefined && value !== "";
+
+export function formatThreadContext(snapshot: Record<string, unknown>) {
+  const league = snapshot.league as Record<string, unknown>;
+  const selectedTeam = snapshot.selected_team as Record<string, unknown>;
+  const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
+  const rankings = snapshot.top_espn_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
+  const lineup = Object.entries((league.lineup_slot_counts || {}) as Record<string, unknown>)
+    .filter(([, count]) => Number(count) > 0)
+    .map(([slot, count]) => `${count} ${slot}`)
+    .join(", ");
+  const lines = [
+    "# LEAGUE CONTEXT (authoritative daily snapshot)",
+    `Updated: ${String(snapshot.refreshed_at)}`,
+    "",
+    "## League",
+    `Name: ${String(league.name || "Unnamed league")}`,
+    `Season: ${String(league.season)}`,
+    `Scoring: ${String(league.scoring_format_label || league.scoring_type || "unknown")}${present(league.reception_points) ? ` (${String(league.reception_points)} points per reception)` : ""}`,
+    `Teams: ${String(league.team_count || teams.length)}; playoffs: ${String(league.playoff_team_count || "unknown")}; regular-season weeks: ${String(league.regular_season_weeks || "unknown")}`,
+    `Starting lineup and bench: ${lineup || "not available"}`,
+    `Selected user team: ${String(selectedTeam.name)} (team_id: ${String(selectedTeam.id)})`,
+    "",
+    "## Player ownership and rosters",
+    "These ownership assignments are authoritative. Never recommend that a team acquire a player already on that same team.",
+  ];
+
+  for (const team of [...teams].sort((left, right) => Number(Boolean(right.is_user_team)) - Number(Boolean(left.is_user_team)))) {
+    const roster = (team.roster || []) as Array<Record<string, unknown>>;
+    const record = `${String(team.wins ?? 0)}-${String(team.losses ?? 0)}${Number(team.ties || 0) ? `-${String(team.ties)}` : ""}`;
+    lines.push("", `### ${team.is_user_team ? "YOUR TEAM — " : ""}${String(team.name)} (team_id: ${String(team.id)})`, `Record: ${record}; standing: ${String(team.standing || "preseason/unranked")}`);
+    if (!roster.length) lines.push("Roster: empty (pre-draft or unavailable)");
+    else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
+  }
+
+  lines.push("", `## ${String(league.season)} ESPN PPR rankings`, "Top 20 within each position, ordered by ESPN's current overall PPR draft rank. Projections are ESPN current-season projections, not rankings.");
+  for (const position of CONTEXT_POSITIONS) {
+    lines.push("", `### ${position}`);
+    const players = rankings?.[position] || [];
+    for (const [index, player] of players.entries()) {
+      const facts = [
+        `position list #${index + 1}`,
+        present(player.espn_overall_rank) ? `ESPN overall #${String(player.espn_overall_rank)}` : null,
+        present(player.projected_total_points) ? `${String(player.projected_total_points)} projected points` : null,
+        present(player.injury_status) && player.injury_status !== "ACTIVE" ? `injury: ${String(player.injury_status)}` : null,
+      ].filter(Boolean).join("; ");
+      lines.push(`- ${String(player.name)} (${String(player.nfl_team || "FA")}) | ${facts} | player_id ${String(player.id)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false) {
   if (!force && thread.context_snapshot?.context_version === CONTEXT_VERSION && thread.context_date_utc === utcDate()) return thread.context_snapshot;
 
