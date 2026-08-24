@@ -27,9 +27,11 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
+const CONTEXT_VERSION = "league-rosters-player-pool-v2";
+const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 
 export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false) {
-  if (!force && thread.context_snapshot && thread.context_date_utc === utcDate()) return thread.context_snapshot;
+  if (!force && thread.context_snapshot?.context_version === CONTEXT_VERSION && thread.context_date_utc === utcDate()) return thread.context_snapshot;
 
   const { data: teams, error: teamsError } = await supabase.from("fantasy_teams")
     .select("id,name,external_id,wins,losses,ties,points_for,points_against,standing,final_standing,playoff_pct")
@@ -64,13 +66,32 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     rosters.set(teamId, entries);
   }
 
+  const { data: projectedPlayers, error: projectedPlayersError } = await supabase.from("player_directory")
+    .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,median_rank,fetched_at")
+    .eq("season", thread.team.league.season)
+    .in("position", [...CONTEXT_POSITIONS])
+    .order("projected_total_points", { ascending: false, nullsFirst: false })
+    .limit(500);
+  if (projectedPlayersError) throw new Error("Could not load the projected player pool for context");
+  const topPlayersByPosition = Object.fromEntries(CONTEXT_POSITIONS.map((position) => [
+    position,
+    (projectedPlayers || []).filter((player) => player.position === position).slice(0, 20).map((player) => ({
+      ...player,
+      projection_season: thread.team.league.season,
+      projection_basis: `${thread.team.league.season} ESPN projection`,
+      previous_season_position_finish: player.median_rank,
+      ranking_basis: `${thread.team.league.season - 1} ESPN positional finish; not a ${thread.team.league.season} projection or consensus rank`,
+    })),
+  ]));
+
   const refreshedAt = new Date().toISOString();
   const snapshot = {
-    context_version: "league-rosters-v1",
+    context_version: CONTEXT_VERSION,
     context_date_utc: utcDate(),
     refreshed_at: refreshedAt,
     selected_team: { id: thread.team.id, name: thread.team.name },
     league: thread.team.league,
+    top_projected_players_by_position: topPlayersByPosition,
     teams: (teams || []).map((team) => ({
       ...team,
       is_user_team: team.id === thread.team_id,
