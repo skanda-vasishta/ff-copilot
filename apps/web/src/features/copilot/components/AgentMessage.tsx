@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useState } from "react";
 import type { AgentMessage as Message, ToolCallPart } from "@ff-copilot/agent-runtime";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -18,11 +19,12 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 function ToolActivity({ calls }: { calls: ToolCallPart[] }) {
-  return <div className="space-y-1" aria-label="Sources checked">
-    {calls.map((call) => <div key={call.id} className="flex w-fit items-center gap-2 py-0.5 text-[11px] text-[#68746e]">
-      <span className="text-[10px] font-bold text-[#96c83b]">✓</span>
-      <span>{TOOL_LABELS[call.name] || "Checked data"}</span>
-    </div>)}
+  const [open, setOpen] = useState(false);
+  return <div aria-label="Sources checked">
+    <button onClick={() => setOpen((value) => !value)} className="focus-ring flex h-8 items-center gap-2 rounded-lg border border-white/[.055] bg-white/[.025] px-2.5 text-xs text-[#a8b09c] hover:bg-white/[.045]"><span className="font-mono text-[10px] text-[#c9f958]">✓</span><span>Checked {calls.length} {calls.length === 1 ? "source" : "sources"}</span><span className="ml-1 font-mono text-[9px] text-[#5f6659]">{open ? "hide" : "details"}</span></button>
+    {open && <div className="ml-2 mt-1.5 space-y-0.5 border-l border-white/[.07] pl-3">
+      {calls.map((call) => <div key={call.id} className="flex w-fit items-center gap-2 py-1 text-[11px] text-[#8a9280]"><span className="font-mono text-[10px] text-[#c9f958]">✓</span><span>{TOOL_LABELS[call.name] || "Checked data"}</span></div>)}
+    </div>}
   </div>;
 }
 
@@ -60,10 +62,11 @@ export function AgentMessage({ message }: { message: Message }) {
 
   return <article className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
     <div className={isUser ? "max-w-[85%] sm:max-w-[70%]" : "w-full"}>
-      {text && <div className={`text-sm leading-6 ${isUser ? "rounded-md bg-white/[.075] px-3.5 py-2.5 text-[#edf1ef]" : "text-[#d5dcd8]"}`}>
+      {!isUser && <div className="mb-3 flex items-center gap-2"><span className="grid size-[22px] place-items-center rounded-[7px] border border-[#c9f958]/20 bg-[#c9f958]/10 text-xs text-[#c9f958]">✦</span><span className="text-xs font-semibold text-[#c4cbb9]">Copilot</span></div>}
+      {text && <div className={`text-[14.5px] leading-6 ${isUser ? "rounded-[16px_16px_5px_16px] border border-[#c9f958]/20 bg-gradient-to-br from-[#c9f958]/15 to-[#c9f958]/[.07] px-3.5 py-2.5 text-[#f2f7e6]" : "text-[#d3d9cb]"}`}>
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <Markdown>{text}</Markdown>}
       </div>}
-      {calls.length > 0 && <div className={text ? "mt-2 pl-1" : "pl-1"}><ToolActivity calls={calls} /></div>}
+      {calls.length > 0 && <div className={text ? "mt-3" : ""}><ToolActivity calls={calls} /></div>}
     </div>
   </article>;
 }

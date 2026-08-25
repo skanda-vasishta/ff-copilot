@@ -23,7 +23,7 @@ export function PlayerDirectory() {
   if (!scope) return <div className="rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#78847e]">Use settings in the top-right corner. The player season and scoring context follow that selection.</p></div>
 
   return <div>
-    <div className="panel rounded-lg p-3 sm:p-4">
+    <div className="rounded-[16px] border border-white/[.08] bg-[#181a16]/60 p-3 backdrop-blur-xl">
       <div className="flex flex-col gap-3 lg:flex-row">
         <label className="relative min-w-0 flex-1"><span className="sr-only">Search players</span><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#65716b]">⌕</span><input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by player name…" className="focus-ring w-full rounded-md border border-white/[.08] bg-[#090d10] py-3 pl-11 pr-4 text-sm text-white placeholder:text-[#58635d] focus:border-[#b7f34a]/40" /></label>
         <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label="Filter by position">
@@ -36,7 +36,7 @@ export function PlayerDirectory() {
 
     {players.isLoading && <div className="mt-5 grid gap-2" aria-label="Loading players">{Array.from({length: 7}).map((_, i) => <div key={i} className="h-[68px] animate-pulse rounded-md border border-white/[.04] bg-white/[.025]" />)}</div>}
     {players.error && <p role="alert" className="mt-5 rounded-md border border-red-400/20 bg-red-400/[.06] p-4 text-sm text-red-200">We couldn&apos;t load players. {players.error.message}</p>}
-    {players.data && <div className="panel mt-5 overflow-hidden rounded-lg">
+    {players.data && <div className="mt-[18px] overflow-hidden rounded-[16px] border border-white/[.06] bg-white/[.02]">
       <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
         <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]"><th className="px-5 py-4 sm:px-6">Player</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">Projection</th><th className="px-3 py-4 text-right">{scope.team.league.season - 1} position finish</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
         <tbody className="divide-y divide-white/[.055]">{players.data.items.map(player => <tr key={player.id} className="group transition hover:bg-white/[.025]">

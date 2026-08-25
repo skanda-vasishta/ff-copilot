@@ -1,15 +1,19 @@
 @import "tailwindcss";
 
+@font-face { font-family: "Mozaic GEO"; src: url("/fonts/MozaicGEO-Medium.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "Mozaic GEO"; src: url("/fonts/MozaicGEO-SemiBold.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Mozaic GEO"; src: url("/fonts/MozaicGEO-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
 :root {
   color-scheme: dark;
-  --background: #080b0e;
-  --surface: #101519;
-  --surface-raised: #161c21;
-  --border: #263038;
-  --foreground: #f4f7f5;
-  --muted: #8c9992;
-  --accent: #b7f34a;
-  --accent-strong: #9ddd28;
+  --background: #080907;
+  --surface: #11130f;
+  --surface-raised: #181a16;
+  --border: rgba(255,255,255,.075);
+  --foreground: #eef1e9;
+  --muted: #8a9280;
+  --accent: #c9f958;
+  --accent-strong: #a8e63c;
 }
 
 * { box-sizing: border-box; }
@@ -17,13 +21,20 @@ html { background: var(--background); }
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--background);
+  background:
+    radial-gradient(1100px 620px at 78% -12%, rgba(201,249,88,.045), transparent 62%),
+    radial-gradient(900px 700px at 6% 104%, rgba(120,255,190,.025), transparent 60%),
+    var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: "Mozaic GEO", var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: rgba(183, 243, 74, .25); color: #fff; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.09); border: 3px solid transparent; border-radius: 999px; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
 
 .panel {
   border: 1px solid var(--border);

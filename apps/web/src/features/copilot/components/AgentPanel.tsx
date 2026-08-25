@@ -13,6 +13,7 @@ import type { AgentModelSelection } from "@/features/copilot/client/api";
 export function AgentPanel() {
   const [threads, setThreads] = useState<AgentThread[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [threadQuery, setThreadQuery] = useState("");
   const [input, setInput] = useState("");
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [refreshingContext, setRefreshingContext] = useState(false);
@@ -26,6 +27,17 @@ export function AgentPanel() {
     const found = threads.find((item) => item.id === threadId);
     return found ? { ...found, season: scope?.team.league.season } : null;
   }, [threadId, threads, scope?.team.league.season]);
+  const groupedThreads = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86_400_000;
+    const groups: Record<string, AgentThread[]> = { Today: [], Yesterday: [], Earlier: [] };
+    for (const item of threads.filter((candidate) => candidate.title.toLowerCase().includes(threadQuery.trim().toLowerCase()))) {
+      const updated = new Date(item.updated_at).getTime();
+      groups[updated >= today ? "Today" : updated >= yesterday ? "Yesterday" : "Earlier"].push(item);
+    }
+    return Object.entries(groups).filter(([, items]) => items.length);
+  }, [threads, threadQuery]);
   const agent = useAgent(thread);
 
   useEffect(() => {
@@ -123,24 +135,24 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
-  return <div className="grid h-full min-h-0 overflow-hidden bg-[#0d1114] lg:grid-cols-[260px_minmax(0,1fr)]">
-    <aside className="flex min-h-0 flex-col border-b border-white/[.07] bg-[#090c0f] lg:border-b-0 lg:border-r">
-      <div className="border-b border-white/[.06] p-3.5">
-        <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring w-full rounded-md border border-[#b7f34a]/35 bg-[#b7f34a]/[.08] px-3 py-2 text-xs font-semibold text-[#b7f34a] hover:bg-[#b7f34a]/[.13] disabled:cursor-not-allowed disabled:opacity-35">+ New conversation</button>
+  return <div className="grid h-full min-h-0 overflow-hidden bg-[#080907] lg:grid-cols-[284px_minmax(0,1fr)]">
+    <aside className="flex min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:border-b-0 lg:border-r">
+      <div className="p-3.5 pb-2.5">
+        <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring flex h-[38px] w-full items-center gap-2 rounded-[11px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[13px] font-semibold text-[#d6fb7a] hover:border-[#c9f958]/40 hover:bg-[#c9f958]/15 disabled:cursor-not-allowed disabled:opacity-35"><span className="text-lg font-light">+</span> New conversation</button>
         {!scope && <p className="mt-2 px-1 text-[10px] text-amber-200/70">Select a team from settings first.</p>}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col p-3">
-        <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[.15em] text-[#58635d]">Conversations</p>
-        <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto lg:block lg:space-y-1 lg:overflow-y-auto">
-          {threads.map((item) => <button key={item.id} onClick={() => setThreadId(item.id)} className={`focus-ring min-w-52 border-l-2 px-3 py-2 text-left text-[13px] transition lg:w-full lg:min-w-0 ${item.id === threadId ? "border-[#b7f34a]/60 bg-white/[.045] text-white" : "border-transparent text-[#78847e] hover:bg-white/[.025] hover:text-white"}`}><span className="block truncate font-medium">{item.title}</span><span className="mt-0.5 block text-[9px] text-[#4f5a54]">{new Date(item.updated_at).toLocaleDateString()}</span></button>)}
-          {!loadingThreads && !threads.length && <p className="px-2 py-3 text-xs leading-5 text-[#58635d]">Conversations for this team will appear here.</p>}
+      <label className="mx-3.5 mb-2.5 flex h-[34px] items-center gap-2 rounded-[10px] border border-white/[.055] bg-white/[.035] px-3"><span className="text-xs text-[#6e7568]">⌕</span><input aria-label="Search conversations" value={threadQuery} onChange={(event) => setThreadQuery(event.target.value)} placeholder="Search conversations" className="min-w-0 flex-1 bg-transparent text-xs text-[#eef1e9] outline-none placeholder:text-[#5f6659]" /></label>
+      <div className="flex min-h-0 flex-1 flex-col px-2.5 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {groupedThreads.map(([label, items]) => <div key={label} className="mb-1.5"><p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[.1em] text-[#5f6659]">{label}</p>{items.map((item) => <button key={item.id} onClick={() => setThreadId(item.id)} className={`focus-ring flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] transition ${item.id === threadId ? "bg-white/[.065] text-[#eef1e9]" : "text-[#8a9280] hover:bg-white/[.035] hover:text-[#eef1e9]"}`}><span className={`h-3.5 w-[3px] rounded-full ${item.id === threadId ? "bg-[#c9f958]" : "bg-transparent"}`} /><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="font-mono text-[9px] text-[#5f6659]">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></button>)}</div>)}
+          {!loadingThreads && !groupedThreads.length && <p className="px-2 py-3 text-xs leading-5 text-[#58635d]">{threadQuery ? "No matching conversations." : "Conversations for this team will appear here."}</p>}
         </div>
       </div>
     </aside>
 
     <section className="flex min-h-0 min-w-0 flex-col">
-      <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-white/[.07] px-5 py-2.5 sm:px-6">
-        <div className="min-w-0"><p className="truncate text-[10px] font-semibold uppercase tracking-[.15em] text-[#65716b]">{scope?.team.name || "Workspace"} / Copilot</p><h1 className="mt-1 truncate font-semibold text-white">{thread?.title || "New conversation"}</h1></div>
+      <header className="flex min-h-[58px] flex-wrap items-center justify-between gap-3 border-b border-white/[.055] bg-[#0a0b09]/60 px-5 py-2 backdrop-blur-xl sm:px-6">
+        <div className="min-w-0"><h1 className="truncate text-sm font-semibold text-[#eef1e9]">{thread?.title || "New conversation"}</h1><p className="mt-0.5 truncate font-mono text-[10px] text-[#6e7568]">{scope ? `${scope.team.name} · ${scope.team.league.name || "League"} ${scope.team.league.season}` : "Select a team"}</p></div>
         <div className="flex items-center gap-2">
           {models.data?.models.length && modelSelection ? <>
             <select aria-label="Model" value={modelSelection.model} onChange={(event) => chooseModel(event.target.value)} disabled={agent.status !== "idle" || savingModel} className="focus-ring h-8 rounded-md border border-white/[.09] bg-[#090d10] px-2 text-[11px] text-[#aab4af] disabled:opacity-40">{models.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
@@ -152,8 +164,8 @@ export function AgentPanel() {
       </header>
       {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#8c9992]">{contextNotice}</div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
-        <div className="mx-auto flex min-h-full max-w-3xl flex-col space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-8 sm:px-8">
+        <div className="mx-auto flex min-h-full max-w-[768px] flex-col space-y-7">
           {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope && <button onClick={newThread} className="focus-ring mt-6 rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">New conversation</button>}</div>}
           {thread && !agent.messages.length && <div className="m-auto max-w-xl py-16 text-center"><h2 className="text-2xl font-semibold tracking-[-.03em] text-white">What are you deciding?</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Ask about a player, compare your roster, or work through a waiver or trade decision.</p></div>}
           {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
@@ -163,10 +175,10 @@ export function AgentPanel() {
         </div>
       </div>
 
-      <form onSubmit={submit} className="shrink-0 border-t border-white/[.07] bg-[#0d1114]/95 p-2.5 sm:p-3">
-        <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-md border border-white/[.11] bg-[#090d10] p-1.5 focus-within:border-[#b7f34a]/35">
-          <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-32 min-h-9 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-1.5 text-[13px] leading-6 text-white outline-none placeholder:text-[#4f5a54] disabled:opacity-50" />
-          {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring h-8 rounded-md border border-white/[.09] px-3 text-[11px] text-[#aab4af]">Stop</button> : <button disabled={!thread || !input.trim()} className="focus-ring h-8 rounded-md bg-[#b7f34a] px-3 text-xs font-semibold text-[#10140a] disabled:opacity-30">Send</button>}
+      <form onSubmit={submit} className="shrink-0 bg-gradient-to-t from-[#080907] via-[#080907]/95 to-transparent px-5 pb-5 pt-2 sm:px-8">
+        <div className="mx-auto flex max-w-[768px] items-end gap-2 rounded-[18px] border border-white/[.09] bg-[#181a16]/80 p-2 shadow-[0_20px_44px_-24px_rgba(0,0,0,.8)] backdrop-blur-xl focus-within:border-[#c9f958]/30">
+          <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2 text-sm leading-6 text-[#eef1e9] outline-none placeholder:text-[#5f6659] disabled:opacity-50" />
+          {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring grid size-9 place-items-center rounded-[10px] border border-white/[.09] text-[11px] text-[#a8b09c]">Stop</button> : <button aria-label="Send message" disabled={!thread || !input.trim()} className="focus-ring grid size-9 place-items-center rounded-[10px] bg-gradient-to-br from-[#d9ff6e] to-[#a8e63c] text-lg font-semibold text-[#12200a] disabled:opacity-25">↑</button>}
         </div>
       </form>
     </section>
