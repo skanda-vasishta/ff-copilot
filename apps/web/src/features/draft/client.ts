@@ -8,6 +8,17 @@ export async function listDraftSessions(leagueId: string) {
   return data as DraftSession[]
 }
 
+export async function renameDraftSession(id: string, name: string) {
+  const value = name.trim()
+  if (!value) throw new Error('Draft name is required')
+  const { data, error } = await createClient().from('draft_sessions').update({ name: value, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+  if (error) {
+    if (error.code === '23505') throw new Error('A draft with that name already exists')
+    throw error
+  }
+  return data as DraftSession
+}
+
 export async function createDraftSession(input: { leagueId: string; selectedTeamId: string; season: number; name: string; draftType: 'snake' | 'linear'; teamOrder: string[]; roundCount: number }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -16,7 +27,10 @@ export async function createDraftSession(input: { leagueId: string; selectedTeam
     user_id: user.id, league_id: input.leagueId, selected_team_id: input.selectedTeamId, season: input.season,
     name: input.name, draft_type: input.draftType, team_order: input.teamOrder, round_count: input.roundCount,
   }).select().single()
-  if (error || !session) throw error || new Error('Could not create draft')
+  if (error || !session) {
+    if (error?.code === '23505') throw new Error('A draft with that name already exists')
+    throw error || new Error('Could not create draft')
+  }
   const { error: threadError } = await supabase.from('agent_threads').insert({
     user_id: user.id, league_id: input.leagueId, team_id: input.selectedTeamId, draft_session_id: session.id, title: `${input.name} Copilot`,
   })
