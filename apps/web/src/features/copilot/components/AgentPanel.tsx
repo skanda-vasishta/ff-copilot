@@ -134,8 +134,8 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
-  return <div className="grid h-full min-h-0 overflow-hidden bg-[#080907] lg:grid-cols-[238px_minmax(0,1fr)]">
-    <aside className="flex min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:border-b-0 lg:border-r">
+  return <div className="copilot-shell grid h-full min-h-0 overflow-hidden lg:grid-cols-[238px_minmax(0,1fr)]">
+    <aside className="copilot-sidebar flex min-h-0 flex-col border-b backdrop-blur-lg lg:border-b-0 lg:border-r">
       <div className="p-3.5 pb-2.5">
         <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring flex h-9 w-full items-center gap-2 rounded-[8px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[11px] font-semibold text-[#d6fb7a] hover:border-[#c9f958]/40 hover:bg-[#c9f958]/15 disabled:cursor-not-allowed disabled:opacity-35"><span className="text-base font-light">+</span> New conversation</button>
         {!scope && <p className="mt-2 px-1 text-[10px] text-amber-200/70">Select a team from settings first.</p>}
@@ -150,7 +150,7 @@ export function AgentPanel() {
     </aside>
 
     <section className="flex min-h-0 min-w-0 flex-col">
-      <header className="flex min-h-[58px] flex-wrap items-center justify-between gap-3 border-b border-white/[.055] bg-[#0a0b09]/60 px-5 py-2 backdrop-blur-xl sm:px-6">
+      <header className="copilot-toolbar flex min-h-[58px] flex-wrap items-center justify-between gap-3 border-b px-5 py-2 backdrop-blur-xl sm:px-6">
         <div className="min-w-0"><h1 className="truncate text-sm font-semibold text-[#eef1e9]">{thread?.title || "New conversation"}</h1><p className="mt-0.5 truncate font-mono text-[10px] text-[#6e7568]">{scope ? `${scope.team.name} · ${scope.team.league.name || "League"} ${scope.team.league.season}` : "Select a team"}</p></div>
         <div className="flex items-center gap-1">
           {models.data?.models.length && modelSelection ? <>
@@ -173,8 +173,8 @@ export function AgentPanel() {
         </div>
       </div>
 
-      <form onSubmit={submit} className="shrink-0 bg-gradient-to-t from-[#080907] via-[#080907]/95 to-transparent px-5 pb-5 pt-2 sm:px-8">
-        <div className="mx-auto flex max-w-[820px] items-end gap-2 rounded-[10px] border border-white/[.08] bg-[#151713]/90 p-1.5 shadow-[0_18px_40px_-26px_rgba(0,0,0,.85)] backdrop-blur-xl focus-within:border-[#c9f958]/25">
+      <form onSubmit={submit} className="copilot-composer-fade shrink-0 px-5 pb-5 pt-2 sm:px-8">
+        <div className="copilot-composer mx-auto flex max-w-[820px] items-end gap-2 rounded-[10px] border p-1.5 shadow-[0_18px_40px_-26px_rgba(0,0,0,.85)] backdrop-blur-xl">
           <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2 text-sm leading-6 text-[#eef1e9] outline-none placeholder:text-[#5f6659] disabled:opacity-50" />
           {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring mb-1 h-8 shrink-0 rounded-[6px] bg-white/[.055] px-2.5 text-[10px] font-medium text-[#aeb5a8] transition hover:bg-red-400/[.08] hover:text-red-200">Stop</button> : <button aria-label="Send message" disabled={!thread || !input.trim()} className="focus-ring mb-1 grid size-8 shrink-0 place-items-center rounded-[6px] bg-gradient-to-br from-[#d9ff6e] to-[#a8e63c] text-base font-semibold text-[#12200a] disabled:opacity-20">↑</button>}
         </div>

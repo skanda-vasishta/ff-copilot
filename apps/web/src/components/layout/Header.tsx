@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useActiveScope } from '@/lib/scope'
+import { ThemeToggle } from './ThemeToggle'
 
 type WorkspaceTeam = {
   created_at: string
@@ -50,7 +51,7 @@ export function Header() {
 
   if (pathname === '/login') return null
 
-  return <header className="sticky top-0 z-30 border-b border-white/[.055] bg-[#0a0b09]/90 backdrop-blur-xl">
+  return <header className="app-header sticky top-0 z-30 border-b backdrop-blur-xl">
     <div className="flex h-14 w-full items-center px-4 sm:px-5">
       <Link href="/team" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FF Copilot home">
         <span className="grid size-7 place-items-center rounded-[7px] border border-[#c9f958]/35 bg-[#c9f958]/10 text-[10px] font-black tracking-[-.05em] text-[#c9f958]">FF</span>
@@ -65,7 +66,8 @@ export function Header() {
         })}
       </nav>
 
-      <div ref={menuRef} className="relative ml-auto">
+      <div className="ml-auto mr-1"><ThemeToggle /></div>
+      <div ref={menuRef} className="relative">
         <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} className="focus-ring flex h-8 max-w-52 items-center gap-2 rounded-[6px] border border-white/[.07] bg-white/[.025] px-2.5 text-left text-[11px] text-[#b9c0b3] transition hover:bg-white/[.05] hover:text-[#eef1e9]">
           <span className="hidden max-w-32 truncate font-medium sm:block">{scope?.team.name || 'Select team'}</span>
           {scope && <span className="hidden border-l border-white/[.08] pl-2 font-mono text-[9px] text-[#697064] md:block">{scope.team.league.season}</span>}
