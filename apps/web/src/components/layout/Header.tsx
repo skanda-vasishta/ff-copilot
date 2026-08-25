@@ -66,9 +66,10 @@ export function Header() {
       </nav>
 
       <div ref={menuRef} className="relative ml-auto">
-        <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} className="focus-ring flex max-w-56 items-center gap-2 rounded-[7px] border border-white/[.07] bg-white/[.025] px-2.5 py-1.5 text-left text-[11px] text-[#c4cbb9] transition hover:bg-white/[.05] hover:text-[#eef1e9]">
-          <span className="hidden min-w-0 sm:block"><span className="block truncate font-medium">{scope?.team.name || 'Select a team'}</span><span className="block truncate font-mono text-[9px] text-[#6e7568]">{scope ? `${scope.team.league.name || 'ESPN league'} · ${scope.team.league.season}` : 'No active workspace'}</span></span>
-          <span className={`text-[9px] text-[#7c8377] transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
+        <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} className="focus-ring flex h-8 max-w-52 items-center gap-2 rounded-[6px] border border-white/[.07] bg-white/[.025] px-2.5 text-left text-[11px] text-[#b9c0b3] transition hover:bg-white/[.05] hover:text-[#eef1e9]">
+          <span className="hidden max-w-32 truncate font-medium sm:block">{scope?.team.name || 'Select team'}</span>
+          {scope && <span className="hidden border-l border-white/[.08] pl-2 font-mono text-[9px] text-[#697064] md:block">{scope.team.league.season}</span>}
+          <span className={`text-[8px] text-[#71786c] transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
         </button>
         {open && <div role="menu" className="absolute right-0 top-[calc(100%+7px)] w-72 overflow-hidden rounded-[9px] border border-white/[.09] bg-[#11130f] p-1.5 shadow-[0_20px_60px_rgba(0,0,0,.55)]">
           <p className="px-2.5 pb-1.5 pt-1 text-[9px] font-semibold uppercase tracking-[.16em] text-[#687063]">Switch team</p>
