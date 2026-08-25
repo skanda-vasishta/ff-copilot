@@ -307,17 +307,6 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
         <aside className="space-y-5">
           <section className="panel rounded-lg p-5">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">
-              How to read this page
-            </p>
-            <dl className="mt-4 space-y-4 text-xs leading-5">
-              <div><dt className="font-medium text-white">Projection</dt><dd className="mt-1 text-[#78847e]">Estimated future fantasy points. Sources can disagree.</dd></div>
-              <div><dt className="font-medium text-white">Ranking</dt><dd className="mt-1 text-[#78847e]">A player&apos;s order relative to others. Lower is better.</dd></div>
-              <div><dt className="font-medium text-white">Completed result</dt><dd className="mt-1 text-[#78847e]">Observed prior-season performance, not an estimate.</dd></div>
-            </dl>
-            <p className="mt-4 border-t border-white/[.06] pt-4 text-[10px] leading-4 text-[#58635d]">Current consensus values are transparent simple averages. We do not yet have enough validated historical evidence to label one provider the most accurate.</p>
-          </section>
-          <section className="panel rounded-lg p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">
               {selectedSeason} facts
             </p>
             <dl className="mt-4 space-y-3 text-sm">
