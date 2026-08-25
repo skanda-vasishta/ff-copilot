@@ -6,7 +6,7 @@ import { api } from '@/lib/api'
 import { useActiveScope } from '@/lib/scope'
 import { createClient } from '@/lib/supabase/client'
 import { createDraftSession, getDraftState, listDraftSessions, recordDraftPick, removeDraftPick } from './client'
-import type { DraftPlayer, DraftTeam } from './types'
+import type { DraftPlayer, DraftSession, DraftTeam } from './types'
 import { DraftCopilot } from './DraftCopilot'
 import { PlayerProfile } from '@/components/features/players/PlayerProfile'
 
@@ -24,19 +24,26 @@ export function DraftRoom() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const sessions = useQuery({ queryKey: ['draft-sessions', scope?.team.league_id], queryFn: () => listDraftSessions(scope!.team.league_id), enabled: Boolean(scope) })
-  useEffect(() => { if (!sessionId && sessions.data?.length) setSessionId(sessions.data[0].id) }, [sessionId, sessions.data])
   const state = useQuery({ queryKey: ['draft-state', sessionId], queryFn: () => getDraftState(sessionId!), enabled: Boolean(sessionId) })
   if (scopeLoading) return <p className="p-8 text-sm text-[#78847e]">Loading…</p>
   if (!scope) return <div className="mx-auto max-w-lg p-16 text-center"><h1 className="text-2xl font-semibold text-white">Select a team first</h1><p className="mt-2 text-sm text-[#78847e]">Drafts use the active league and team.</p></div>
-  if (creating || (!sessions.isLoading && !sessions.data?.length)) return <DraftSetup scope={scope} onCancel={sessions.data?.length ? () => setCreating(false) : undefined} onCreated={(id) => { client.invalidateQueries({ queryKey: ['draft-sessions'] }); setSessionId(id); setCreating(false) }} />
+  if (creating) return <DraftSetup scope={scope} onCancel={() => setCreating(false)} onCreated={(id) => { client.invalidateQueries({ queryKey: ['draft-sessions'] }); setSessionId(id); setCreating(false) }} />
+  if (!sessionId) return <DraftLanding sessions={sessions.data || []} loading={sessions.isLoading} leagueName={scope.team.league.name || 'League'} season={scope.team.league.season} onOpen={setSessionId} onCreate={() => setCreating(true)}/>
   return <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col">
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-white/[.06] px-4">
-      <select value={sessionId || ''} onChange={(event) => setSessionId(event.target.value)} className="h-8 rounded-[6px] border border-white/[.08] bg-white/[.03] px-2 text-xs text-[#cbd1c5]">{sessions.data?.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}</select>
-      <button onClick={() => setCreating(true)} className="h-8 rounded-[6px] px-2.5 text-xs text-[#858d80] hover:bg-white/[.04] hover:text-white">+ New draft</button>
+      <button onClick={() => setSessionId(null)} className="h-8 rounded-[6px] px-2.5 text-xs text-[#858d80] hover:bg-white/[.04] hover:text-white">← All drafts</button>
+      <span className="h-4 w-px bg-white/[.07]"/><span className="truncate text-xs font-medium text-[#cbd1c5]">{state.data?.session.name}</span>
       {state.data && <><span className="ml-auto text-[10px] uppercase tracking-[.1em] text-[#697166]">{state.data.session.draft_type} · {state.data.session.round_count} rounds</span><span className="rounded-[5px] bg-[#c9f958]/10 px-2 py-1 text-[10px] text-[#b8e65b]">{state.data.session.status}</span></>}
     </div>
     {state.isLoading ? <p className="p-8 text-sm text-[#78847e]">Loading draft…</p> : state.data ? <ActiveDraft state={state.data} teams={[]} onChanged={() => client.invalidateQueries({ queryKey: ['draft-state', sessionId] })} /> : null}
   </div>
+}
+
+function DraftLanding({ sessions, loading, leagueName, season, onOpen, onCreate }: { sessions: DraftSession[]; loading: boolean; leagueName: string; season: number; onOpen: (id: string) => void; onCreate: () => void }) {
+  return <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:py-14">
+    <header className="flex flex-col justify-between gap-5 border-b border-white/[.07] pb-7 sm:flex-row sm:items-end"><div><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#8daa48]">{leagueName} · {season}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.035em] text-white">Drafts</h1><p className="mt-2 text-sm text-[#747c70]">Resume a draft or start a new manual run.</p></div><button onClick={onCreate} className="h-9 rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#13190d]">New draft</button></header>
+    {loading?<div className="mt-6 grid gap-3 sm:grid-cols-2">{[0,1,2,3].map((item)=><div key={item} className="h-36 animate-pulse rounded-[8px] border border-white/[.05] bg-white/[.02]"/>)}</div>:sessions.length?<div className="mt-6 grid gap-3 sm:grid-cols-2">{sessions.map((session)=>{const total=session.team_order.length*session.round_count,completed=Math.min(session.current_overall_pick-1,total),progress=total?Math.round(completed/total*100):0;return <button key={session.id} onClick={()=>onOpen(session.id)} className="group rounded-[8px] border border-white/[.07] bg-white/[.018] p-5 text-left transition hover:border-white/[.13] hover:bg-white/[.028]"><div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold text-[#dce1d6] group-hover:text-white">{session.name}</h2><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#697166]">{session.draft_type} · {session.team_order.length} teams · {session.round_count} rounds</p></div><span className={`rounded-[5px] px-2 py-1 text-[9px] font-medium uppercase tracking-[.08em] ${session.status==='completed'?'bg-white/[.05] text-[#879087]':'bg-[#c9f958]/10 text-[#b8e65b]'}`}>{session.status}</span></div><div className="mt-7"><div className="flex justify-between text-[10px] text-[#697166]"><span>{completed} of {total} picks</span><span>{progress}%</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[.05]"><div className="h-full bg-[#a9d64d]" style={{width:`${progress}%`}}/></div></div><div className="mt-4 flex items-center justify-between text-[10px] text-[#596158]"><span>Updated {new Date(session.updated_at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</span><span className="text-[#8b9487] group-hover:text-[#b8e65b]">Open →</span></div></button>})}</div>:<div className="mt-16 text-center"><p className="text-sm font-medium text-[#d2d7cc]">No draft runs yet</p><p className="mt-1 text-xs text-[#697166]">Create one to set the order and begin entering picks.</p><button onClick={onCreate} className="mt-5 h-9 rounded-[6px] border border-white/[.09] px-4 text-xs text-[#bdc4b9] hover:bg-white/[.03]">Create your first draft</button></div>}
+  </main>
 }
 
 function DraftSetup({ scope, onCreated, onCancel }: { scope: NonNullable<ReturnType<typeof useActiveScope>['scope']>; onCreated: (id: string) => void; onCancel?: () => void }) {
