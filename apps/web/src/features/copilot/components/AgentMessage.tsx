@@ -63,7 +63,7 @@ export function AgentMessage({ message }: { message: Message }) {
   return <article className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
     <div className={isUser ? "max-w-[85%] sm:max-w-[70%]" : "w-full"}>
       {!isUser && <div className="mb-3 flex items-center gap-2"><span className="grid size-[22px] place-items-center rounded-[7px] border border-[#c9f958]/20 bg-[#c9f958]/10 text-xs text-[#c9f958]">✦</span><span className="text-xs font-semibold text-[#c4cbb9]">Copilot</span></div>}
-      {text && <div className={`text-[14.5px] leading-6 ${isUser ? "rounded-[16px_16px_5px_16px] border border-[#c9f958]/20 bg-gradient-to-br from-[#c9f958]/15 to-[#c9f958]/[.07] px-3.5 py-2.5 text-[#f2f7e6]" : "text-[#d3d9cb]"}`}>
+      {text && <div className={`text-[14px] leading-[1.6] ${isUser ? "rounded-[16px_16px_5px_16px] border border-[#c9f958]/20 bg-gradient-to-br from-[#c9f958]/15 to-[#c9f958]/[.07] px-3.5 py-2.5 text-[#f2f7e6]" : "text-[#d3d9cb]"}`}>
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <Markdown>{text}</Markdown>}
       </div>}
       {calls.length > 0 && <div className={text ? "mt-3" : ""}><ToolActivity calls={calls} /></div>}

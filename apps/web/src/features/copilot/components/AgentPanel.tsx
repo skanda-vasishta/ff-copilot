@@ -135,7 +135,7 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
-  return <div className="grid h-full min-h-0 overflow-hidden bg-[#080907] lg:grid-cols-[284px_minmax(0,1fr)]">
+  return <div className="grid h-full min-h-0 overflow-hidden bg-[#080907] lg:grid-cols-[264px_minmax(0,1fr)]">
     <aside className="flex min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:border-b-0 lg:border-r">
       <div className="p-3.5 pb-2.5">
         <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring flex h-[38px] w-full items-center gap-2 rounded-[11px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[13px] font-semibold text-[#d6fb7a] hover:border-[#c9f958]/40 hover:bg-[#c9f958]/15 disabled:cursor-not-allowed disabled:opacity-35"><span className="text-lg font-light">+</span> New conversation</button>
@@ -165,7 +165,7 @@ export function AgentPanel() {
       {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#8c9992]">{contextNotice}</div>}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-8 sm:px-8">
-        <div className="mx-auto flex min-h-full max-w-[768px] flex-col space-y-7">
+        <div className="mx-auto flex min-h-full max-w-[820px] flex-col space-y-7">
           {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope && <button onClick={newThread} className="focus-ring mt-6 rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">New conversation</button>}</div>}
           {thread && !agent.messages.length && <div className="m-auto max-w-xl py-16 text-center"><h2 className="text-2xl font-semibold tracking-[-.03em] text-white">What are you deciding?</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Ask about a player, compare your roster, or work through a waiver or trade decision.</p></div>}
           {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
@@ -176,7 +176,7 @@ export function AgentPanel() {
       </div>
 
       <form onSubmit={submit} className="shrink-0 bg-gradient-to-t from-[#080907] via-[#080907]/95 to-transparent px-5 pb-5 pt-2 sm:px-8">
-        <div className="mx-auto flex max-w-[768px] items-end gap-2 rounded-[18px] border border-white/[.09] bg-[#181a16]/80 p-2 shadow-[0_20px_44px_-24px_rgba(0,0,0,.8)] backdrop-blur-xl focus-within:border-[#c9f958]/30">
+        <div className="mx-auto flex max-w-[820px] items-end gap-2 rounded-[18px] border border-white/[.09] bg-[#181a16]/80 p-2 shadow-[0_20px_44px_-24px_rgba(0,0,0,.8)] backdrop-blur-xl focus-within:border-[#c9f958]/30">
           <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2 text-sm leading-6 text-[#eef1e9] outline-none placeholder:text-[#5f6659] disabled:opacity-50" />
           {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring grid size-9 place-items-center rounded-[10px] border border-white/[.09] text-[11px] text-[#a8b09c]">Stop</button> : <button aria-label="Send message" disabled={!thread || !input.trim()} className="focus-ring grid size-9 place-items-center rounded-[10px] bg-gradient-to-br from-[#d9ff6e] to-[#a8e63c] text-lg font-semibold text-[#12200a] disabled:opacity-25">↑</button>}
         </div>
