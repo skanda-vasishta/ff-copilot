@@ -32,21 +32,21 @@ function Markdown({ children }: { children: string }) {
   return <ReactMarkdown
     remarkPlugins={[remarkGfm]}
     components={{
-      p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-      h1: ({ children }) => <h1 className="mb-3 mt-5 text-xl font-semibold first:mt-0">{children}</h1>,
-      h2: ({ children }) => <h2 className="mb-2 mt-5 text-lg font-semibold first:mt-0">{children}</h2>,
-      h3: ({ children }) => <h3 className="mb-2 mt-4 font-semibold first:mt-0">{children}</h3>,
-      ul: ({ children }) => <ul className="mb-3 ml-5 list-disc space-y-1 last:mb-0">{children}</ul>,
-      ol: ({ children }) => <ol className="mb-3 ml-5 list-decimal space-y-1 last:mb-0">{children}</ol>,
-      li: ({ children }) => <li className="pl-1 marker:text-[#7d8a83]">{children}</li>,
+      p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
+      h1: ({ children }) => <h1 className="mb-3 mt-7 text-[20px] font-semibold leading-tight tracking-[-.02em] text-[#f3f5ef] first:mt-0">{children}</h1>,
+      h2: ({ children }) => <h2 className="mb-3 mt-6 text-[17px] font-semibold leading-snug tracking-[-.01em] text-[#eef1e9] first:mt-0">{children}</h2>,
+      h3: ({ children }) => <h3 className="mb-2 mt-5 text-[15px] font-semibold text-[#e8ebe3] first:mt-0">{children}</h3>,
+      ul: ({ children }) => <ul className="mb-4 ml-5 list-disc space-y-2 last:mb-0">{children}</ul>,
+      ol: ({ children }) => <ol className="mb-4 ml-5 list-decimal space-y-2 last:mb-0">{children}</ol>,
+      li: ({ children }) => <li className="pl-1.5 marker:text-[#9aaa85]">{children}</li>,
       strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-      blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[#b7f34a]/40 pl-3 text-[#9aa69f]">{children}</blockquote>,
+      blockquote: ({ children }) => <blockquote className="my-4 border-l-2 border-[#b7f34a]/45 py-0.5 pl-4 text-[#aeb7aa]">{children}</blockquote>,
       a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="text-[#b7f34a] underline decoration-[#b7f34a]/30 underline-offset-2 hover:decoration-[#b7f34a]">{children}</a>,
       code: ({ children, className }) => className
         ? <code className={className}>{children}</code>
         : <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[.9em] text-[#c8f58a]">{children}</code>,
       pre: ({ children }) => <pre className="my-3 overflow-x-auto border border-white/[.07] bg-[#080b0d] p-4 font-mono text-xs leading-5 text-[#cdd5d0]">{children}</pre>,
-      table: ({ children }) => <div className="my-3 overflow-x-auto"><table className="w-full border-collapse text-left text-xs">{children}</table></div>,
+      table: ({ children }) => <div className="my-5 overflow-x-auto rounded-[6px] border border-white/[.07]"><table className="w-full border-collapse text-left text-[12px] leading-5">{children}</table></div>,
       th: ({ children }) => <th className="border-b border-white/10 px-2 py-2 font-semibold text-white">{children}</th>,
       td: ({ children }) => <td className="border-b border-white/[.06] px-2 py-2">{children}</td>,
       hr: () => <hr className="my-4 border-white/[.08]" />,
@@ -63,7 +63,7 @@ export function AgentMessage({ message }: { message: Message }) {
   return <article className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
     <div className={isUser ? "max-w-[85%] sm:max-w-[70%]" : "w-full"}>
       {!isUser && <div className="mb-3 flex items-center gap-2"><span className="grid size-[22px] place-items-center rounded-[7px] border border-[#c9f958]/20 bg-[#c9f958]/10 text-xs text-[#c9f958]">✦</span><span className="text-xs font-semibold text-[#c4cbb9]">Copilot</span></div>}
-      {text && <div className={`text-[14px] leading-[1.6] ${isUser ? "rounded-[16px_16px_5px_16px] border border-[#c9f958]/20 bg-gradient-to-br from-[#c9f958]/15 to-[#c9f958]/[.07] px-3.5 py-2.5 text-[#f2f7e6]" : "text-[#d3d9cb]"}`}>
+      {text && <div className={`${isUser ? "rounded-[14px_14px_4px_14px] border border-[#c9f958]/20 bg-gradient-to-br from-[#c9f958]/15 to-[#c9f958]/[.07] px-3.5 py-2.5 text-[14px] leading-[1.6] text-[#f2f7e6]" : "text-[15px] leading-[1.72] text-[#d9ded3]"}`}>
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <Markdown>{text}</Markdown>}
       </div>}
       {calls.length > 0 && <div className={text ? "mt-3" : ""}><ToolActivity calls={calls} /></div>}
