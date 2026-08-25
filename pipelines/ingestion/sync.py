@@ -687,7 +687,20 @@ def sync_one_league(
         league_data = League(league_id=int(external_id), year=season)
         fetched_at = now()
         settings = league_data.settings
+        league_payload = league_data.espn_request.get_league()
         raw_settings = json.loads(json.dumps(vars(settings), default=str))
+        # espn-api's normalized Settings object currently drops draftSettings,
+        # including the pre-draft pick order. Preserve the provider payload in a
+        # small, stable shape so agent context can name each team's slot.
+        provider_draft_settings = (league_payload.get("settings", {}) or {}).get("draftSettings", {}) or {}
+        raw_settings["draft_settings"] = {
+            "type": provider_draft_settings.get("type"),
+            "order_type": provider_draft_settings.get("orderType"),
+            "pick_order": provider_draft_settings.get("pickOrder") or [],
+            "date": provider_draft_settings.get("date"),
+            "available_date": provider_draft_settings.get("availableDate"),
+            "time_per_selection": provider_draft_settings.get("timePerSelection"),
+        }
         scoring_rules = getattr(settings, "scoring_format", []) or []
         reception_points = next((rule.get("points") for rule in scoring_rules if rule.get("abbr") == "REC"), None)
         scoring_label = (
@@ -781,7 +794,6 @@ def sync_one_league(
             run.read += len(draft_rows)
             run.written += len(draft_rows)
         if sync_history:
-            league_payload = league_data.espn_request.get_league()
             previous_seasons = sorted({
                 int(value) for value in league_payload.get("status", {}).get("previousSeasons", [])
                 if int(value) < season

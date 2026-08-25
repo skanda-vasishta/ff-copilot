@@ -13,6 +13,7 @@ type League = {
   reception_points: number | null;
   scoring_format_label: string | null;
   lineup_slot_counts: Record<string, number>;
+  league_settings: Record<string, unknown>;
   last_synced_at: string | null;
 };
 
@@ -27,7 +28,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-projection-consensus-v5";
+const CONTEXT_VERSION = "league-rosters-draft-order-v6";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -38,6 +39,10 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   const selectedTeam = snapshot.selected_team as Record<string, unknown>;
   const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
   const rankings = snapshot.top_espn_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
+  const leagueSettings = (league.league_settings || {}) as Record<string, unknown>;
+  const draftSettings = (leagueSettings.draft_settings || {}) as Record<string, unknown>;
+  const pickOrder = Array.isArray(draftSettings.pick_order) ? draftSettings.pick_order.map(String) : [];
+  const teamByExternalId = new Map(teams.map((team) => [String(team.external_id), team]));
   const lineup = Object.entries((league.lineup_slot_counts || {}) as Record<string, unknown>)
     .filter(([, count]) => Number(count) > 0)
     .map(([slot, count]) => `${count} ${slot}`)
@@ -53,10 +58,27 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     `Teams: ${String(league.team_count || teams.length)}; playoffs: ${String(league.playoff_team_count || "unknown")}; regular-season weeks: ${String(league.regular_season_weeks || "unknown")}`,
     `Starting lineup and bench: ${lineup || "not available"}`,
     `Selected user team: ${String(selectedTeam.name)} (team_id: ${String(selectedTeam.id)})`,
+  ];
+
+  if (pickOrder.length) {
+    lines.push(
+      "",
+      `## ${String(league.season)} ESPN draft order`,
+      `Source: ESPN league settings; draft type: ${String(draftSettings.type || "unknown")}; order type: ${String(draftSettings.order_type || "unknown")}; league synced: ${String(league.last_synced_at || snapshot.refreshed_at)}`,
+    );
+    for (const [index, externalTeamId] of pickOrder.entries()) {
+      const orderedTeam = teamByExternalId.get(externalTeamId);
+      lines.push(`${index + 1}. ${String(orderedTeam?.name || `ESPN team ${externalTeamId}`)}${orderedTeam?.id === selectedTeam.id ? " (YOUR TEAM)" : ""} | team_id ${String(orderedTeam?.id || "unknown")} | ESPN team ${externalTeamId}`);
+    }
+  } else {
+    lines.push("", `## ${String(league.season)} ESPN draft order`, "Not available in the latest stored ESPN league settings. Do not infer it from a previous season.");
+  }
+
+  lines.push(
     "",
     "## Player ownership and rosters",
     "These ownership assignments are authoritative. Never recommend that a team acquire a player already on that same team.",
-  ];
+  );
 
   for (const team of [...teams].sort((left, right) => Number(Boolean(right.is_user_team)) - Number(Boolean(left.is_user_team)))) {
     const roster = (team.roster || []) as Array<Record<string, unknown>>;
@@ -181,4 +203,4 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   return snapshot;
 }
 
-export const THREAD_CONTEXT_SELECT = "*, team:fantasy_teams(id,name,external_id,league:leagues(id,name,season,provider,external_id,team_count,playoff_team_count,regular_season_weeks,scoring_type,reception_points,scoring_format_label,lineup_slot_counts,last_synced_at))";
+export const THREAD_CONTEXT_SELECT = "*, team:fantasy_teams(id,name,external_id,league:leagues(id,name,season,provider,external_id,team_count,playoff_team_count,regular_season_weeks,scoring_type,reception_points,scoring_format_label,lineup_slot_counts,league_settings,last_synced_at))";
