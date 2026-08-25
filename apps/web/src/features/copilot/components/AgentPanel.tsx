@@ -126,14 +126,8 @@ export function AgentPanel() {
   return <div className="grid h-full min-h-0 overflow-hidden bg-[#0d1114] lg:grid-cols-[260px_minmax(0,1fr)]">
     <aside className="flex min-h-0 flex-col border-b border-white/[.07] bg-[#090c0f] lg:border-b-0 lg:border-r">
       <div className="border-b border-white/[.06] p-3.5">
-        <p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-[#65716b]">Team workspace</p>
-        <div className="mt-2 border-l-2 border-[#b7f34a]/55 px-3 py-2">
-          <div className="flex items-center gap-3">
-            <span className="grid size-8 shrink-0 place-items-center border border-white/[.08] text-[10px] font-bold text-[#b7f34a]">{scope?.team.name?.slice(0, 2).toUpperCase() || "FF"}</span>
-            <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{scope?.team.name || "No team selected"}</span><span className="mt-0.5 block truncate text-[10px] text-[#65716b]">{scope ? `${scope.team.league.name || "League"} · ${scope.team.league.season}` : "Choose a team in settings"}</span></span>
-          </div>
-        </div>
-        <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring mt-2.5 w-full rounded-md border border-[#b7f34a]/35 bg-[#b7f34a]/[.08] px-3 py-2 text-xs font-semibold text-[#b7f34a] hover:bg-[#b7f34a]/[.13] disabled:cursor-not-allowed disabled:opacity-35">+ New conversation</button>
+        <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring w-full rounded-md border border-[#b7f34a]/35 bg-[#b7f34a]/[.08] px-3 py-2 text-xs font-semibold text-[#b7f34a] hover:bg-[#b7f34a]/[.13] disabled:cursor-not-allowed disabled:opacity-35">+ New conversation</button>
+        {!scope && <p className="mt-2 px-1 text-[10px] text-amber-200/70">Select a team from settings first.</p>}
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[.15em] text-[#58635d]">Conversations</p>
