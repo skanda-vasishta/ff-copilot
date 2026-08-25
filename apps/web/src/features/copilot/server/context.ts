@@ -184,13 +184,22 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   const rankedPlayerIds = [...rankingsByPlayer.keys()];
   if (!rankedPlayerIds.length) throw new Error("Current consensus rankings are not available for context");
 
-  const { data: projectedPlayers, error: projectedPlayersError } = await supabase.from("player_directory")
+  // PostgREST encodes `.in()` filters into the request URL. A full player pool can
+  // exceed the proxy URL limit once UUIDs from several ranking sources are merged,
+  // so fetch it in bounded batches instead of issuing one oversized request.
+  const playerIdBatches = Array.from({ length: Math.ceil(rankedPlayerIds.length / 75) }, (_, index) =>
+    rankedPlayerIds.slice(index * 75, (index + 1) * 75));
+  const projectedPlayerQueries = await Promise.all(playerIdBatches.map((playerIds) => supabase.from("player_directory")
     .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,projection_source_count,projection_sources,median_rank,fetched_at")
     .eq("season", thread.team.league.season)
-    .in("id", rankedPlayerIds)
-    .in("position", [...CONTEXT_POSITIONS])
-    .limit(500);
-  if (projectedPlayersError) throw new Error("Could not load the projected player pool for context");
+    .in("id", playerIds)
+    .in("position", [...CONTEXT_POSITIONS])));
+  const projectedPlayersError = projectedPlayerQueries.find((query) => query.error)?.error;
+  if (projectedPlayersError) {
+    console.error("Could not load projected player context", projectedPlayersError);
+    throw new Error("Could not load the projected player pool for context");
+  }
+  const projectedPlayers = projectedPlayerQueries.flatMap((query) => query.data || []);
   const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
   const rankedPlayers = (projectedPlayers || []).filter((player) => rankingsByPlayer.has(player.id)).map((player) => {
     const sourceRanks = rankingsByPlayer.get(player.id) || [];
