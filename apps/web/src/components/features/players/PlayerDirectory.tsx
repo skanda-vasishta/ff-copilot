@@ -20,7 +20,7 @@ export function PlayerDirectory() {
   const totalPages = Math.max(1, Math.ceil((players.data?.total || 0) / 25))
 
   if (isLoading) return <p className="text-sm text-[#78847e]">Loading your workspace…</p>
-  if (!scope) return <div className="rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#78847e]">Use settings in the top-right corner. The player season and scoring context follow that selection.</p></div>
+  if (!scope) return <div className="rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#78847e]">Your player season and scoring context follow the active team.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#11170a]">Open settings</Link></div>
 
   return <div>
     <div className="rounded-[16px] border border-white/[.08] bg-[#181a16]/60 p-3 backdrop-blur-xl">

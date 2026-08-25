@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useActiveScope } from "@/lib/scope";
@@ -123,7 +124,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
         <div className="h-72 animate-pulse rounded-lg bg-white/[.03]" />
       </div>
     );
-  if (!scope) return <div className="mt-6 rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#78847e]">Use workspace settings in the top-right corner.</p></div>;
+  if (!scope) return <div className="mt-6 rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#78847e]">Add a team in settings, then choose it from the header.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#11170a]">Open settings</Link></div>;
   if (detail.error || !player)
     return (
       <div
