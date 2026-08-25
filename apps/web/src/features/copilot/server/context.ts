@@ -27,7 +27,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-espn-rankings-v4";
+const CONTEXT_VERSION = "league-rosters-projection-consensus-v5";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -66,7 +66,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
   }
 
-  lines.push("", `## ${String(league.season)} ESPN PPR rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by ESPN's current overall PPR draft rank. Projections are ESPN current-season projections, not rankings.`);
+  lines.push("", `## ${String(league.season)} ESPN PPR rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by ESPN's current overall PPR draft rank. Projected points are the average of each available compatible full-season PPR source, not a ranking.`);
   for (const position of CONTEXT_POSITIONS) {
     lines.push("", `### ${position}`);
     const players = rankings?.[position] || [];
@@ -74,7 +74,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
       const facts = [
         `position list #${index + 1}`,
         present(player.espn_overall_rank) ? `ESPN overall #${String(player.espn_overall_rank)}` : null,
-        present(player.projected_total_points) ? `${String(player.projected_total_points)} projected points` : null,
+        present(player.projected_total_points) ? `${String(player.projected_total_points)} consensus projected points (${String(player.projection_source_count || 0)} sources)` : null,
         present(player.injury_status) && player.injury_status !== "ACTIVE" ? `injury: ${String(player.injury_status)}` : null,
       ].filter(Boolean).join("; ");
       lines.push(`- ${String(player.name)} (${String(player.nfl_team || "FA")}) | ${facts} | player_id ${String(player.id)}`);
@@ -132,7 +132,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   if (!rankedPlayerIds.length) throw new Error("Current ESPN rankings are not available for context");
 
   const { data: projectedPlayers, error: projectedPlayersError } = await supabase.from("player_directory")
-    .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,median_rank,fetched_at")
+    .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,projection_source_count,projection_sources,median_rank,fetched_at")
     .eq("season", thread.team.league.season)
     .in("id", rankedPlayerIds)
     .in("position", [...CONTEXT_POSITIONS])
@@ -151,7 +151,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
       ranking_basis: `${thread.team.league.season} ESPN PPR draft rank`,
       ranking_fetched_at: rankingsByPlayer.get(player.id)?.fetched_at,
       projection_season: thread.team.league.season,
-      projection_basis: `${thread.team.league.season} ESPN projection`,
+      projection_basis: `${thread.team.league.season} full-PPR cumulative projection consensus from all available compatible sources`,
       previous_season_position_finish: player.median_rank,
       previous_season_finish_basis: `${thread.team.league.season - 1} ESPN positional finish; not a ${thread.team.league.season} projection or consensus rank`,
     })),

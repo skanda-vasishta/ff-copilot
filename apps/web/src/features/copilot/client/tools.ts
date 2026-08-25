@@ -5,6 +5,7 @@ import { validateToolInput } from "@/features/copilot/harness";
 type PlayerDetail = {
   player: Record<string, unknown>;
   snapshots: Record<string, unknown>[];
+  projections: Record<string, unknown>;
   rankings: { items: Record<string, unknown>[]; summary: Record<string, unknown> };
   sources: Array<Record<string, unknown> & { source: string }>;
 };
@@ -26,7 +27,7 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       items: result.items.map(({ average_rank: _average, median_rank, minimum_rank: _minimum, maximum_rank: _maximum, ...player }) => ({
         ...player,
         projection_season: season,
-        projection_basis: `${season} ESPN projection`,
+        projection_basis: `${season} full-PPR cumulative projection consensus from all available compatible sources`,
         previous_season_position_finish: median_rank,
         ranking_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
       })),
@@ -34,9 +35,10 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   }
   if (call.name === "get_player_overview") {
     const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
-    const snapshot = detail.snapshots[0];
+    const snapshot = detail.snapshots.find((candidate) => candidate.source === "espn");
     return {
       player: detail.player,
+      projection_consensus: detail.projections,
       latest_snapshot: snapshot ? {
         season: snapshot.season,
         week: snapshot.week,
@@ -46,10 +48,8 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
         injury_status: snapshot.injury_status,
         total_points: snapshot.total_points,
         average_points: snapshot.average_points,
-        projected_total_points: snapshot.projected_total_points,
-        projected_average_points: snapshot.projected_average_points,
         projection_season: snapshot.season,
-        projection_basis: `${snapshot.season} ESPN projection`,
+        projection_basis: `${snapshot.season} projection values are provided in projection_consensus; ESPN snapshot values are not the consensus`,
         percent_owned: snapshot.percent_owned,
         percent_started: snapshot.percent_started,
         fetched_at: snapshot.fetched_at,
@@ -119,11 +119,23 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       items: result.items.map(({ average_rank: _average, median_rank, minimum_rank: _minimum, maximum_rank: _maximum, ...player }) => ({
         ...player,
         projection_season: season,
-        projection_basis: `${season} ESPN projection`,
+        projection_basis: `${season} full-PPR cumulative projection consensus from all available compatible sources`,
         previous_season_position_finish: median_rank,
         ranking_basis: `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`,
       })),
     };
+  }
+  if (call.name === "get_league_draft_history") {
+    if (!thread.league_id) return { error: "No league is attached to this conversation." };
+    return api(`/v1/leagues/${thread.league_id}/draft-picks?${queryString({
+      season: typeof input.season === "number" ? input.season : undefined,
+      round_number: typeof input.round_number === "number" ? input.round_number : undefined,
+      team_name: typeof input.team_name === "string" ? input.team_name : undefined,
+      position: typeof input.position === "string" ? input.position : undefined,
+      overall_pick: typeof input.overall_pick === "number" ? input.overall_pick : undefined,
+      window: typeof input.window === "number" ? input.window : 3,
+      limit: typeof input.limit === "number" ? input.limit : 200,
+    })}`);
   }
   throw new Error(`Unknown tool: ${call.name}`);
 }

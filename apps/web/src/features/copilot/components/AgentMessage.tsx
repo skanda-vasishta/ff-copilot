@@ -12,6 +12,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_league_standings: "Loaded league standings",
   get_league_team_roster: "Loaded team roster",
   get_league_free_agents: "Checked league free agents",
+  get_league_draft_history: "Checked league draft history",
 };
 
 function ToolActivity({ calls }: { calls: ToolCallPart[] }) {

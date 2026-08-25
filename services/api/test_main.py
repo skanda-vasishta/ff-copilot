@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from services.api.main import AuthenticatedUser, app, current_user, db_for, source_freshness
+from services.api.main import AuthenticatedUser, app, current_user, db_for, projection_summary, source_freshness
 
 
 client = TestClient(app)
@@ -102,11 +102,58 @@ def test_league_free_agents_exclude_players_on_latest_rosters():
         app.dependency_overrides.clear()
 
 
+class DraftHistoryDB:
+    async def request(self, method, table, **kwargs):
+        if table == "rpc/link_league_history":
+            assert method == "POST"
+            return ([
+                {"id": "league-2026", "season": 2026},
+                {"id": "league-2025", "season": 2025},
+            ], {})
+        if table == "league_draft_picks":
+            assert method == "GET"
+            assert kwargs["params"]["league_id"] == "in.(league-2025)"
+            assert kwargs["params"]["overall_pick"] == "gte.7"
+            assert kwargs["params"]["and"] == "(overall_pick.lte.13)"
+            return ([
+                {"overall_pick": pick, "player_name": f"Player {pick}", "league": {"season": 2025}}
+                for pick in range(7, 14)
+            ], {})
+        raise AssertionError(table)
+
+
+def test_draft_history_returns_pick_neighborhood_and_available_seasons():
+    app.dependency_overrides[db_for] = lambda: DraftHistoryDB()
+    try:
+        response = client.get("/v1/leagues/league-2026/draft-picks?season=2025&overall_pick=10&window=3")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available_seasons"] == [2026, 2025]
+        assert [pick["overall_pick"] for pick in body["items"]] == list(range(7, 14))
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_draft_history_requires_season_for_pick_neighborhood():
+    app.dependency_overrides[db_for] = lambda: DraftHistoryDB()
+    try:
+        response = client.get("/v1/leagues/league-2026/draft-picks?overall_pick=10")
+        assert response.status_code == 400
+    finally:
+        app.dependency_overrides.clear()
+
+
 class PlayerDetailDB:
     async def request(self, method, table, **kwargs):
         rows = {
             "players": [{"id": "player-1", "name": "Test Player"}],
-            "player_snapshots": [{"id": "snapshot-1", "season": 2026}],
+            "player_snapshots": [
+                {"id": "snapshot-1", "source": "espn", "season": 2026,
+                 "projected_total_points": 255, "fetched_at": "2026-08-23T00:00:00Z"},
+                {"id": "snapshot-2", "source": "fftoday", "season": 2026,
+                 "projected_total_points": 289, "raw_payload": {"scoring_format": "ppr"},
+                 "fetched_at": "2026-08-23T00:00:00Z"},
+            ],
             "player_rankings": [
                 {"id": "rank-1", "source": "espn", "overall_rank": 10, "scoring_format": "ppr",
                  "ranking_type": "current_draft_rank", "fetched_at": "2026-08-23T00:00:00Z"},
@@ -126,6 +173,9 @@ def test_player_detail_combines_facts_in_one_request():
         body = response.json()
         assert body["player"]["name"] == "Test Player"
         assert body["snapshots"][0]["season"] == 2026
+        assert body["projections"]["projected_total_points"] == 272.0
+        assert body["projections"]["projected_average_points"] == 16.0
+        assert body["projections"]["source_count"] == 2
         assert body["rankings"]["summary"] == {
             "average": 15.0, "median": 15.0, "minimum": 10.0,
             "maximum": 20.0, "source_count": 2,
@@ -133,6 +183,21 @@ def test_player_detail_combines_facts_in_one_request():
         assert body["sources"][0]["source"] == "reddit"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_projection_summary_uses_latest_compatible_cumulative_value_per_source():
+    summary = projection_summary([
+        {"source": "espn", "projected_total_points": 250, "fetched_at": "2026-08-24T00:00:00Z"},
+        {"source": "espn", "projected_total_points": 240, "fetched_at": "2026-08-20T00:00:00Z"},
+        {"source": "fftoday", "projected_total_points": 284,
+         "raw_payload": {"scoring_format": "ppr"}, "fetched_at": "2026-08-23T00:00:00Z"},
+        {"source": "other", "projected_total_points": 999,
+         "raw_payload": {"scoring_format": "standard"}, "fetched_at": "2026-08-24T00:00:00Z"},
+    ])
+    assert summary["projected_total_points"] == 267.0
+    assert summary["projected_average_points"] == 267.0 / 17
+    assert summary["source_count"] == 2
+    assert [source["source"] for source in summary["sources"]] == ["espn", "fftoday"]
 
 
 def test_source_freshness_counts_unique_players_and_latest_fetch():

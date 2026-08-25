@@ -171,6 +171,10 @@ def snapshot_payload(player_id: str, player: Any, season: int, week: int | None,
     raw = {key: getattr(player, key, None) for key in (
         "eligibleSlots", "lineupSlot", "acquisitionType", "stats", "onTeamId"
     )}
+    # The global ESPN reference league is deliberately configured as full PPR.
+    # Persist the scoring basis so projections can be combined without guessing.
+    raw["scoring_format"] = "ppr"
+    raw["projection_scope"] = "full_season_cumulative"
     payload = {
         "player_id": player_id, "source": "espn", "season": season, "week": week,
         "position_rank": getattr(player, "posRank", None), "injury_status": getattr(player, "injuryStatus", None),
@@ -188,7 +192,9 @@ def snapshot_payload(player_id: str, player: Any, season: int, week: int | None,
 def resolve_player(db: SupabaseAdmin, external_id: str, payload: dict[str, Any]) -> str:
     ids = db.select("player_external_ids", provider="espn", external_id=external_id)
     if ids:
-        db.patch("players", {"id": ids[0]["player_id"]}, payload)
+        db.patch("players", {"id": ids[0]["player_id"]}, {
+            key: value for key, value in payload.items() if value is not None
+        })
         return ids[0]["player_id"]
     player_id = db.insert("players", payload)[0]["id"]
     db.insert("player_external_ids", {"player_id": player_id, "provider": "espn", "external_id": external_id})
@@ -540,6 +546,7 @@ def sync_global(args):
                         "attribution": "FFToday",
                         "source_url": row["source_url"],
                         "scoring_format": "ppr",
+                        "projection_scope": "full_season_cumulative",
                         "position": row["position"],
                         "nfl_team": row["nfl_team"],
                         "stat_values": row["raw_values"],
@@ -668,7 +675,14 @@ def coverage_report(args):
             )
 
 
-def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int | None, request_id: str | None = None):
+def sync_one_league(
+    db: SupabaseAdmin,
+    external_id: str,
+    season: int,
+    week: int | None,
+    request_id: str | None = None,
+    sync_history: bool = False,
+):
     with Run(db, "league", season, week, request_id) as run:
         league_data = League(league_id=int(external_id), year=season)
         fetched_at = now()
@@ -695,6 +709,7 @@ def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int 
             "reception_points": reception_points, "scoring_format_label": scoring_label,
             "lineup_slot_counts": lineup_counts, "league_settings": raw_settings},
             "provider,external_id,season")[0]
+        teams_by_external_id: dict[str, dict[str, Any]] = {}
         for team in league_data.teams:
             db_team = db.upsert("fantasy_teams", {"league_id": league["id"], "external_id": str(team.team_id),
                 "name": team.team_name, "updated_at": fetched_at,
@@ -704,6 +719,7 @@ def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int 
                 "standing": getattr(team, "standing", None),
                 "final_standing": getattr(team, "final_standing", None),
                 "playoff_pct": getattr(team, "playoff_pct", None)}, "league_id,external_id")[0]
+            teams_by_external_id[str(team.team_id)] = db_team
             roster_key = [{"id": str(player.playerId), "slot": getattr(player, "lineupSlot", None)} for player in team.roster]
             roster = db.upsert("roster_snapshots", {"team_id": db_team["id"], "season": season, "week": week,
                 "fetched_at": fetched_at, "data_hash": digest(roster_key)}, "team_id,season,week,data_hash")[0]
@@ -717,11 +733,78 @@ def sync_one_league(db: SupabaseAdmin, external_id: str, season: int, week: int 
                 db.upsert("roster_players", rows, "roster_snapshot_id,player_id")
             run.read += len(team.roster)
             run.written += len(rows) + 2
+
+        draft = list(getattr(league_data, "draft", []) or [])
+        if draft:
+            draft_player_ids = sorted({int(pick.playerId) for pick in draft if getattr(pick, "playerId", None)})
+            player_details: dict[str, Any] = {}
+            for player_id_batch in chunks(draft_player_ids, 50):
+                try:
+                    result = league_data.player_info(playerId=player_id_batch)
+                    players = result if isinstance(result, list) else [result] if result else []
+                    player_details.update({str(player.playerId): player for player in players})
+                except Exception as exc:
+                    run.error(f"draft_player_details:{season}", exc)
+
+            draft_rows = []
+            for overall_pick, pick in enumerate(draft, start=1):
+                external_player_id = str(pick.playerId)
+                detail = player_details.get(external_player_id)
+                name = getattr(detail, "name", None) or getattr(pick, "playerName", None) or f"ESPN player {external_player_id}"
+                player_id = resolve_player(
+                    db,
+                    external_player_id,
+                    player_payload(detail) if detail else {
+                        "name": name, "position": None, "nfl_team": None, "updated_at": fetched_at
+                    },
+                )
+                team_external_id = str(getattr(getattr(pick, "team", None), "team_id", "")) or None
+                nominating_team = getattr(pick, "nominatingTeam", None)
+                nominating_external_id = str(getattr(nominating_team, "team_id", "")) or None
+                draft_rows.append({
+                    "league_id": league["id"], "overall_pick": overall_pick,
+                    "round_number": int(pick.round_num), "round_pick": int(pick.round_pick),
+                    "team_id": teams_by_external_id.get(team_external_id, {}).get("id"),
+                    "team_external_id": team_external_id,
+                    "team_name": getattr(getattr(pick, "team", None), "team_name", None),
+                    "player_id": player_id, "player_external_id": external_player_id,
+                    "player_name": name, "player_position": getattr(detail, "position", None),
+                    "nfl_team": getattr(detail, "proTeam", None),
+                    "bid_amount": clean_number(getattr(pick, "bid_amount", None)),
+                    "keeper_status": bool(pick.keeper_status) if getattr(pick, "keeper_status", None) is not None else None,
+                    "nominating_team_external_id": nominating_external_id,
+                    "nominating_team_name": getattr(nominating_team, "team_name", None),
+                    "raw_payload": {"provider": "espn", "season": season}, "fetched_at": fetched_at,
+                })
+            for batch in chunks(draft_rows, 50):
+                db.upsert("league_draft_picks", batch, "league_id,overall_pick")
+            run.read += len(draft_rows)
+            run.written += len(draft_rows)
+        if sync_history:
+            league_payload = league_data.espn_request.get_league()
+            previous_seasons = sorted({
+                int(value) for value in league_payload.get("status", {}).get("previousSeasons", [])
+                if int(value) < season
+            }, reverse=True)
+            for previous_season in previous_seasons:
+                try:
+                    sync_one_league(db, external_id, previous_season, None, sync_history=False)
+                except Exception as exc:
+                    # ESPN can expose a year in previousSeasons while requiring
+                    # private-league cookies for that historical season.
+                    run.error(f"league_history:{previous_season}", exc)
+
         if request_id:
             request = db.select("sync_requests", id=request_id)[0]
             if request.get("requested_by"):
-                db.upsert("user_leagues", {"user_id": request["requested_by"], "league_id": league["id"]},
-                          "user_id,league_id")
+                linked_leagues = (
+                    db.select("leagues", provider="espn", external_id=external_id)
+                    if sync_history else [league]
+                )
+                db.upsert("user_leagues", [
+                    {"user_id": request["requested_by"], "league_id": linked["id"]}
+                    for linked in linked_leagues
+                ], "user_id,league_id")
 
 
 def sync_league(args):
@@ -734,7 +817,7 @@ def sync_league(args):
         failures = []
         for league in leagues:
             try:
-                sync_one_league(db, league["external_id"], args.season, args.week)
+                sync_one_league(db, league["external_id"], args.season, args.week, sync_history=args.history)
             except Exception as exc:
                 failures.append((league["external_id"], str(exc)))
                 print(f"Failed league {league['external_id']}: {exc}", file=sys.stderr)
@@ -749,7 +832,7 @@ def sync_league(args):
         for (_provider, external_id, season, week), group in grouped.items():
             primary = group[0]
             try:
-                sync_one_league(db, external_id, season, week, primary["id"])
+                sync_one_league(db, external_id, season, week, primary["id"], sync_history=True)
                 leagues = db.select("leagues", provider="espn", external_id=external_id, season=season)
                 for duplicate in group[1:]:
                     if leagues and duplicate.get("requested_by"):
@@ -765,7 +848,7 @@ def sync_league(args):
                     })
                 print(f"Failed request group {primary['id']}: {exc}", file=sys.stderr)
     elif args.league_id:
-        sync_one_league(db, args.league_id, args.season, args.week)
+        sync_one_league(db, args.league_id, args.season, args.week, sync_history=args.history)
     else:
         raise SystemExit("Provide --league-id, --pending, or --all-linked")
 
@@ -864,6 +947,10 @@ def parser():
     league_sync.add_argument("--league-id")
     league_sync.add_argument("--pending", action="store_true")
     league_sync.add_argument("--all-linked", action="store_true")
+    league_sync.add_argument(
+        "--history", action="store_true",
+        help="Discover and sync every previous ESPN season associated with the league ID",
+    )
     league_sync.set_defaults(func=sync_league)
     return root
 

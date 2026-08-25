@@ -58,6 +58,20 @@ type SourceDocument = {
 type PlayerDetail = {
   player: PlayerRecord;
   snapshots: Snapshot[];
+  projections: {
+    projected_total_points: number | null;
+    projected_average_points: number | null;
+    source_count: number;
+    scoring_format: string;
+    scope: string;
+    games_denominator: number;
+    sources: Array<{
+      source: string;
+      projected_total_points: number;
+      source_updated_at: string | null;
+      fetched_at: string;
+    }>;
+  };
   rankings: RankingResponse;
   sources: SourceDocument[];
 };
@@ -93,6 +107,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
   });
   const player = detail.data?.player;
   const rankings = detail.data?.rankings;
+  const projections = detail.data?.projections;
   const sources = detail.data?.sources || [];
   const latest = detail.data?.snapshots.find((snapshot) => snapshot.source === "espn");
   const fftoday = detail.data?.snapshots.find((snapshot) => snapshot.source === "fftoday");
@@ -164,8 +179,8 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Projected points", number(latest?.projected_total_points)],
-          ["Projected / game", number(latest?.projected_average_points)],
+          ["Consensus projected points", number(projections?.projected_total_points)],
+          ["Consensus projected / game", number(projections?.projected_average_points)],
           [
             `${scope.team.league.season - 1} position finish`,
             latest?.position_rank == null ? "—" : `#${latest.position_rank}`,
@@ -185,11 +200,30 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
               {value}
             </p>
             <p className="mt-2 text-[10px] text-[#58635d]">
-              ESPN · {date(latest?.fetched_at || null)}
+              {label.startsWith("Consensus")
+                ? `${projections?.source_count || 0} full-PPR source${projections?.source_count === 1 ? "" : "s"}${label.includes("/ game") ? ` · total ÷ ${projections?.games_denominator || 17}` : ""}`
+                : `ESPN · ${date(latest?.fetched_at || null)}`}
             </p>
           </div>
         ))}
       </section>
+
+      {projections && projections.sources.length > 0 && (
+        <section className="panel rounded-2xl p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">
+            Full-season PPR projection sources
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {projections.sources.map((projection) => (
+              <div key={projection.source} className="rounded-lg border border-white/[.07] bg-black/15 px-3 py-2 text-xs text-[#9da7a2]">
+                <span>{sourceNames[projection.source] || projection.source}</span>
+                <span className="ml-2 font-mono font-semibold text-white">{number(projection.projected_total_points)}</span>
+                <span className="ml-2 text-[#58635d]">{date(projection.source_updated_at || projection.fetched_at)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {fftoday && (
         <section className="panel flex flex-col justify-between gap-4 rounded-2xl p-5 sm:flex-row sm:items-center">

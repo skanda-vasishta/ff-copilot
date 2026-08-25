@@ -196,6 +196,38 @@ def ranking_summary(data: list[dict[str, Any]]) -> dict[str, float | int | None]
     }
 
 
+def projection_summary(data: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine the latest full-PPR cumulative projection from each source."""
+    latest_by_source: dict[str, dict[str, Any]] = {}
+    for row in sorted(data, key=lambda item: item.get("fetched_at") or "", reverse=True):
+        raw = row.get("raw_payload") or {}
+        scoring_format = str(raw.get("scoring_format") or "").lower()
+        # ESPN rows before migration 0014 came from the same full-PPR reference
+        # league but did not persist that marker.
+        compatible = scoring_format == "ppr" or row.get("source") == "espn"
+        if compatible and row.get("projected_total_points") is not None:
+            latest_by_source.setdefault(str(row["source"]), row)
+    sources = [
+        {
+            "source": source,
+            "projected_total_points": float(row["projected_total_points"]),
+            "source_updated_at": row.get("source_updated_at"),
+            "fetched_at": row.get("fetched_at"),
+        }
+        for source, row in sorted(latest_by_source.items())
+    ]
+    total = sum(item["projected_total_points"] for item in sources) / len(sources) if sources else None
+    return {
+        "projected_total_points": total,
+        "projected_average_points": total / 17 if total is not None else None,
+        "source_count": len(sources),
+        "scoring_format": "ppr",
+        "scope": "full_season_cumulative",
+        "games_denominator": 17,
+        "sources": sources,
+    }
+
+
 @app.get("/v1/players/{player_id}")
 async def get_player(player_id: str, db: SupabaseREST = Depends(db_for)):
     return await require_player(player_id, db)
@@ -219,6 +251,7 @@ async def get_player_detail(player_id: str, season: int | None = None, db: Supab
     return {
         "player": player,
         "snapshots": snapshots,
+        "projections": projection_summary(snapshots),
         "rankings": {"items": rankings, "summary": ranking_summary(rankings)},
         "sources": sources,
     }
@@ -356,6 +389,58 @@ async def league_seasons(league_id: str, db: SupabaseREST = Depends(db_for)):
     if not data:
         raise HTTPException(status_code=404, detail="League not found")
     return sorted(data, key=lambda league: league["season"], reverse=True)
+
+
+@app.get("/v1/leagues/{league_id}/draft-picks")
+async def league_draft_picks(
+    league_id: str,
+    season: int | None = Query(None, ge=2000, le=2100),
+    round_number: int | None = Query(None, ge=1, le=40),
+    team_name: str | None = Query(None, min_length=1, max_length=100),
+    position: Literal["QB", "RB", "WR", "TE"] | None = None,
+    overall_pick: int | None = Query(None, ge=1, le=1000),
+    window: int = Query(3, ge=0, le=20),
+    limit: int = Query(200, ge=1, le=500),
+    db: SupabaseREST = Depends(db_for),
+):
+    if overall_pick is not None and season is None:
+        raise HTTPException(status_code=400, detail="season is required when querying around an overall pick")
+    leagues, _ = await db.request("POST", "rpc/link_league_history", json={"p_league_id": league_id})
+    if not leagues:
+        raise HTTPException(status_code=404, detail="League not found")
+    available_seasons = sorted({int(league["season"]) for league in leagues}, reverse=True)
+    selected_leagues = [league for league in leagues if season is None or int(league["season"]) == season]
+    if season is not None and not selected_leagues:
+        return {"items": [], "available_seasons": available_seasons, "filters": {"season": season}}
+
+    params: dict[str, Any] = {
+        "league_id": f"in.({','.join(league['id'] for league in selected_leagues)})",
+        "select": "*,league:leagues(season,name,external_id)",
+        "order": "overall_pick.asc",
+        "limit": min(2000, max(limit, (window * 2 + 1) * len(selected_leagues))),
+    }
+    if round_number is not None:
+        params["round_number"] = f"eq.{round_number}"
+    if team_name:
+        params["team_name"] = f"ilike.*{team_name.replace('*', '')}*"
+    if position:
+        params["player_position"] = f"eq.{position}"
+    if overall_pick is not None:
+        params["overall_pick"] = f"gte.{max(1, overall_pick - window)}"
+        params["and"] = f"(overall_pick.lte.{overall_pick + window})"
+    picks, _ = await db.request("GET", "league_draft_picks", params=params)
+    picks = sorted(
+        picks,
+        key=lambda pick: (-int(pick.get("league", {}).get("season", 0)), int(pick["overall_pick"])),
+    )[:limit]
+    return {
+        "items": picks,
+        "available_seasons": available_seasons,
+        "filters": {
+            "season": season, "round_number": round_number, "team_name": team_name,
+            "position": position, "overall_pick": overall_pick, "window": window,
+        },
+    }
 
 
 @app.get("/v1/leagues/{league_id}/free-agents")

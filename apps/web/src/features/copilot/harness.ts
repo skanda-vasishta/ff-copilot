@@ -9,7 +9,7 @@ const noInput = z.object({}).strict();
 
 export const TOOL_REGISTRY = {
   search_players: {
-    description: "Find NFL fantasy players by full or partial name. Returns internal player IDs, current projections, and an explicitly labeled previous-season ESPN positional finish. Use this before player-specific tools when an ID is unknown; never describe the previous-season finish as a current draft rank.",
+    description: "Find NFL fantasy players by full or partial name. Returns internal player IDs, the current full-PPR cumulative projection consensus with its source breakdown, and an explicitly labeled previous-season ESPN positional finish. Use this before player-specific tools when an ID is unknown; never describe the previous-season finish as a current draft rank.",
     schema: z.object({
       query: z.string().trim().min(1).describe("Player name or partial name, such as 'Bijan Robinson' or 'Bijan'"),
       position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional fantasy position filter"),
@@ -17,7 +17,7 @@ export const TOOL_REGISTRY = {
     }).strict(),
   },
   get_player_overview: {
-    description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, projections, injury status, ownership, explicitly labeled ranking basis, and available news sources. In preseason, ESPN position_rank is the previous season's positional finish, not a current draft rank. Use source-specific tools for underlying article text.",
+    description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, full-PPR cumulative projection consensus and source breakdown, injury status, ownership, explicitly labeled ranking basis, and available news sources. In preseason, ESPN position_rank is the previous season's positional finish, not a current draft rank. Use source-specific tools for underlying article text.",
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_player_espn: {
@@ -45,12 +45,27 @@ export const TOOL_REGISTRY = {
     schema: z.object({ team_id: z.uuid().describe("Fantasy team UUID returned by get_league_standings") }).strict(),
   },
   get_league_free_agents: {
-    description: "Retrieve players who are absent from every team's latest stored roster in this conversation's ESPN league. Use this for waiver, add/drop, and best-available-player questions. Results include projections, injuries, ranking summaries, and the roster snapshot timestamp that availability is based on; never infer league availability from search_players.",
+    description: "Retrieve players who are absent from every team's latest stored roster in this conversation's ESPN league. Use this for waiver, add/drop, and best-available-player questions. Results include full-PPR cumulative projection consensus values, injuries, ranking summaries, and the roster snapshot timestamp that availability is based on; never infer league availability from search_players.",
     schema: z.object({
       position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional position filter"),
       limit: z.number().int().min(1).max(50).optional().describe("Maximum results; defaults to 25"),
       sort: z.enum(["median_rank", "average_rank", "projected_total_points", "name"]).optional().describe("How to order available players; defaults to highest projected points. Median/average currently reflect the explicitly labeled previous-season ESPN positional finish, not current consensus ranks"),
     }).strict(),
+  },
+  get_league_draft_history: {
+    description: "Query completed ESPN draft picks from this conversation's league across stored historical seasons. Use it to inspect a complete round, one team's draft, one position, or the picks immediately before and after a specific overall pick. Results are immutable completed-draft facts, not live draft state.",
+    schema: z.object({
+      season: z.number().int().min(2000).max(2100).optional().describe("Historical season; omit to query all stored seasons"),
+      round_number: z.number().int().min(1).max(40).optional().describe("Return picks from this round"),
+      team_name: z.string().trim().min(1).max(100).optional().describe("Case-insensitive team-name filter, useful because team UUIDs differ by season"),
+      position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Return only picks at this fantasy position"),
+      overall_pick: z.number().int().min(1).max(1000).optional().describe("Center the result on this overall pick; requires season"),
+      window: z.number().int().min(0).max(20).optional().describe("Number of preceding and subsequent picks around overall_pick; defaults to 3"),
+      limit: z.number().int().min(1).max(500).optional().describe("Maximum picks returned; defaults to 200"),
+    }).strict().refine((value) => value.overall_pick == null || value.season != null, {
+      message: "season is required with overall_pick",
+      path: ["season"],
+    }),
   },
 } as const;
 

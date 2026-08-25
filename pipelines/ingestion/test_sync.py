@@ -42,6 +42,13 @@ def test_league_parser_supports_daily_linked_refresh():
     assert args.all_linked is True
 
 
+def test_league_parser_supports_full_history_backfill():
+    args = parser().parse_args([
+        "sync-league", "--season", "2026", "--league-id", "123456", "--history"
+    ])
+    assert args.history is True
+
+
 def test_batches_are_stable():
     assert list(chunks(list(range(5)), 2)) == [[0, 1], [2, 3], [4]]
 
