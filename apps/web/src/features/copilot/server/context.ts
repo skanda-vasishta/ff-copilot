@@ -28,7 +28,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-draft-picks-v7";
+const CONTEXT_VERSION = "league-rosters-consensus-rankings-v8";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -38,7 +38,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   const league = snapshot.league as Record<string, unknown>;
   const selectedTeam = snapshot.selected_team as Record<string, unknown>;
   const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
-  const rankings = snapshot.top_espn_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
+  const rankings = snapshot.top_consensus_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
   const leagueSettings = (league.league_settings || {}) as Record<string, unknown>;
   const draftSettings = (leagueSettings.draft_settings || {}) as Record<string, unknown>;
   const pickOrder = Array.isArray(draftSettings.pick_order) ? draftSettings.pick_order.map(String) : [];
@@ -105,14 +105,16 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
   }
 
-  lines.push("", `## ${String(league.season)} ESPN PPR rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by ESPN's current overall PPR draft rank. Projected points are the average of each available compatible full-season PPR source, not a ranking.`);
+  lines.push("", `## ${String(league.season)} full-PPR consensus rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by a simple average of every compatible current positional rank. ESPN is a platform draft rank, FantasyPros is expert consensus rank, and FFToday is projection-derived positional rank. Projected points separately average every compatible full-season PPR projection source.`);
   for (const position of CONTEXT_POSITIONS) {
     lines.push("", `### ${position}`);
     const players = rankings?.[position] || [];
     for (const [index, player] of players.entries()) {
       const facts = [
         `position list #${index + 1}`,
-        present(player.espn_overall_rank) ? `ESPN overall #${String(player.espn_overall_rank)}` : null,
+        present(player.consensus_position_rank) ? `consensus ${position}${Number(player.consensus_position_rank).toFixed(1)}` : null,
+        present(player.consensus_overall_rank) ? `overall consensus #${Number(player.consensus_overall_rank).toFixed(1)}` : null,
+        Array.isArray(player.ranking_sources) ? `source ranks: ${(player.ranking_sources as Array<Record<string, unknown>>).map((source) => `${String(source.source)} ${position}${String(source.position_rank ?? "?")}${present(source.overall_rank) ? ` / overall ${String(source.overall_rank)}` : ""}`).join(", ")}` : null,
         present(player.projected_total_points) ? `${String(player.projected_total_points)} consensus projected points (${String(player.projection_source_count || 0)} sources)` : null,
         present(player.injury_status) && player.injury_status !== "ACTIVE" ? `injury: ${String(player.injury_status)}` : null,
       ].filter(Boolean).join("; ");
@@ -158,17 +160,29 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     rosters.set(teamId, entries);
   }
 
-  const { data: espnRankings, error: espnRankingsError } = await supabase.from("player_rankings")
-    .select("player_id,overall_rank,position_rank,fetched_at")
-    .eq("source", "espn")
-    .eq("season", thread.team.league.season)
-    .eq("scoring_format", "ppr")
-    .eq("ranking_type", "current_draft_rank")
-    .order("overall_rank", { ascending: true, nullsFirst: false })
-    .limit(500);
-  if (espnRankingsError) throw new Error("Could not load current ESPN rankings for context");
-  const rankedPlayerIds = (espnRankings || []).map((ranking) => ranking.player_id);
-  if (!rankedPlayerIds.length) throw new Error("Current ESPN rankings are not available for context");
+  const rankingQueries = await Promise.all([
+    ["espn", "current_draft_rank"], ["fantasypros", "expert_consensus_rank"], ["fftoday", "projected_position_rank"],
+  ].map(([source, rankingType]) => supabase.from("player_rankings")
+    .select("player_id,source,ranking_type,overall_rank,position_rank,fetched_at")
+    .eq("season", thread.team.league.season).eq("source", source)
+    .eq("scoring_format", "ppr").eq("ranking_type", rankingType)
+    .order("fetched_at", { ascending: false }).limit(1000)));
+  const rankingQueryError = rankingQueries.find((query) => query.error)?.error;
+  if (rankingQueryError) throw new Error("Could not load current consensus rankings for context");
+  const currentRankings = rankingQueries.flatMap((query) => query.data || []);
+  const latestRankingByPlayerSource = new Map<string, NonNullable<typeof currentRankings>[number]>();
+  for (const ranking of currentRankings || []) {
+    const key = `${ranking.player_id}:${ranking.source}`;
+    if (!latestRankingByPlayerSource.has(key)) latestRankingByPlayerSource.set(key, ranking);
+  }
+  const rankingsByPlayer = new Map<string, Array<NonNullable<typeof currentRankings>[number]>>();
+  for (const ranking of latestRankingByPlayerSource.values()) {
+    const rows = rankingsByPlayer.get(ranking.player_id) || [];
+    rows.push(ranking);
+    rankingsByPlayer.set(ranking.player_id, rows);
+  }
+  const rankedPlayerIds = [...rankingsByPlayer.keys()];
+  if (!rankedPlayerIds.length) throw new Error("Current consensus rankings are not available for context");
 
   const { data: projectedPlayers, error: projectedPlayersError } = await supabase.from("player_directory")
     .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,projection_source_count,projection_sources,median_rank,fetched_at")
@@ -177,18 +191,28 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     .in("position", [...CONTEXT_POSITIONS])
     .limit(500);
   if (projectedPlayersError) throw new Error("Could not load the projected player pool for context");
-  const rankingsByPlayer = new Map((espnRankings || []).map((ranking) => [ranking.player_id, ranking]));
-  const rankedPlayers = (projectedPlayers || []).filter((player) => rankingsByPlayer.has(player.id)).sort((left, right) =>
-    Number(rankingsByPlayer.get(left.id)?.overall_rank ?? Number.MAX_SAFE_INTEGER)
-      - Number(rankingsByPlayer.get(right.id)?.overall_rank ?? Number.MAX_SAFE_INTEGER));
+  const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  const rankedPlayers = (projectedPlayers || []).filter((player) => rankingsByPlayer.has(player.id)).map((player) => {
+    const sourceRanks = rankingsByPlayer.get(player.id) || [];
+    const positionRanks = sourceRanks.map((ranking) => ranking.position_rank).filter((rank): rank is number => rank != null);
+    const overallRanks = sourceRanks.map((ranking) => ranking.overall_rank).filter((rank): rank is number => rank != null);
+    return {
+      ...player,
+      consensus_position_rank: positionRanks.length ? average(positionRanks) : null,
+      consensus_overall_rank: overallRanks.length ? average(overallRanks) : null,
+      ranking_sources: sourceRanks.map((ranking) => ({
+        source: ranking.source, ranking_type: ranking.ranking_type,
+        overall_rank: ranking.overall_rank, position_rank: ranking.position_rank,
+        fetched_at: ranking.fetched_at,
+      })),
+    };
+  }).sort((left, right) => Number(left.consensus_position_rank ?? Number.MAX_SAFE_INTEGER) - Number(right.consensus_position_rank ?? Number.MAX_SAFE_INTEGER));
   const topPlayersByPosition = Object.fromEntries(CONTEXT_POSITIONS.map((position) => [
     position,
     rankedPlayers.filter((player) => player.position === position).slice(0, CONTEXT_PLAYERS_PER_POSITION).map((player) => ({
       ...player,
-      espn_overall_rank: rankingsByPlayer.get(player.id)?.overall_rank,
       ranking_season: thread.team.league.season,
-      ranking_basis: `${thread.team.league.season} ESPN PPR draft rank`,
-      ranking_fetched_at: rankingsByPlayer.get(player.id)?.fetched_at,
+      ranking_basis: `${thread.team.league.season} full-PPR positional consensus across all compatible current sources`,
       projection_season: thread.team.league.season,
       projection_basis: `${thread.team.league.season} full-PPR cumulative projection consensus from all available compatible sources`,
       previous_season_position_finish: player.median_rank,
@@ -203,7 +227,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     refreshed_at: refreshedAt,
     selected_team: { id: thread.team.id, name: thread.team.name },
     league: thread.team.league,
-    top_espn_ranked_players_by_position: topPlayersByPosition,
+    top_consensus_ranked_players_by_position: topPlayersByPosition,
     teams: (teams || []).map((team) => ({
       ...team,
       is_user_team: team.id === thread.team_id,

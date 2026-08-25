@@ -1,5 +1,6 @@
 import asyncio
 import os
+import statistics
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -225,6 +226,66 @@ def projection_summary(data: list[dict[str, Any]]) -> dict[str, Any]:
         "scope": "full_season_cumulative",
         "games_denominator": 17,
         "sources": sources,
+    }
+
+
+@app.get("/v1/rankings/consensus")
+async def consensus_rankings(
+    season: int = Query(2026, ge=2000, le=2100),
+    position: Literal["QB", "RB", "WR", "TE"] | None = None,
+    limit: int = Query(30, ge=1, le=100),
+    db: SupabaseREST = Depends(db_for),
+):
+    source_types = {
+        "espn": "current_draft_rank",
+        "fantasypros": "expert_consensus_rank",
+        "fftoday": "projected_position_rank",
+    }
+    responses = await asyncio.gather(*[
+        db.request("GET", "player_rankings", params={
+            "season": f"eq.{season}", "source": f"eq.{source}",
+            "scoring_format": "eq.ppr", "ranking_type": f"eq.{ranking_type}",
+            "select": "player_id,source,ranking_type,overall_rank,position_rank,fetched_at,player:players(id,name,position,nfl_team,active)",
+            "order": "fetched_at.desc", "limit": 1000,
+        }) for source, ranking_type in source_types.items()
+    ])
+    rows = [row for response, _ in responses for row in response]
+    latest_by_player_source: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        player = row.get("player") or {}
+        if position and player.get("position") != position:
+            continue
+        latest_by_player_source.setdefault((row["player_id"], row["source"]), row)
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for (player_id, _), row in latest_by_player_source.items():
+        grouped.setdefault(player_id, []).append(row)
+    items = []
+    for player_id, rankings in grouped.items():
+        player = rankings[0].get("player") or {}
+        position_ranks = [float(row["position_rank"]) for row in rankings if row.get("position_rank") is not None]
+        overall_ranks = [float(row["overall_rank"]) for row in rankings if row.get("overall_rank") is not None]
+        if not position_ranks:
+            continue
+        items.append({
+            "player": player,
+            "position_consensus_average": sum(position_ranks) / len(position_ranks),
+            "position_consensus_median": statistics.median(position_ranks),
+            "overall_consensus_average": sum(overall_ranks) / len(overall_ranks) if overall_ranks else None,
+            "overall_consensus_median": statistics.median(overall_ranks) if overall_ranks else None,
+            "position_source_count": len(position_ranks),
+            "overall_source_count": len(overall_ranks),
+            "sources": [{
+                "source": row["source"], "ranking_type": row["ranking_type"],
+                "overall_rank": row.get("overall_rank"), "position_rank": row.get("position_rank"),
+                "fetched_at": row.get("fetched_at"),
+            } for row in sorted(rankings, key=lambda item: item["source"])],
+        })
+    items.sort(key=lambda item: (item["position_consensus_average"], item["player"].get("name") or ""))
+    return {
+        "season": season, "position": position, "scoring_format": "ppr",
+        "method": "Simple average of each source's latest comparable positional rank. FFToday is projection-derived; ESPN is platform draft rank; FantasyPros is expert consensus rank.",
+        "items": items[:limit],
     }
 
 

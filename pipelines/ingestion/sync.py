@@ -439,6 +439,14 @@ def sync_global(args):
             if getattr(player, "position", None) in FANTASY_POSITIONS
         }
         draft_ranks = espn_draft_ranks(league, args.free_agents, "PPR")
+        draft_position_ranks: dict[str, int] = {}
+        for position in FANTASY_POSITIONS:
+            ordered = sorted(
+                (external_id for external_id, player in unique.items()
+                 if getattr(player, "position", None) == position and external_id in draft_ranks),
+                key=lambda external_id: draft_ranks[external_id],
+            )
+            draft_position_ranks.update({external_id: index for index, external_id in enumerate(ordered, 1)})
         run.read = len(unique)
         external_rows = db.request("GET", "player_external_ids", params={
             "provider": "eq.espn", "select": "external_id,player_id", "limit": 1000
@@ -455,7 +463,8 @@ def sync_global(args):
             if external_id in draft_ranks:
                 rankings.append({"player_id": player_id, "source": "espn", "season": args.season,
                     "week": args.week, "scoring_format": "ppr", "ranking_type": "current_draft_rank",
-                    "overall_rank": draft_ranks[external_id], "position_rank": None, "fetched_at": fetched_at})
+                    "overall_rank": draft_ranks[external_id],
+                    "position_rank": draft_position_ranks.get(external_id), "fetched_at": fetched_at})
             if getattr(player, "posRank", None) is not None:
                 preseason = not (clean_number(getattr(player, "total_points", None)) or 0)
                 rankings.append({"player_id": player_id, "source": "espn", "season": args.season,

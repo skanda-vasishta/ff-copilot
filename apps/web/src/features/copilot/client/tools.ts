@@ -64,21 +64,41 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
         fetched_at: ranking.fetched_at,
         basis: ranking.ranking_type === "previous_season_position_finish" || ranking.ranking_type === "position"
           ? `${season - 1} ESPN positional finish; not a ${season} draft or projection rank`
-          : `${season} season-to-date rank`,
+          : ranking.ranking_type === "current_draft_rank"
+            ? `${season} ESPN platform PPR draft rank`
+            : ranking.ranking_type === "expert_consensus_rank"
+              ? `${season} FantasyPros expert consensus PPR rank`
+              : ranking.ranking_type === "projected_position_rank"
+                ? `${season} FFToday projection-derived positional rank`
+                : `${season} stored ranking`,
       })),
       sources: [...new Set(detail.sources.map((source) => source.source))],
     };
   }
-  const sourceMatch = call.name.match(/^get_player_(espn|fantasypros|reddit)$/);
+  if (call.name === "get_consensus_rankings") {
+    return api(`/v1/rankings/consensus?${queryString({
+      season,
+      position: String(input.position || ""),
+      limit: Math.min(Number(input.limit) || 30, 100),
+    })}`);
+  }
+  const sourceMatch = call.name.match(/^get_player_(espn|fantasypros|fftoday|reddit)$/);
   if (sourceMatch) {
-    const sources = await api<Array<Record<string, unknown> & { source: string }>>(`/v1/players/${String(input.player_id)}/sources`);
-    return sources.filter((document) => document.source.toLowerCase() === sourceMatch[1]).slice(0, 6).map((document) => ({
-      title: document.title,
-      content: typeof document.content === "string" ? document.content.slice(0, 6000) : "",
-      source_url: document.source_url,
-      published_at: document.published_at,
-      fetched_at: document.fetched_at,
-    }));
+    const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
+    const source = sourceMatch[1];
+    return {
+      source,
+      season,
+      snapshots: detail.snapshots.filter((row) => String(row.source).toLowerCase() === source).slice(0, 3),
+      rankings: detail.rankings.items.filter((row) => String(row.source).toLowerCase() === source).slice(0, 5),
+      documents: detail.sources.filter((document) => document.source.toLowerCase() === source).slice(0, 6).map((document) => ({
+        title: document.title,
+        content: typeof document.content === "string" ? document.content.slice(0, 6000) : "",
+        source_url: document.source_url,
+        published_at: document.published_at,
+        fetched_at: document.fetched_at,
+      })),
+    };
   }
   if (call.name === "get_my_team") {
     if (!thread.team_id) return { error: "No team is attached to this conversation." };

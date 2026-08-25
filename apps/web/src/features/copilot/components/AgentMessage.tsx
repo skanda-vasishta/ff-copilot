@@ -7,12 +7,14 @@ const TOOL_LABELS: Record<string, string> = {
   get_player_overview: "Opened player overview",
   get_player_espn: "Checked ESPN",
   get_player_fantasypros: "Checked FantasyPros",
+  get_player_fftoday: "Checked FFToday",
   get_player_reddit: "Checked Reddit",
   get_my_team: "Loaded your roster",
   get_league_standings: "Loaded league standings",
   get_league_team_roster: "Loaded team roster",
   get_league_free_agents: "Checked league free agents",
   get_league_draft_history: "Checked league draft history",
+  get_consensus_rankings: "Compared consensus rankings",
 };
 
 function ToolActivity({ calls }: { calls: ToolCallPart[] }) {

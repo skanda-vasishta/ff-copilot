@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const IN_SEASON_SYSTEM_PROMPT = `You are FF Copilot, an in-season fantasy football assistant.
 
-Help the user make waiver, lineup, roster, and trade decisions using the factual tools provided. Retrieve facts before making player-specific claims. Treat the supplied roster ownership as authoritative. Before proposing any trade, verify that each outgoing player belongs to the sender and each incoming player belongs to a different team; never suggest acquiring a player the user already owns. Do not claim another manager would accept an offer without evidence; frame trade acceptance as uncertain. Clearly distinguish source facts from your analysis, mention important uncertainty and data freshness, and never invent injuries, rankings, projections, roster status, or news. Ask one concise question when league or roster context is required but unavailable. Keep answers focused and practical.`;
+Help the user make waiver, lineup, roster, and trade decisions using the factual tools provided. Retrieve facts before making player-specific claims. For ranking questions, prefer get_consensus_rankings and report the contributing sources instead of treating ESPN alone as authoritative. Treat ESPN platform ranks, FantasyPros expert consensus ranks, and FFToday projection-derived ranks as distinct inputs; do not mislabel one as another. Treat the supplied roster ownership as authoritative. Before proposing any trade, verify that each outgoing player belongs to the sender and each incoming player belongs to a different team; never suggest acquiring a player the user already owns. Do not claim another manager would accept an offer without evidence; frame trade acceptance as uncertain. Clearly distinguish source facts from your analysis, mention important uncertainty and data freshness, and never invent injuries, rankings, projections, roster status, or news. Ask one concise question when league or roster context is required but unavailable. Keep answers focused and practical.`;
 
 const playerId = z.uuid().describe("Internal player UUID returned by search_players or another player tool");
 const noInput = z.object({}).strict();
@@ -20,12 +20,23 @@ export const TOOL_REGISTRY = {
     description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, full-PPR cumulative projection consensus and source breakdown, injury status, ownership, explicitly labeled ranking basis, and available news sources. In preseason, ESPN position_rank is the previous season's positional finish, not a current draft rank. Use source-specific tools for underlying article text.",
     schema: z.object({ player_id: playerId }).strict(),
   },
+  get_consensus_rankings: {
+    description: "Retrieve current full-PPR positional consensus rankings built from every compatible stored source. ESPN contributes platform draft rank, FantasyPros contributes expert consensus rank, and FFToday contributes projection-derived positional rank. Returns the average/median and the complete per-source breakdown; use this instead of treating ESPN alone as the ranking authority.",
+    schema: z.object({
+      position: z.enum(["QB", "RB", "WR", "TE"]).describe("Position to rank"),
+      limit: z.number().int().min(1).max(100).optional().describe("Number of ranked players; defaults to 30"),
+    }).strict(),
+  },
   get_player_espn: {
-    description: "Retrieve stored ESPN news and analysis documents for one player, including source URL and publication/fetch timestamps. This returns provider text, not a generated summary.",
+    description: "Retrieve stored ESPN rankings, projections/statistical snapshots, and news for one player with timestamps. ESPN's current PPR number is a platform draft rank, not a multi-source consensus.",
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_player_fantasypros: {
-    description: "Retrieve stored FantasyPros notes for one player, including source URL and publication/fetch timestamps. This returns provider text, not a generated summary.",
+    description: "Retrieve stored FantasyPros expert-consensus rankings and notes for one player with timestamps. This returns provider facts and text, not a generated summary.",
+    schema: z.object({ player_id: playerId }).strict(),
+  },
+  get_player_fftoday: {
+    description: "Retrieve stored FFToday full-season PPR projection and projection-derived positional rank for one player with source/fetch timestamps. Do not describe FFToday's projection-derived rank as expert consensus rank.",
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_player_reddit: {
