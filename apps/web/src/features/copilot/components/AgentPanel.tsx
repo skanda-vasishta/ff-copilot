@@ -61,12 +61,11 @@ export function AgentPanel() {
     setThreadId(created.id);
   }
 
-  async function removeThread() {
-    if (!thread) return;
-    await deleteThread(thread.id);
-    const remaining = threads.filter((item) => item.id !== thread.id);
+  async function removeThread(id: string) {
+    await deleteThread(id);
+    const remaining = threads.filter((item) => item.id !== id);
     setThreads(remaining);
-    setThreadId(remaining[0]?.id || null);
+    if (threadId === id) setThreadId(remaining[0]?.id || null);
   }
 
   async function refreshContext() {
@@ -144,7 +143,7 @@ export function AgentPanel() {
       <label className="mx-3.5 mb-2.5 flex h-8 items-center gap-2 rounded-[7px] border border-white/[.055] bg-white/[.035] px-2.5"><span className="text-[10px] text-[#6e7568]">⌕</span><input aria-label="Search conversations" value={threadQuery} onChange={(event) => setThreadQuery(event.target.value)} placeholder="Search conversations" className="min-w-0 flex-1 bg-transparent text-[10px] text-[#eef1e9] outline-none placeholder:text-[#5f6659]" /></label>
       <div className="flex min-h-0 flex-1 flex-col px-2.5 pb-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {groupedThreads.map(([label, items]) => <div key={label} className="mb-1.5"><p className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[.1em] text-[#5f6659]">{label}</p>{items.map((item) => <button key={item.id} onClick={() => setThreadId(item.id)} className={`focus-ring flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[11px] transition ${item.id === threadId ? "bg-white/[.065] text-[#eef1e9]" : "text-[#8a9280] hover:bg-white/[.035] hover:text-[#eef1e9]"}`}><span className={`h-3 w-0.5 rounded-full ${item.id === threadId ? "bg-[#c9f958]" : "bg-transparent"}`} /><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="font-mono text-[8px] text-[#5f6659]">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></button>)}</div>)}
+          {groupedThreads.map(([label, items]) => <div key={label} className="mb-1.5"><p className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[.1em] text-[#5f6659]">{label}</p>{items.map((item) => <div key={item.id} className={`group flex h-8 items-center rounded-[6px] transition ${item.id === threadId ? "bg-white/[.065] text-[#eef1e9]" : "text-[#8a9280] hover:bg-white/[.035] hover:text-[#eef1e9]"}`}><button onClick={() => setThreadId(item.id)} className="focus-ring flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-[6px] pl-2 text-left text-[11px]"><span className={`h-3 w-0.5 shrink-0 rounded-full ${item.id === threadId ? "bg-[#c9f958]" : "bg-transparent"}`} /><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="font-mono text-[8px] text-[#5f6659]">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></button><button aria-label={`Delete ${item.title}`} title="Delete conversation" onClick={() => removeThread(item.id)} className={`focus-ring mr-1 grid size-6 shrink-0 place-items-center rounded-[5px] text-[11px] transition hover:bg-red-400/[.08] hover:text-red-200 ${item.id === threadId ? "text-[#687064]" : "text-transparent group-hover:text-[#687064] focus-visible:text-[#687064]"}`}>×</button></div>)}</div>)}
           {!loadingThreads && !groupedThreads.length && <p className="px-2 py-3 text-xs leading-5 text-[#58635d]">{threadQuery ? "No matching conversations." : "Conversations for this team will appear here."}</p>}
         </div>
       </div>
@@ -159,7 +158,6 @@ export function AgentPanel() {
             <select aria-label="Reasoning effort" value={modelSelection.reasoningEffort} onChange={(event) => chooseReasoning(event.target.value)} disabled={agent.status !== "idle" || savingModel} className="focus-ring h-8 rounded-md border border-white/[.09] bg-[#090d10] px-2 text-[11px] capitalize text-[#aab4af] disabled:opacity-40">{models.data.models.find((model) => model.id === modelSelection.model)?.efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select>
           </> : null}
           {thread && <button disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="focus-ring h-8 rounded-md border border-white/[.08] px-2.5 text-[11px] text-[#78847e] hover:text-white disabled:opacity-40">{refreshingContext ? "Refreshing…" : "Refresh context"}</button>}
-          {thread && <button onClick={removeThread} className="focus-ring h-8 rounded-md border border-white/[.08] px-2.5 text-[11px] text-[#65716b] hover:border-red-300/20 hover:text-red-200">Delete</button>}
         </div>
       </header>
       {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#8c9992]">{contextNotice}</div>}
