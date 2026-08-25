@@ -170,9 +170,6 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
             <h1 className="mt-3 text-4xl font-semibold tracking-[-.045em] text-white sm:text-5xl">
               {player.name}
             </h1>
-            <p className="mt-3 text-sm text-[#78847e]">
-              Cross-source player file · {selectedSeason} season
-            </p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-white/[.08] bg-black/20 px-3 py-2 text-xs text-[#9da7a2]">
             <span
@@ -185,38 +182,34 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
 
       <section className="grid gap-3 md:grid-cols-3">
         <div className="panel rounded-lg p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#b7f34a]">{selectedSeason} cumulative projection</p>
-          <p className="mt-2 font-mono text-3xl font-semibold text-white">{number(projections?.projected_total_points)}</p>
-          <p className="mt-2 text-xs text-[#65716b]">Simple average of {projections?.source_count || 0} compatible full-PPR sources</p>
-        </div>
-        <div className="panel rounded-lg p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">{selectedSeason - 1} completed result</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">{selectedSeason - 1} position finish</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{latest?.position_rank == null ? "—" : `${player.position} #${latest.position_rank}`}</p>
-          <p className="mt-2 text-xs text-[#65716b]">Observed ESPN positional finish—not a current projection</p>
         </div>
         <div className="panel rounded-lg p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">Current availability signal</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">ESPN rostered</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{latest?.percent_owned == null ? "—" : `${number(latest.percent_owned)}%`}</p>
-          <p className="mt-2 text-xs text-[#65716b]">Rostered across ESPN leagues · {date(latest?.fetched_at || null)}</p>
+        </div>
+        <div className="panel rounded-lg p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">Overall PPR rank</p>
+          <p className="mt-2 font-mono text-3xl font-semibold text-white">{rankings?.summary.average == null ? "—" : `#${number(rankings.summary.average)}`}</p>
         </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
         <div className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] p-5 sm:p-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">Projection consensus</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Expected full-season PPR points</h2>
-            <p className="mt-2 text-sm leading-6 text-[#78847e]">A simple mean of compatible cumulative projections. This is not accuracy-weighted.</p>
-            <div className="mt-5 flex items-end gap-5">
-              <div><p className="font-mono text-4xl font-semibold text-white">{number(projections?.projected_total_points)}</p><p className="mt-1 text-xs text-[#65716b]">season total</p></div>
-              <div className="border-l border-white/[.08] pl-5"><p className="font-mono text-2xl font-semibold text-[#c7cfca]">{number(projections?.projected_average_points)}</p><p className="mt-1 text-xs text-[#65716b]">per game · total ÷ {projections?.games_denominator || 17}</p></div>
+            <h2 className="text-lg font-semibold text-white">{selectedSeason} PPR projections</h2>
+            <div className="mt-4 flex items-end gap-5">
+              <div><p className="font-mono text-3xl font-semibold text-white">{number(projections?.projected_total_points)}</p><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#65716b]">Total</p></div>
+              <div className="border-l border-white/[.08] pl-5"><p className="font-mono text-xl font-semibold text-[#c7cfca]">{number(projections?.projected_average_points)}</p><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#65716b]">Per game</p></div>
+              <p className="ml-auto text-[10px] text-[#65716b]">{projections?.source_count || 0} sources</p>
             </div>
           </div>
           <div className="divide-y divide-white/[.06]">
             {projections?.sources.map((projection) => (
               <div key={projection.source} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
-                <div><p className="text-sm font-medium text-white">{sourceNames[projection.source] || projection.source}</p><p className="mt-1 text-[10px] text-[#58635d]">Updated {date(projection.source_updated_at || projection.fetched_at)}</p></div>
-                <div className="text-right"><p className="font-mono text-lg font-semibold text-white">{number(projection.projected_total_points)}</p><p className="text-[10px] text-[#65716b]">projected points</p></div>
+                <div><p className="text-sm font-medium text-white">{sourceNames[projection.source] || projection.source}</p><p className="mt-1 text-[10px] text-[#58635d]">{date(projection.source_updated_at || projection.fetched_at)}</p></div>
+                <p className="font-mono text-lg font-semibold text-white">{number(projection.projected_total_points)}</p>
               </div>
             ))}
             {!projections?.sources.length && <p className="px-6 py-8 text-sm text-[#65716b]">No compatible current projections.</p>}
@@ -225,21 +218,14 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
 
         <div className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] p-5 sm:p-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">Source rankings</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">How sources order the player</h2>
-            <p className="mt-2 text-sm leading-6 text-[#78847e]">Lower is better. Overall and positional ranks are different measures and are never averaged together.</p>
-            <div className="mt-5 rounded-md border border-white/[.07] bg-black/15 p-4">
-              <p className="text-[10px] uppercase tracking-[.14em] text-[#65716b]">Comparable overall PPR consensus</p>
-              <p className="mt-1 font-mono text-3xl font-semibold text-white">{rankings?.summary.average == null ? "—" : `#${number(rankings.summary.average)}`}</p>
-              <p className="mt-1 text-[10px] text-[#58635d]">Simple mean of the latest {rankings?.summary.source_count || 0} overall ranks</p>
-            </div>
+            <div className="flex items-end justify-between gap-4"><h2 className="text-lg font-semibold text-white">PPR rankings</h2><p className="text-[10px] text-[#65716b]">{rankings?.summary.source_count || 0} overall sources</p></div>
           </div>
           <div className="divide-y divide-white/[.06]">
             {currentRanks.map((ranking) => (
               <div key={`${ranking.source}:${ranking.ranking_type}`} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
                 <div>
                   <a href={sourceLinks[ranking.source]} target="_blank" rel="noreferrer" className="text-sm font-medium text-white hover:text-[#b7f34a]">{sourceNames[ranking.source] || ranking.source} ↗</a>
-                  <p className="mt-1 text-[10px] text-[#58635d]">{ranking.ranking_type === "expert_consensus_rank" ? "Expert consensus draft rank" : ranking.ranking_type === "projected_position_rank" ? "Projection-derived positional rank" : "Platform PPR draft rank"} · {date(ranking.fetched_at)}</p>
+                  <p className="mt-1 text-[10px] text-[#58635d]">{date(ranking.fetched_at)}</p>
                 </div>
                 <div className="text-right font-mono text-sm text-white">
                   {ranking.overall_rank != null && <p>Overall #{number(ranking.overall_rank, 0)}</p>}
@@ -255,16 +241,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] px-5 py-5 sm:px-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">
-              Source intelligence
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-white">
-              What every source is saying
-            </h2>
-            <p className="mt-2 text-sm text-[#78847e]">
-              Raw source material is kept separate and labeled. Expand an item
-              to read more.
-            </p>
+            <h2 className="text-lg font-semibold text-white">Source notes</h2>
           </div>
           <div className="divide-y divide-white/[.06]">
             {Object.entries(bySource).map(([source, documents]) => (
