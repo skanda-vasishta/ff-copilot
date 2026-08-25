@@ -51,7 +51,7 @@ export function Header() {
 
   if (pathname === '/login') return null
 
-  return <header className="app-header sticky top-0 z-30 border-b backdrop-blur-xl">
+  return <header className="app-header sticky top-0 z-30 border-b border-white/[.055] bg-[#0a0b09]/90 backdrop-blur-xl">
     <div className="flex h-14 w-full items-center px-4 sm:px-5">
       <Link href="/team" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FF Copilot home">
         <span className="grid size-7 place-items-center rounded-[7px] border border-[#c9f958]/35 bg-[#c9f958]/10 text-[10px] font-black tracking-[-.05em] text-[#c9f958]">FF</span>

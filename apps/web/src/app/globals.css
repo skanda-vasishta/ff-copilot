@@ -88,7 +88,7 @@ html[data-theme="light"] {
   --copy: #343a31;
 }
 html[data-theme="light"] body { background: #f6f7f4; color: #252a23; }
-html[data-theme="light"] .app-header { background: rgba(250,251,248,.94); }
+html[data-theme="light"] .app-header { border-color: var(--line) !important; background: rgba(250,251,248,.94) !important; }
 html[data-theme="light"] .theme-toggle { color: #66705f; }
 html[data-theme="light"] .theme-toggle:hover { color: #273020; background: rgba(30,36,28,.055); }
 html[data-theme="light"] .app-header [class*="text-[#eef1e9]"],
@@ -109,6 +109,11 @@ html[data-theme="light"] .copilot-toolbar [class*="bg-white/"] { background: rgb
 html[data-theme="light"] .copilot-sidebar [class*="border-white/"],
 html[data-theme="light"] .copilot-toolbar [class*="border-white/"] { border-color: rgba(30,36,28,.1) !important; }
 html[data-theme="light"] .copilot-composer { box-shadow: 0 14px 35px rgba(28,34,25,.11); }
+html[data-theme="light"] .copilot-shell { background: var(--canvas) !important; }
+html[data-theme="light"] .copilot-sidebar { border-color: var(--line) !important; background: var(--sidebar) !important; }
+html[data-theme="light"] .copilot-toolbar { border-color: var(--line) !important; background: var(--toolbar) !important; }
+html[data-theme="light"] .copilot-composer-fade { background: linear-gradient(to top, var(--canvas) 45%, transparent) !important; }
+html[data-theme="light"] .copilot-composer { border-color: var(--line) !important; background: var(--composer) !important; }
 html[data-theme="light"] .copilot-composer textarea { color: #2e342b; }
 html[data-theme="light"] .agent-user-message { border-color: rgba(101,148,23,.2); background: #eaf2dc; color: #28331f; }
 html[data-theme="light"] .agent-assistant-message strong,
