@@ -123,7 +123,7 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
-  return <div className="grid h-full min-h-0 overflow-hidden rounded-2xl border border-white/[.07] bg-[#0d1114] shadow-[0_24px_80px_rgba(0,0,0,.2)] lg:grid-cols-[288px_minmax(0,1fr)]">
+  return <div className="grid h-full min-h-0 overflow-hidden bg-[#0d1114] lg:grid-cols-[288px_minmax(0,1fr)]">
     <aside className="flex min-h-0 flex-col border-b border-white/[.07] bg-[#090c0f] lg:border-b-0 lg:border-r">
       <div className="border-b border-white/[.06] p-4">
         <p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-[#65716b]">Team workspace</p>

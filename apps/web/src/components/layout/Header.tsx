@@ -20,7 +20,7 @@ export function Header() {
 
   return <>
     <header className="sticky top-0 z-30 border-b border-white/[.07] bg-[#080b0e]/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1440px] items-center px-4 sm:px-6 lg:px-8">
+      <div className="flex h-16 w-full items-center px-4 sm:px-6">
       <Link href="/team" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FF Copilot home">
         <span className="grid size-8 place-items-center rounded-[10px] bg-[#b7f34a] text-[11px] font-black tracking-[-.05em] text-[#10140a] shadow-[0_0_25px_rgba(183,243,74,.16)]">FF</span>
         <span className="text-sm font-semibold tracking-[-.02em] text-white">Copilot</span>
