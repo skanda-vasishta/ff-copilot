@@ -1,5 +1,5 @@
 'use client'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { AgentThread } from '@ff-copilot/agent-runtime'
 import { useAgent } from '@/features/copilot/client/useAgent'
 import { AgentMessage } from '@/features/copilot/components/AgentMessage'
@@ -7,10 +7,16 @@ import { AgentMessage } from '@/features/copilot/components/AgentMessage'
 export function DraftCopilot({ thread, season }: { thread: AgentThread | null; season: number }) {
   const [input, setInput] = useState('')
   const agent = useAgent(thread ? { ...thread, season } : null)
+  const messagesRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const messages = messagesRef.current
+    if (!messages) return
+    messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' })
+  }, [agent.messages, agent.status])
   async function submit(event: FormEvent) { event.preventDefault(); const value = input.trim(); if (!value) return; setInput(''); await agent.send(value) }
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="border-b border-white/[.06] px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#8daa48]">Draft Copilot</p><p className="mt-1 text-xs text-[#737b70]">Uses the complete board at the start of each request.</p></div>
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">
+    <div ref={messagesRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">
       {!agent.messages.length && <p className="text-xs leading-5 text-[#747c70]">Ask who to take, compare candidates, or analyze what other teams need.</p>}
       {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
       {agent.status !== 'idle' && agent.status !== 'error' && <p className="text-xs text-[#747c70]">{agent.status === 'running-tool' ? 'Checking player data…' : 'Thinking…'}</p>}
