@@ -110,6 +110,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
     queryFn: () =>
       api<PlayerDetail>(`/v1/players/${playerId}/detail?season=${season}`),
     enabled: Boolean(season),
+    staleTime: 5 * 60_000,
   });
   const player = detail.data?.player;
   const rankings = detail.data?.rankings;

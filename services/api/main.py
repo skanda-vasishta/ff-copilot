@@ -146,7 +146,7 @@ async def list_players(
         params["nfl_team"] = f"eq.{nfl_team}"
     if season:
         params["season"] = f"eq.{season}"
-    data, headers = await db.request("GET", "player_directory", params=params, prefer="count=exact")
+    data, headers = await db.request("GET", "player_directory_cache", params=params, prefer="count=exact")
     total = int(headers.get("content-range", "0/0").split("/")[-1].replace("*", "0"))
     return {"items": data, "page": page, "page_size": page_size, "total": total}
 
@@ -159,7 +159,7 @@ async def draft_player_pool(
     external_ids, _ = await db.request("GET", "player_external_ids", params={
         "provider": "eq.espn", "select": "player_id,external_id", "limit": 1000
     })
-    directory, _ = await db.request("GET", "player_directory", params={
+    directory, _ = await db.request("GET", "player_directory_cache", params={
         "season": f"eq.{season}", "select": "*", "limit": 1000
     })
     espn_by_player = {row["player_id"]: row["external_id"] for row in external_ids}
@@ -543,7 +543,7 @@ async def league_free_agents(
     }
     if position:
         directory_params["position"] = f"eq.{position}"
-    players, _ = await db.request("GET", "player_directory", params=directory_params)
+    players, _ = await db.request("GET", "player_directory_cache", params=directory_params)
     available = [player for player in players if player["id"] not in rostered_ids][:limit]
     refreshed_at = max((snapshot["fetched_at"] for snapshot in latest_snapshots), default=None)
     return {

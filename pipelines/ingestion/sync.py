@@ -640,6 +640,11 @@ def sync_global(args):
                         run.error(f"sources:{futures[future]}", exc)
             flush_documents()
 
+        try:
+            db.request("POST", "rpc/refresh_player_directory_cache", data={})
+        except Exception as exc:
+            run.error("player_directory_cache", exc)
+
 
 def coverage_report(args):
     db = SupabaseAdmin()

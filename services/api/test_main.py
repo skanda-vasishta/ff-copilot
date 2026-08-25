@@ -25,7 +25,7 @@ def test_invalid_token_is_rejected():
 class FakeDB:
     async def request(self, method, table, **kwargs):
         assert method == "GET"
-        assert table == "player_directory"
+        assert table == "player_directory_cache"
         assert kwargs["params"]["limit"] == 25
         return ([{"id": "player-1", "name": "Test Player"}], {"content-range": "0-0/1"})
 
@@ -50,7 +50,7 @@ class DraftPoolDB:
         assert method == "GET"
         if table == "player_external_ids":
             return ([{"player_id": "player-1", "external_id": "123"}], {})
-        if table == "player_directory":
+        if table == "player_directory_cache":
             assert kwargs["params"]["season"] == "eq.2026"
             return ([{"id": "player-1", "name": "Draft Player"}], {})
         raise AssertionError(table)
@@ -77,7 +77,7 @@ class FreeAgentDB:
                 {"id": "new-2", "team_id": "team-2", "fetched_at": "2026-08-23T13:00:00Z"},
             ],
             "roster_players": [{"player_id": "rostered"}],
-            "player_directory": [
+            "player_directory_cache": [
                 {"id": "rostered", "name": "Rostered Player", "median_rank": 1},
                 {"id": "available", "name": "Available Player", "median_rank": 2},
             ],
