@@ -18,9 +18,9 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 function ToolActivity({ calls }: { calls: ToolCallPart[] }) {
-  return <div className="space-y-1.5" aria-label="Sources checked">
-    {calls.map((call) => <div key={call.id} className="flex w-fit items-center gap-2 rounded-lg border border-white/[.07] bg-[#090d10]/70 px-2.5 py-1.5 text-[11px] text-[#77837d]">
-      <span className="grid size-4 place-items-center rounded-full bg-[#b7f34a]/10 text-[9px] font-bold text-[#b7f34a]">✓</span>
+  return <div className="space-y-1" aria-label="Sources checked">
+    {calls.map((call) => <div key={call.id} className="flex w-fit items-center gap-2 py-0.5 text-[11px] text-[#68746e]">
+      <span className="text-[10px] font-bold text-[#96c83b]">✓</span>
       <span>{TOOL_LABELS[call.name] || "Checked data"}</span>
     </div>)}
   </div>;
@@ -43,7 +43,7 @@ function Markdown({ children }: { children: string }) {
       code: ({ children, className }) => className
         ? <code className={className}>{children}</code>
         : <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[.9em] text-[#c8f58a]">{children}</code>,
-      pre: ({ children }) => <pre className="my-3 overflow-x-auto rounded-xl border border-white/[.07] bg-[#080b0d] p-4 font-mono text-xs leading-5 text-[#cdd5d0]">{children}</pre>,
+      pre: ({ children }) => <pre className="my-3 overflow-x-auto border border-white/[.07] bg-[#080b0d] p-4 font-mono text-xs leading-5 text-[#cdd5d0]">{children}</pre>,
       table: ({ children }) => <div className="my-3 overflow-x-auto"><table className="w-full border-collapse text-left text-xs">{children}</table></div>,
       th: ({ children }) => <th className="border-b border-white/10 px-2 py-2 font-semibold text-white">{children}</th>,
       td: ({ children }) => <td className="border-b border-white/[.06] px-2 py-2">{children}</td>,
@@ -59,8 +59,8 @@ export function AgentMessage({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
   return <article className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-    <div className="max-w-[85%] sm:max-w-[75%]">
-      {text && <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${isUser ? "bg-[#b7f34a] text-[#10140a]" : "border border-white/[.07] bg-white/[.035] text-[#d5dcd8]"}`}>
+    <div className={isUser ? "max-w-[85%] sm:max-w-[70%]" : "w-full"}>
+      {text && <div className={`text-sm leading-6 ${isUser ? "rounded-md bg-white/[.075] px-3.5 py-2.5 text-[#edf1ef]" : "text-[#d5dcd8]"}`}>
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <Markdown>{text}</Markdown>}
       </div>}
       {calls.length > 0 && <div className={text ? "mt-2 pl-1" : "pl-1"}><ToolActivity calls={calls} /></div>}

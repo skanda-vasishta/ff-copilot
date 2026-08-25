@@ -127,18 +127,18 @@ export function AgentPanel() {
     <aside className="flex min-h-0 flex-col border-b border-white/[.07] bg-[#090c0f] lg:border-b-0 lg:border-r">
       <div className="border-b border-white/[.06] p-4">
         <p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-[#65716b]">Team workspace</p>
-        <div className="mt-2 rounded-xl border border-white/[.07] bg-white/[.025] px-3 py-3">
+        <div className="mt-2 border-l-2 border-[#b7f34a]/55 px-3 py-2">
           <div className="flex items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#b7f34a]/10 text-xs font-black text-[#b7f34a]">{scope?.team.name?.slice(0, 2).toUpperCase() || "FF"}</span>
+            <span className="grid size-8 shrink-0 place-items-center border border-white/[.08] text-[10px] font-bold text-[#b7f34a]">{scope?.team.name?.slice(0, 2).toUpperCase() || "FF"}</span>
             <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{scope?.team.name || "No team selected"}</span><span className="mt-0.5 block truncate text-[10px] text-[#65716b]">{scope ? `${scope.team.league.name || "League"} · ${scope.team.league.season}` : "Choose a team in settings"}</span></span>
           </div>
         </div>
-        <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring mt-3 w-full rounded-xl bg-[#b7f34a] px-4 py-2.5 text-sm font-bold text-[#10140a] hover:bg-[#c7ff5e] disabled:cursor-not-allowed disabled:opacity-35">+ New conversation</button>
+        <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring mt-3 w-full rounded-md border border-[#b7f34a]/35 bg-[#b7f34a]/[.08] px-4 py-2.5 text-sm font-semibold text-[#b7f34a] hover:bg-[#b7f34a]/[.13] disabled:cursor-not-allowed disabled:opacity-35">+ New conversation</button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[.15em] text-[#58635d]">Conversations</p>
         <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto lg:block lg:space-y-1 lg:overflow-y-auto">
-          {threads.map((item) => <button key={item.id} onClick={() => setThreadId(item.id)} className={`focus-ring min-w-52 rounded-xl border px-3 py-3 text-left text-sm transition lg:w-full lg:min-w-0 ${item.id === threadId ? "border-white/[.07] bg-white/[.075] text-white" : "border-transparent text-[#78847e] hover:bg-white/[.035] hover:text-white"}`}><span className="block truncate font-medium">{item.title}</span><span className="mt-1 block text-[10px] text-[#4f5a54]">{new Date(item.updated_at).toLocaleDateString()}</span></button>)}
+          {threads.map((item) => <button key={item.id} onClick={() => setThreadId(item.id)} className={`focus-ring min-w-52 border-l-2 px-3 py-2.5 text-left text-sm transition lg:w-full lg:min-w-0 ${item.id === threadId ? "border-[#b7f34a]/60 bg-white/[.045] text-white" : "border-transparent text-[#78847e] hover:bg-white/[.025] hover:text-white"}`}><span className="block truncate font-medium">{item.title}</span><span className="mt-1 block text-[10px] text-[#4f5a54]">{new Date(item.updated_at).toLocaleDateString()}</span></button>)}
           {!loadingThreads && !threads.length && <p className="px-2 py-3 text-xs leading-5 text-[#58635d]">Conversations for this team will appear here.</p>}
         </div>
       </div>
@@ -160,19 +160,19 @@ export function AgentPanel() {
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
         <div className="mx-auto flex min-h-full max-w-3xl flex-col space-y-4">
-          {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#b7f34a]/[.08] text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope && <button onClick={newThread} className="focus-ring mt-6 rounded-xl bg-[#b7f34a] px-5 py-3 text-sm font-bold text-[#10140a]">New conversation</button>}</div>}
+          {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope && <button onClick={newThread} className="focus-ring mt-6 rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">New conversation</button>}</div>}
           {thread && !agent.messages.length && <div className="m-auto max-w-xl py-16 text-center"><h2 className="text-2xl font-semibold tracking-[-.03em] text-white">What are you deciding?</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Ask about a player, compare your roster, or work through a waiver or trade decision.</p></div>}
           {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
           {agent.status !== "idle" && agent.status !== "error" && <div className="flex items-center gap-2 text-xs text-[#78847e]"><span className="size-2 animate-pulse rounded-full bg-[#b7f34a]" />{agent.status === "running-tool" ? "Checking the data…" : "Thinking…"}</div>}
-          {agent.error && <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-400/20 bg-red-400/[.06] px-4 py-3 text-xs text-red-200"><span>{agent.error}</span><button onClick={agent.clearError} className="underline">Dismiss</button></div>}
+          {agent.error && <div role="alert" className="flex items-center justify-between gap-3 border-l-2 border-red-400/40 bg-red-400/[.04] px-4 py-3 text-xs text-red-200"><span>{agent.error}</span><button onClick={agent.clearError} className="underline">Dismiss</button></div>}
           <div ref={end} />
         </div>
       </div>
 
       <form onSubmit={submit} className="shrink-0 border-t border-white/[.07] bg-[#0d1114]/95 p-3 sm:p-4">
-        <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-white/[.1] bg-[#090d10] p-2 shadow-[0_12px_36px_rgba(0,0,0,.2)] focus-within:border-[#b7f34a]/35">
+        <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-md border border-white/[.11] bg-[#090d10] p-1.5 focus-within:border-[#b7f34a]/35">
           <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-36 min-h-11 flex-1 resize-none overflow-y-auto bg-transparent px-3 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-[#4f5a54] disabled:opacity-50" />
-          {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring rounded-xl border border-white/[.09] px-4 py-3 text-xs text-[#aab4af]">Stop</button> : <button disabled={!thread || !input.trim()} className="focus-ring rounded-xl bg-[#b7f34a] px-4 py-3 text-sm font-bold text-[#10140a] disabled:opacity-30">Send</button>}
+          {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring rounded-md border border-white/[.09] px-4 py-3 text-xs text-[#aab4af]">Stop</button> : <button disabled={!thread || !input.trim()} className="focus-ring rounded-md bg-[#b7f34a] px-4 py-3 text-sm font-bold text-[#10140a] disabled:opacity-30">Send</button>}
         </div>
       </form>
     </section>

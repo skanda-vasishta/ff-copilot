@@ -119,16 +119,16 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
   if (loadingScope || detail.isLoading)
     return (
       <div className="mt-6 space-y-4">
-        <div className="h-44 animate-pulse rounded-3xl bg-white/[.03]" />
-        <div className="h-72 animate-pulse rounded-2xl bg-white/[.03]" />
+        <div className="h-44 animate-pulse rounded-lg bg-white/[.03]" />
+        <div className="h-72 animate-pulse rounded-lg bg-white/[.03]" />
       </div>
     );
-  if (!scope) return <div className="mt-6 rounded-2xl border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#78847e]">Use workspace settings in the top-right corner.</p></div>;
+  if (!scope) return <div className="mt-6 rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#78847e]">Use workspace settings in the top-right corner.</p></div>;
   if (detail.error || !player)
     return (
       <div
         role="alert"
-        className="mt-6 rounded-2xl border border-red-400/20 bg-red-400/[.06] p-6 text-sm text-red-200"
+        className="mt-6 rounded-lg border border-red-400/20 bg-red-400/[.06] p-6 text-sm text-red-200"
       >
         We couldn&apos;t load this player. {detail.error?.message}
       </div>
@@ -157,7 +157,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
 
   return (
     <div className="mt-6 space-y-5">
-      <header className="panel relative overflow-hidden rounded-3xl p-6 sm:p-8">
+      <header className="panel relative overflow-hidden rounded-lg p-6 sm:p-8">
         <div className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-[#b7f34a]/[.06] blur-3xl" />
         <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
@@ -183,17 +183,17 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
       </header>
 
       <section className="grid gap-3 md:grid-cols-3">
-        <div className="panel rounded-2xl p-5">
+        <div className="panel rounded-lg p-5">
           <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#b7f34a]">{selectedSeason} cumulative projection</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{number(projections?.projected_total_points)}</p>
           <p className="mt-2 text-xs text-[#65716b]">Simple average of {projections?.source_count || 0} compatible full-PPR sources</p>
         </div>
-        <div className="panel rounded-2xl p-5">
+        <div className="panel rounded-lg p-5">
           <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">{selectedSeason - 1} completed result</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{latest?.position_rank == null ? "—" : `${player.position} #${latest.position_rank}`}</p>
           <p className="mt-2 text-xs text-[#65716b]">Observed ESPN positional finish—not a current projection</p>
         </div>
-        <div className="panel rounded-2xl p-5">
+        <div className="panel rounded-lg p-5">
           <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">Current availability signal</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{latest?.percent_owned == null ? "—" : `${number(latest.percent_owned)}%`}</p>
           <p className="mt-2 text-xs text-[#65716b]">Rostered across ESPN leagues · {date(latest?.fetched_at || null)}</p>
@@ -201,7 +201,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <div className="panel overflow-hidden rounded-2xl">
+        <div className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] p-5 sm:p-6">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">Projection consensus</p>
             <h2 className="mt-2 text-xl font-semibold text-white">Expected full-season PPR points</h2>
@@ -222,12 +222,12 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
           </div>
         </div>
 
-        <div className="panel overflow-hidden rounded-2xl">
+        <div className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] p-5 sm:p-6">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">Source rankings</p>
             <h2 className="mt-2 text-xl font-semibold text-white">How sources order the player</h2>
             <p className="mt-2 text-sm leading-6 text-[#78847e]">Lower is better. Overall and positional ranks are different measures and are never averaged together.</p>
-            <div className="mt-5 rounded-xl border border-white/[.07] bg-black/15 p-4">
+            <div className="mt-5 rounded-md border border-white/[.07] bg-black/15 p-4">
               <p className="text-[10px] uppercase tracking-[.14em] text-[#65716b]">Comparable overall PPR consensus</p>
               <p className="mt-1 font-mono text-3xl font-semibold text-white">{rankings?.summary.average == null ? "—" : `#${number(rankings.summary.average)}`}</p>
               <p className="mt-1 text-[10px] text-[#58635d]">Simple mean of the latest {rankings?.summary.source_count || 0} overall ranks</p>
@@ -252,7 +252,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="panel overflow-hidden rounded-2xl">
+        <section className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] px-5 py-5 sm:px-6">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#b7f34a]">
               Source intelligence
@@ -281,7 +281,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
                   {documents.slice(0, 5).map((document) => (
                     <details
                       key={document.id}
-                      className="group rounded-xl border border-white/[.07] bg-black/15 p-4"
+                      className="group rounded-md border border-white/[.07] bg-black/15 p-4"
                     >
                       <summary className="cursor-pointer list-none text-sm font-medium text-[#c6ceca]">
                         <span className="flex items-start justify-between gap-4">
@@ -327,7 +327,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
         </section>
 
         <aside className="space-y-5">
-          <section className="panel rounded-2xl p-5">
+          <section className="panel rounded-lg p-5">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">
               How to read this page
             </p>
@@ -338,7 +338,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
             </dl>
             <p className="mt-4 border-t border-white/[.06] pt-4 text-[10px] leading-4 text-[#58635d]">Current consensus values are transparent simple averages. We do not yet have enough validated historical evidence to label one provider the most accurate.</p>
           </section>
-          <section className="panel rounded-2xl p-5">
+          <section className="panel rounded-lg p-5">
             <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">
               {selectedSeason} facts
             </p>
