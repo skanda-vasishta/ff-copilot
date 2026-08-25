@@ -1,10 +1,11 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api, Player, Paginated, queryString } from '@/lib/api'
 import { useActiveScope } from '@/lib/scope'
+import { PlayerDetailModal } from './PlayerDetailModal'
 
 const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']
 const positionTone: Record<string, string> = { QB: 'bg-violet-400/10 text-violet-300', RB: 'bg-sky-400/10 text-sky-300', WR: 'bg-amber-300/10 text-amber-200', TE: 'bg-rose-400/10 text-rose-300', K: 'bg-white/[.06] text-[#bbc4bf]', 'D/ST': 'bg-emerald-400/10 text-emerald-300' }
@@ -12,12 +13,22 @@ const positionTone: Record<string, string> = { QB: 'bg-violet-400/10 text-violet
 export function PlayerDirectory() {
   const { scope, isLoading } = useActiveScope()
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [position, setPosition] = useState('')
   const [page, setPage] = useState(1)
-  const [sort, setSort] = useState<'name' | 'projected_total_points' | 'median_rank'>('name')
-  const query = queryString({ search, position, season: scope?.team.league.season, page, page_size: 25, sort, direction: sort === 'projected_total_points' ? 'desc' : 'asc' })
-  const players = useQuery({ queryKey: ['players', query], queryFn: () => api<Paginated<Player>>(`/v1/players?${query}`), enabled: Boolean(scope) })
+  const [sort, setSort] = useState<'name' | 'projected_total_points' | 'median_rank'>('median_rank')
+  const [direction, setDirection] = useState<'asc' | 'desc'>('asc')
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
+  useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search), 250); return () => window.clearTimeout(timer) }, [search])
+  const query = queryString({ search: debouncedSearch, position, season: scope?.team.league.season, page, page_size: 25, sort, direction })
+  const players = useQuery({ queryKey: ['players', query], queryFn: () => api<Paginated<Player>>(`/v1/players?${query}`), enabled: Boolean(scope), staleTime: 5 * 60_000, placeholderData: (previous) => previous })
   const totalPages = Math.max(1, Math.ceil((players.data?.total || 0) / 25))
+  function chooseSort(next: typeof sort) {
+    if (sort === next) setDirection((current) => current === 'asc' ? 'desc' : 'asc')
+    else { setSort(next); setDirection(next === 'projected_total_points' ? 'desc' : 'asc') }
+    setPage(1)
+  }
+  const sortLabel = (field: typeof sort, label: string) => <button onClick={() => chooseSort(field)} className="inline-flex items-center gap-1 hover:text-[#c8f775]">{label}<span className="text-[9px]">{sort === field ? direction === 'asc' ? '↑' : '↓' : '↕'}</span></button>
 
   if (isLoading) return <p className="text-sm text-[#78847e]">Loading your workspace…</p>
   if (!scope) return <div className="rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#78847e]">Your player season and scoring context follow the active team.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#11170a]">Open settings</Link></div>
@@ -30,7 +41,6 @@ export function PlayerDirectory() {
           <button onClick={() => { setPosition(''); setPage(1) }} className={`focus-ring shrink-0 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${!position ? 'bg-[#b7f34a] text-[#10140a]' : 'bg-white/[.05] text-[#8c9992] hover:text-white'}`}>All</button>
           {positions.map(p => <button key={p} onClick={() => { setPosition(p); setPage(1) }} className={`focus-ring shrink-0 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${position === p ? 'bg-[#b7f34a] text-[#10140a]' : 'bg-white/[.05] text-[#8c9992] hover:text-white'}`}>{p}</button>)}
         </div>
-        <label className="flex items-center gap-2 rounded-md border border-white/[.08] bg-[#090d10] px-3"><span className="whitespace-nowrap text-xs text-[#65716b]">Sort by</span><select aria-label="Sort players" value={sort} onChange={e => { setSort(e.target.value as typeof sort); setPage(1) }} className="focus-ring min-w-32 bg-transparent py-3 text-sm text-white outline-none"><option value="name">Name</option><option value="projected_total_points">Projected points</option><option value="median_rank">Previous position finish</option></select></label>
       </div>
     </div>
 
@@ -38,9 +48,9 @@ export function PlayerDirectory() {
     {players.error && <p role="alert" className="mt-5 rounded-md border border-red-400/20 bg-red-400/[.06] p-4 text-sm text-red-200">We couldn&apos;t load players. {players.error.message}</p>}
     {players.data && <div className="mt-[18px] overflow-hidden rounded-[16px] border border-white/[.06] bg-white/[.02]">
       <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
-        <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]"><th className="px-5 py-4 sm:px-6">Player</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">Projection</th><th className="px-3 py-4 text-right">{scope.team.league.season - 1} position finish</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
-        <tbody className="divide-y divide-white/[.055]">{players.data.items.map(player => <tr key={player.id} className="group transition hover:bg-white/[.025]">
-          <td className="px-5 py-4 sm:px-6"><Link href={`/player-lookup/${player.id}`} className="focus-ring flex w-fit items-center gap-3 rounded-lg"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc] transition group-hover:bg-[#b7f34a]/10 group-hover:text-[#c8f775]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white transition group-hover:text-[#c8f775]">{player.name}</span><span className="text-[#4f5a54] transition group-hover:translate-x-0.5 group-hover:text-[#b7f34a]">→</span></Link></td>
+        <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]"><th className="px-5 py-4 sm:px-6">{sortLabel('name','Player')}</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">{sortLabel('projected_total_points','Projection')}</th><th className="px-3 py-4 text-right">{sortLabel('median_rank','Consensus rank')}</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
+        <tbody className="divide-y divide-white/[.055]">{players.data.items.map(player => <tr key={player.id} onClick={()=>setSelectedPlayerId(player.id)} className="group cursor-pointer transition hover:bg-white/[.025]">
+          <td className="px-5 py-4 sm:px-6"><div className="flex w-fit items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc] transition group-hover:bg-[#b7f34a]/10 group-hover:text-[#c8f775]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white transition group-hover:text-[#c8f775]">{player.name}</span><span className="text-[#4f5a54] transition group-hover:translate-x-0.5 group-hover:text-[#b7f34a]">→</span></div></td>
           <td className="px-3 py-4"><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#9da7a2]'}`}>{player.position || '—'}</span></td><td className="px-3 py-4 font-mono text-xs text-[#9da7a2]">{player.nfl_team || 'FA'}</td>
           <td className="px-3 py-4 text-right font-mono font-medium text-white">{player.projected_total_points?.toFixed(1) ?? '—'}</td><td className="px-3 py-4 text-right"><span className="font-mono font-medium text-white">{player.median_rank?.toFixed(1) ?? '—'}</span></td>
           <td className="px-3 py-4"><span className={`inline-flex items-center gap-1.5 text-xs ${player.injury_status ? 'text-amber-200' : 'text-[#78847e]'}`}><span className={`size-1.5 rounded-full ${player.injury_status ? 'bg-amber-300' : 'bg-[#4f5a54]'}`} />{player.injury_status || 'No designation'}</span></td><td className="px-5 py-4 text-right text-xs text-[#65716b] sm:px-6">{player.fetched_at ? new Date(player.fetched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Not synced'}</td>
@@ -49,5 +59,6 @@ export function PlayerDirectory() {
       {!players.data.items.length && <div className="px-6 py-16 text-center"><p className="text-sm font-medium text-white">No players found</p><p className="mt-1 text-sm text-[#78847e]">Try another name or position.</p></div>}
     </div>}
     <div className="mt-5 flex flex-col items-center justify-between gap-3 text-xs text-[#78847e] sm:flex-row"><span>Showing {players.data?.items.length || 0} of {players.data?.total || 0} players</span><div className="flex items-center gap-2"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">← Previous</button><span className="px-2 font-mono text-[#aab4af]">{page} / {totalPages}</span><button aria-label="Next page" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">Next →</button></div></div>
+    {selectedPlayerId&&<PlayerDetailModal playerId={selectedPlayerId} onClose={()=>setSelectedPlayerId(null)}/>}
   </div>
 }

@@ -133,7 +133,7 @@ async def list_players(
     db: SupabaseREST = Depends(db_for),
 ):
     params: dict[str, Any] = {
-        "select": "*",
+        "select": "id,name,position,nfl_team,active,season,injury_status,projected_total_points,average_rank,median_rank,source_count,fetched_at",
         "limit": page_size,
         "offset": (page - 1) * page_size,
         "order": f"{sort}.{direction}.nullslast",
