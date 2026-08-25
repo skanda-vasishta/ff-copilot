@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useActiveScope } from '@/lib/scope'
+import { ThemeToggle } from './ThemeToggle'
 
 type WorkspaceTeam = {
   created_at: string
@@ -65,7 +66,8 @@ export function Header() {
         })}
       </nav>
 
-      <div ref={menuRef} className="relative ml-auto">
+      <div className="ml-auto mr-1"><ThemeToggle /></div>
+      <div ref={menuRef} className="relative">
         <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} className="focus-ring flex h-8 max-w-52 items-center gap-2 rounded-[6px] border border-white/[.07] bg-white/[.025] px-2.5 text-left text-[11px] text-[#b9c0b3] transition hover:bg-white/[.05] hover:text-[#eef1e9]">
           <span className="hidden max-w-32 truncate font-medium sm:block">{scope?.team.name || 'Select team'}</span>
           {scope && <span className="hidden border-l border-white/[.08] pl-2 font-mono text-[9px] text-[#697064] md:block">{scope.team.league.season}</span>}
