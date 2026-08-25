@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { AGENT_TOOLS, IN_SEASON_SYSTEM_PROMPT, validateToolInput } from "@/features/copilot/harness";
+import { AGENT_TOOLS, DRAFT_AGENT_TOOLS, IN_SEASON_SYSTEM_PROMPT, validateToolInput } from "@/features/copilot/harness";
 import type { AgentEvent, AgentMessage, MessagePart } from "@ff-copilot/agent-runtime";
 import { ensureThreadContext, formatThreadContext, THREAD_CONTEXT_SELECT, type ContextThread } from "@/features/copilot/server/context";
 import { completeAgentStep } from "@/features/copilot/server/model-provider";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { resolveAgentModelSettings } from "@/features/copilot/server/model-access";
+import { buildDraftContext, DRAFT_SYSTEM_PROMPT } from "@/features/draft/server/context";
 
 export const runtime = "nodejs";
 // Reasoning models can legitimately take longer than one minute, especially
@@ -160,16 +161,24 @@ export async function POST(request: Request) {
       if (messagesError || !messages?.length) throw new Error("Could not load the thread");
       inferenceMessages = inferenceHistory(messages as AgentMessage[]);
 
-      const contextSnapshot = await ensureThreadContext(supabase, thread as unknown as ContextThread);
-      const previousSeason = thread.team.league.season - 1;
-      const context = `\n\n${formatThreadContext(contextSnapshot)}\n\nContext rules: All team names and rosters are already present. Treat roster ownership as authoritative: before proposing a trade, verify every outgoing player is on the stated sender and every incoming player is on a different team; never recommend acquiring a player the user already owns. Use get_consensus_rankings for ranked lists and player tools for projection consensus, per-source breakdowns, news, and source documents. A positional consensus combines the latest compatible ESPN platform rank, FantasyPros expert consensus rank, and FFToday projection-derived rank; preserve those labels and never imply they are the same methodology. Zero records and points before games are played mean preseason, not missing context. Projection policy: use only cumulative full-season PPR consensus fields explicitly labeled for the ${thread.team.league.season} season. Never present ${previousSeason} projections as current; ${previousSeason} data may be used only as completed historical ground truth. During preseason, ESPN position_rank in a statistical snapshot is the ${previousSeason} positional finish—not a ${thread.team.league.season} draft, projection, or consensus rank. State that basis whenever using it. Older source documents may provide historical context but must not override ${thread.team.league.season} projections.`;
+      const isDraft = Boolean((thread as unknown as { draft_session_id?: string | null }).draft_session_id);
+      let instructions: string;
+      if (isDraft) {
+        const context = await buildDraftContext(supabase, (thread as unknown as { draft_session_id: string }).draft_session_id, user.id);
+        instructions = `${DRAFT_SYSTEM_PROMPT}\n\n${context}`;
+      } else {
+        const contextSnapshot = await ensureThreadContext(supabase, thread as unknown as ContextThread);
+        const previousSeason = thread.team.league.season - 1;
+        const context = `\n\n${formatThreadContext(contextSnapshot)}\n\nContext rules: All team names and rosters are already present. Treat roster ownership as authoritative: before proposing a trade, verify every outgoing player is on the stated sender and every incoming player is on a different team; never recommend acquiring a player the user already owns. Use get_consensus_rankings for ranked lists and player tools for projection consensus, per-source breakdowns, news, and source documents. A positional consensus combines the latest compatible ESPN platform rank, FantasyPros expert consensus rank, and FFToday projection-derived rank; preserve those labels and never imply they are the same methodology. Zero records and points before games are played mean preseason, not missing context. Projection policy: use only cumulative full-season PPR consensus fields explicitly labeled for the ${thread.team.league.season} season. Never present ${previousSeason} projections as current; ${previousSeason} data may be used only as completed historical ground truth. During preseason, ESPN position_rank in a statistical snapshot is the ${previousSeason} positional finish—not a ${thread.team.league.season} draft, projection, or consensus rank. State that basis whenever using it. Older source documents may provide historical context but must not override ${thread.team.league.season} projections.`;
+        instructions = IN_SEASON_SYSTEM_PROMPT + context;
+      }
       const modelSettings = await resolveAgentModelSettings(supabase);
       run = {
         type: "agent-run",
         id: randomUUID(),
         modelId: modelSettings.model,
         reasoningEffort: modelSettings.reasoningEffort || "none",
-        instructions: IN_SEASON_SYSTEM_PROMPT + context,
+        instructions,
         providerResponseId: "",
         stepCount: 0,
         inputTokens: 0,
@@ -183,7 +192,7 @@ export async function POST(request: Request) {
       reasoningEffort: run.reasoningEffort as Parameters<typeof completeAgentStep>[0]["reasoningEffort"],
       instructions: run.instructions,
       messages: inferenceMessages,
-      tools: [...AGENT_TOOLS] as ChatCompletionTool[],
+      tools: [...((thread as unknown as { draft_session_id?: string | null }).draft_session_id ? DRAFT_AGENT_TOOLS : AGENT_TOOLS)] as ChatCompletionTool[],
       previousResponseId,
     });
     if (completion.usage) {

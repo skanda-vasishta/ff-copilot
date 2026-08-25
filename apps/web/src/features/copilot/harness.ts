@@ -91,6 +91,9 @@ export const AGENT_TOOLS = Object.entries(TOOL_REGISTRY).map(([name, definition]
   },
 }));
 
+const DRAFT_TOOL_NAMES = new Set(['search_players', 'get_player_overview', 'get_consensus_rankings', 'get_player_espn', 'get_player_fantasypros', 'get_player_fftoday', 'get_player_reddit', 'get_league_draft_history']);
+export const DRAFT_AGENT_TOOLS = AGENT_TOOLS.filter((tool) => DRAFT_TOOL_NAMES.has(tool.function.name));
+
 export function validateToolInput(name: string, input: unknown) {
   const definition = TOOL_REGISTRY[name as ToolName];
   if (!definition) throw new Error(`Unknown tool: ${name}`);

@@ -59,6 +59,9 @@ export function AgentMessage({ message }: { message: Message }) {
   const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n");
   const calls = message.parts.filter((part): part is ToolCallPart => part.type === "tool-call");
   const isUser = message.role === "user";
+  const isDraftEvent = isUser && /^\[Draft (event|correction)\]/.test(text);
+
+  if (isDraftEvent) return <div className="flex items-center gap-2 border-l border-[#c9f958]/30 pl-3 text-[10px] text-[#78847e]"><span className="text-[#9fc944]">✓</span><span>{text.replace(/^\[Draft (event|correction)\]\s*/, "")}</span></div>;
 
   return <article className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
     <div className={isUser ? "max-w-[85%] sm:max-w-[70%]" : "w-full"}>
