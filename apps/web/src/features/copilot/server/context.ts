@@ -28,7 +28,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-draft-order-v6";
+const CONTEXT_VERSION = "league-rosters-draft-picks-v7";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -42,7 +42,13 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   const leagueSettings = (league.league_settings || {}) as Record<string, unknown>;
   const draftSettings = (leagueSettings.draft_settings || {}) as Record<string, unknown>;
   const pickOrder = Array.isArray(draftSettings.pick_order) ? draftSettings.pick_order.map(String) : [];
+  const pickAssignments = Array.isArray(draftSettings.pick_assignments)
+    ? draftSettings.pick_assignments as Array<Record<string, unknown>> : [];
   const teamByExternalId = new Map(teams.map((team) => [String(team.external_id), team]));
+  const selectedTeamDetails = teams.find((team) => team.id === selectedTeam.id);
+  const selectedExternalTeamId = String(selectedTeamDetails?.external_id || "");
+  const roundCount = Math.max(0, ...pickAssignments.map((pick) => Number(pick.round || 0)));
+  const userPicks = pickAssignments.filter((pick) => String(pick.team_external_id) === selectedExternalTeamId);
   const lineup = Object.entries((league.lineup_slot_counts || {}) as Record<string, unknown>)
     .filter(([, count]) => Number(count) > 0)
     .map(([slot, count]) => `${count} ${slot}`)
@@ -61,14 +67,25 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   ];
 
   if (pickOrder.length) {
+    const draftType = String(draftSettings.type || "unknown").toLowerCase();
+    const orderType = String(draftSettings.order_type || "unknown").toLowerCase();
+    const clock = present(draftSettings.time_per_selection) ? `${String(draftSettings.time_per_selection)} seconds per pick` : "pick clock unavailable";
+    const status = draftSettings.in_progress ? "in progress" : draftSettings.drafted ? "completed" : "scheduled / pre-draft";
     lines.push(
       "",
       `## ${String(league.season)} ESPN draft order`,
-      `Source: ESPN league settings; draft type: ${String(draftSettings.type || "unknown")}; order type: ${String(draftSettings.order_type || "unknown")}; league synced: ${String(league.last_synced_at || snapshot.refreshed_at)}`,
+      `Draft format: ${String(league.team_count || teams.length)}-team, ${roundCount || "unknown-round"} ${draftType} draft. ${draftType === "snake" ? "The selection order reverses every round." : "Do not assume the order reverses between rounds."}`,
+      `Order configuration: ${orderType}; status: ${status}; ${clock}. Source: ESPN league settings, synced ${String(league.last_synced_at || snapshot.refreshed_at)}.`,
     );
     for (const [index, externalTeamId] of pickOrder.entries()) {
       const orderedTeam = teamByExternalId.get(externalTeamId);
       lines.push(`${index + 1}. ${String(orderedTeam?.name || `ESPN team ${externalTeamId}`)}${orderedTeam?.id === selectedTeam.id ? " (YOUR TEAM)" : ""} | team_id ${String(orderedTeam?.id || "unknown")} | ESPN team ${externalTeamId}`);
+    }
+    lines.push("", `### All picks currently assigned to ${String(selectedTeam.name)}`);
+    if (userPicks.length) {
+      lines.push(userPicks.map((pick) => `Round ${String(pick.round)}, pick ${String(pick.round_pick)} (overall ${String(pick.overall_pick)})`).join("; "));
+    } else {
+      lines.push("No pick assignments were present in ESPN's latest draft grid.");
     }
   } else {
     lines.push("", `## ${String(league.season)} ESPN draft order`, "Not available in the latest stored ESPN league settings. Do not infer it from a previous season.");

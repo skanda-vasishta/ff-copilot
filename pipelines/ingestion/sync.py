@@ -688,11 +688,14 @@ def sync_one_league(
         fetched_at = now()
         settings = league_data.settings
         league_payload = league_data.espn_request.get_league()
+        draft_payload = league_data.espn_request.get_league_draft()
         raw_settings = json.loads(json.dumps(vars(settings), default=str))
         # espn-api's normalized Settings object currently drops draftSettings,
         # including the pre-draft pick order. Preserve the provider payload in a
         # small, stable shape so agent context can name each team's slot.
         provider_draft_settings = (league_payload.get("settings", {}) or {}).get("draftSettings", {}) or {}
+        provider_draft_detail = draft_payload.get("draftDetail", {}) or {}
+        provider_pick_assignments = provider_draft_detail.get("picks", []) or []
         raw_settings["draft_settings"] = {
             "type": provider_draft_settings.get("type"),
             "order_type": provider_draft_settings.get("orderType"),
@@ -700,6 +703,15 @@ def sync_one_league(
             "date": provider_draft_settings.get("date"),
             "available_date": provider_draft_settings.get("availableDate"),
             "time_per_selection": provider_draft_settings.get("timePerSelection"),
+            "drafted": provider_draft_detail.get("drafted"),
+            "in_progress": provider_draft_detail.get("inProgress"),
+            "pick_assignments": [{
+                "overall_pick": pick.get("overallPickNumber"),
+                "round": pick.get("roundId"),
+                "round_pick": pick.get("roundPickNumber"),
+                "team_external_id": pick.get("teamId"),
+                "previous_owner_external_ids": pick.get("owningTeamIds") or [],
+            } for pick in provider_pick_assignments],
         }
         scoring_rules = getattr(settings, "scoring_format", []) or []
         reception_points = next((rule.get("points") for rule in scoring_rules if rule.get("abbr") == "REC"), None)
