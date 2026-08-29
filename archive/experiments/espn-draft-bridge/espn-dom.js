@@ -14,7 +14,7 @@
   async function loadDraftConfig() {
     const id = leagueId();
     if (!id) return null;
-    const url = new URL(`/apis/v3/games/ffl/seasons/${new URL(window.location.href).searchParams.get("seasonId") || new Date().getFullYear()}/segments/0/leagues/${id}`, window.location.origin);
+    const url = new URL(`https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${new URL(window.location.href).searchParams.get("seasonId") || new Date().getFullYear()}/segments/0/leagues/${id}`);
     ["mDraftDetail", "mSettings", "mTeam"].forEach((view) => url.searchParams.append("view", view));
     const response = await fetch(url, { credentials: "include", cache: "no-store" });
     if (!response.ok) return null;
@@ -34,7 +34,7 @@
         abbrev: team.abbrev || null,
       })),
       picks: (data.draftDetail?.picks || [])
-        .filter((pick) => pick.playerId && (pick.overallPickNumber || pick.id))
+        .filter((pick) => Number(pick.playerId) > 0 && (pick.overallPickNumber || pick.id))
         .map((pick) => ({
           overallPickNumber: pick.overallPickNumber || pick.id,
           roundId: pick.roundId || null,
