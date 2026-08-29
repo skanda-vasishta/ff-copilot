@@ -156,11 +156,23 @@ async def draft_player_pool(
     season: int = Query(2026, ge=2000, le=2100),
     db: SupabaseREST = Depends(db_for),
 ):
-    external_ids, _ = await db.request("GET", "player_external_ids", params={
-        "provider": "eq.espn", "select": "player_id,external_id", "limit": 1000
+    async def all_rows(table: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        page_size = 1000
+        for offset in range(0, 10_000, page_size):
+            page, _ = await db.request("GET", table, params={
+                **params, "limit": page_size, "offset": offset,
+            })
+            rows.extend(page)
+            if len(page) < page_size:
+                break
+        return rows
+
+    external_ids = await all_rows("player_external_ids", {
+        "provider": "eq.espn", "select": "player_id,external_id",
     })
-    directory, _ = await db.request("GET", "player_directory_cache", params={
-        "season": f"eq.{season}", "select": "*", "limit": 1000
+    directory = await all_rows("player_directory_cache", {
+        "season": f"eq.{season}", "select": "*",
     })
     espn_by_player = {row["player_id"]: row["external_id"] for row in external_ids}
     return {"items": [

@@ -48,6 +48,8 @@ def test_players_are_paginated_from_directory_view():
 class DraftPoolDB:
     async def request(self, method, table, **kwargs):
         assert method == "GET"
+        assert kwargs["params"]["limit"] == 1000
+        assert kwargs["params"]["offset"] == 0
         if table == "player_external_ids":
             return ([{"player_id": "player-1", "external_id": "123"}], {})
         if table == "player_directory_cache":
