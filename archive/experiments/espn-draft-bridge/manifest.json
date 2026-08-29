@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FF Copilot ESPN Draft Bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Relays live ESPN draft picks from the active draft room to FF Copilot.",
   "permissions": ["storage"],
   "host_permissions": [
@@ -42,6 +42,7 @@
   ],
   "web_accessible_resources": [],
   "action": {
-    "default_title": "FF Copilot ESPN Draft Bridge"
+    "default_title": "FF Copilot ESPN Draft Bridge",
+    "default_popup": "popup.html"
   }
 }

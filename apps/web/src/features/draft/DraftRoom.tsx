@@ -35,7 +35,7 @@ export function DraftRoom() {
       <span className="h-4 w-px bg-white/[.07]"/><span className="truncate text-xs font-medium text-[#cbd1c5]">{state.data?.session.name}</span>
       {state.data && <><span className="ml-auto text-[10px] uppercase tracking-[.1em] text-[#697166]">{state.data.session.draft_type} · {state.data.session.round_count} rounds</span><span className="rounded-[5px] bg-[#c9f958]/10 px-2 py-1 text-[10px] text-[#b8e65b]">{state.data.session.status}</span></>}
     </div>
-    {state.isLoading ? <p className="p-8 text-sm text-[#78847e]">Loading draft…</p> : state.data ? <ActiveDraft state={state.data} teams={[]} onChanged={() => client.invalidateQueries({ queryKey: ['draft-state', sessionId] })} /> : null}
+    {state.isLoading ? <p className="p-8 text-sm text-[#78847e]">Loading draft…</p> : state.data ? <ActiveDraft state={state.data} teams={[]} leagueExternalId={scope.team.league.external_id} onChanged={() => client.invalidateQueries({ queryKey: ['draft-state', sessionId] })} /> : null}
   </div>
 }
 
@@ -49,7 +49,7 @@ function DraftLanding({ sessions, loading, leagueName, season, onOpen, onCreate,
     catch (cause) { setRenameError(cause instanceof Error ? cause.message : 'Could not rename draft') }
   }
   return <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:py-14">
-    <header className="flex flex-col justify-between gap-5 border-b border-white/[.07] pb-7 sm:flex-row sm:items-end"><div><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#8daa48]">{leagueName} · {season}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.035em] text-white">Drafts</h1><p className="mt-2 text-sm text-[#747c70]">Resume a draft or start a new manual run.</p></div><button onClick={onCreate} className="h-9 rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#13190d]">New draft</button></header>
+    <header className="flex flex-col justify-between gap-5 border-b border-white/[.07] pb-7 sm:flex-row sm:items-end"><div><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#8daa48]">{leagueName} · {season}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.035em] text-white">Drafts</h1><p className="mt-2 text-sm text-[#747c70]">Resume a draft or start a new manual run.</p></div><div className="flex items-center gap-2"><a href="/draft/espn-bridge" className="inline-flex h-9 items-center rounded-[6px] border border-white/[.09] px-3 text-xs text-[#aeb6aa] hover:bg-white/[.03] hover:text-white">ESPN live setup</a><button onClick={onCreate} className="h-9 rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#13190d]">New draft</button></div></header>
     {renameError&&<p className="mt-4 text-xs text-red-300">{renameError}</p>}
     {loading?<div className="mt-6 grid gap-3 sm:grid-cols-2">{[0,1,2,3].map((item)=><div key={item} className="h-36 animate-pulse rounded-[8px] border border-white/[.05] bg-white/[.02]"/>)}</div>:sessions.length?<div className="mt-6 grid gap-3 sm:grid-cols-2">{sessions.map((session)=>{const total=session.team_order.length*session.round_count,completed=Math.min(session.current_overall_pick-1,total),progress=total?Math.round(completed/total*100):0,isRenaming=renamingId===session.id;return <div key={session.id} onClick={()=>!isRenaming&&onOpen(session.id)} className="group cursor-pointer rounded-[8px] border border-white/[.07] bg-white/[.018] p-5 text-left transition hover:border-white/[.13] hover:bg-white/[.028]"><div className="flex items-start justify-between gap-4"><div className="min-w-0 flex-1">{isRenaming?<div className="flex gap-2" onClick={(event)=>event.stopPropagation()}><input autoFocus value={renameValue} onChange={(event)=>setRenameValue(event.target.value)} onKeyDown={(event)=>{if(event.key==='Enter')saveRename(session);if(event.key==='Escape')setRenamingId(null)}} className="h-8 min-w-0 flex-1 rounded-[5px] border border-white/[.1] bg-black/20 px-2 text-xs text-white"/><button onClick={()=>saveRename(session)} className="rounded-[5px] bg-[#c9f958] px-2 text-[10px] font-semibold text-[#13190d]">Save</button><button onClick={()=>setRenamingId(null)} className="px-1 text-[10px] text-[#737b70]">Cancel</button></div>:<div className="flex items-center gap-2"><h2 className="truncate text-base font-semibold text-[#dce1d6] group-hover:text-white">{session.name}</h2><button aria-label={`Rename ${session.name}`} onClick={(event)=>{event.stopPropagation();setRenameError('');setRenamingId(session.id);setRenameValue(session.name)}} className="rounded-[4px] px-1.5 py-1 text-[10px] text-[#697166] opacity-0 hover:bg-white/[.05] hover:text-white group-hover:opacity-100">Rename</button></div>}<p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#697166]">{session.draft_type} · {session.team_order.length} teams · {session.round_count} rounds</p></div><span className={`rounded-[5px] px-2 py-1 text-[9px] font-medium uppercase tracking-[.08em] ${session.status==='completed'?'bg-white/[.05] text-[#879087]':'bg-[#c9f958]/10 text-[#b8e65b]'}`}>{session.status}</span></div><div className="mt-7"><div className="flex justify-between text-[10px] text-[#697166]"><span>{completed} of {total} picks</span><span>{progress}%</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[.05]"><div className="h-full bg-[#a9d64d]" style={{width:`${progress}%`}}/></div></div><div className="mt-4 flex items-center justify-between text-[10px] text-[#596158]"><span>Updated {new Date(session.updated_at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</span><span className="text-[#8b9487] group-hover:text-[#b8e65b]">Open →</span></div></div>})}</div>:<div className="mt-16 text-center"><p className="text-sm font-medium text-[#d2d7cc]">No draft runs yet</p><p className="mt-1 text-xs text-[#697166]">Create one to set the order and begin entering picks.</p><button onClick={onCreate} className="mt-5 h-9 rounded-[6px] border border-white/[.09] px-4 text-xs text-[#bdc4b9] hover:bg-white/[.03]">Create your first draft</button></div>}
   </main>
@@ -82,7 +82,16 @@ function DraftSetup({ scope, onCreated, onCancel }: { scope: NonNullable<ReturnT
   </div>
 }
 
-function ActiveDraft({ state, onChanged }: { state: Awaited<ReturnType<typeof getDraftState>>; teams: DraftTeam[]; onChanged: () => void }) {
+type EspnBridgeState = { installed: boolean; connected: boolean; leagueId: string | null; lastFrameAt: string | null; picks: Array<{ overallPickNumber: number; teamId: number; playerId: number }> }
+
+function espnLeagueId(value: string) {
+  const trimmed = value.trim()
+  if (/^\d+$/.test(trimmed)) return trimmed
+  try { return new URL(trimmed).searchParams.get('leagueId') }
+  catch { return null }
+}
+
+function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<ReturnType<typeof getDraftState>>; teams: DraftTeam[]; leagueExternalId: string; onChanged: () => void }) {
   const session = state.session
   const [search, setSearch] = useState('')
   const [position, setPosition] = useState('ALL')
@@ -90,6 +99,11 @@ function ActiveDraft({ state, onChanged }: { state: Awaited<ReturnType<typeof ge
   const [workspaceTab, setWorkspaceTab] = useState<'players' | 'rosters'>('players')
   const [rosterTeamId, setRosterTeamId] = useState(session.selected_team_id)
   const [tickerAway, setTickerAway] = useState(false)
+  const [bridgeLeagueId, setBridgeLeagueId] = useState<string | null>(null)
+  const [bridgeState, setBridgeState] = useState<EspnBridgeState | null>(null)
+  const [bridgeError, setBridgeError] = useState('')
+  const bridgeSyncing = useRef(false)
+  const importedPicks = useRef(new Set<number>())
   const tickerRef = useRef<HTMLDivElement>(null)
   const currentPickRef = useRef<HTMLDivElement>(null)
   const pool = useQuery({ queryKey: ['draft-player-pool', session.season], queryFn: () => api<{ items: DraftPlayer[] }>(`/v1/draft/player-pool?season=${session.season}`) })
@@ -116,10 +130,60 @@ function ActiveDraft({ state, onChanged }: { state: Awaited<ReturnType<typeof ge
     const tickerBounds = ticker.getBoundingClientRect(), currentBounds = current.getBoundingClientRect()
     setTickerAway(currentBounds.left < tickerBounds.left || currentBounds.right > tickerBounds.right)
   }
+  useEffect(() => {
+    const saved = window.localStorage.getItem(`ff-copilot:espn-draft:${session.id}`)
+    if (saved) setBridgeLeagueId(saved)
+  }, [session.id])
+  useEffect(() => {
+    if (!bridgeLeagueId) return
+    const receive = (event: Event) => setBridgeState((event as CustomEvent<EspnBridgeState>).detail)
+    window.addEventListener('ff-copilot:draft-bridge-state', receive)
+    const request = () => window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail: { leagueId: bridgeLeagueId } }))
+    request()
+    const timer = window.setInterval(request, 1000)
+    return () => { window.clearInterval(timer); window.removeEventListener('ff-copilot:draft-bridge-state', receive) }
+  }, [bridgeLeagueId])
+  useEffect(() => {
+    if (!bridgeState?.connected || !bridgeState.picks.length || !pool.data?.items.length || bridgeSyncing.current) return
+    const existing = new Map(state.picks.map((pick) => [pick.overall_pick, pick.player_id]))
+    const byEspnId = new Map(pool.data.items.map((player) => [String(player.espn_id), player.id]))
+    const pending = bridgeState.picks
+      .filter((pick) => !existing.has(pick.overallPickNumber) && !importedPicks.current.has(pick.overallPickNumber))
+      .sort((a, b) => a.overallPickNumber - b.overallPickNumber)
+    if (!pending.length) return
+    bridgeSyncing.current = true
+    void (async () => {
+      let revision = session.revision
+      try {
+        for (const pick of pending) {
+          const playerId = byEspnId.get(String(pick.playerId))
+          if (!playerId) throw new Error(`ESPN player ${pick.playerId} is missing from the player dataset`)
+          const updated = await recordDraftPick(session.id, playerId, pick.overallPickNumber, revision)
+          revision = updated.revision
+          importedPicks.current.add(pick.overallPickNumber)
+        }
+        setBridgeError('')
+        onChanged()
+      } catch (cause) {
+        setBridgeError(cause instanceof Error ? cause.message : 'Could not import ESPN picks')
+      } finally { bridgeSyncing.current = false }
+    })()
+  }, [bridgeState, onChanged, pool.data?.items, session.id, session.revision, state.picks])
+  function connectBridge() {
+    const input = window.prompt('Paste the ESPN draft link or league ID', bridgeLeagueId || leagueExternalId)
+    if (input == null) return
+    const id = espnLeagueId(input)
+    if (!id) { setBridgeError('Could not find an ESPN league ID in that value'); return }
+    window.localStorage.setItem(`ff-copilot:espn-draft:${session.id}`, id)
+    setBridgeLeagueId(id)
+    setBridgeState(null)
+    setBridgeError('')
+  }
   useEffect(() => { requestAnimationFrame(goToLatestPick) }, [session.current_overall_pick])
   return <div className="flex min-h-0 flex-1 flex-col">
     <section className="shrink-0 border-b border-white/[.06] bg-white/[.012]">
-      <div className="flex items-center justify-between px-4 py-2"><div><p className="text-[9px] uppercase tracking-[.12em] text-[#687063]">On the clock</p><p className="mt-0.5 text-xs font-semibold text-white">Pick {session.current_overall_pick} · {currentTeam?.name || 'Complete'}</p></div><div className="flex items-center gap-3">{tickerAway&&<button onClick={goToLatestPick} className="rounded-[5px] bg-[#c9f958]/10 px-2 py-1 text-[9px] font-medium text-[#b8e65b]">Latest pick →</button>}<p className="text-[9px] text-[#687063]">Scroll to review · click × to remove</p></div></div>
+      <div className="flex items-center justify-between px-4 py-2"><div><p className="text-[9px] uppercase tracking-[.12em] text-[#687063]">On the clock</p><p className="mt-0.5 text-xs font-semibold text-white">Pick {session.current_overall_pick} · {currentTeam?.name || 'Complete'}</p></div><div className="flex items-center gap-3">{tickerAway&&<button onClick={goToLatestPick} className="rounded-[5px] bg-[#c9f958]/10 px-2 py-1 text-[9px] font-medium text-[#b8e65b]">Latest pick →</button>}<button onClick={connectBridge} className={`rounded-[5px] border px-2 py-1 text-[9px] ${bridgeState?.connected?'border-[#c9f958]/25 text-[#b8e65b]':'border-white/[.08] text-[#7f897b]'}`}>{bridgeState?.connected?`ESPN connected · ${bridgeState.picks.length} picks`:bridgeLeagueId?'Waiting for ESPN bridge':'Connect ESPN'}</button><p className="text-[9px] text-[#687063]">Scroll to review · click × to remove</p></div></div>
+      {bridgeError&&<p className="px-4 pb-2 text-[10px] text-red-300">{bridgeError}</p>}
       <div ref={tickerRef} onScroll={updateTickerPosition} className="flex gap-1.5 overflow-x-auto px-3 pb-3">{Array.from({length:total},(_,index)=>{const overall=index+1,teamId=teamForPick(session.team_order,session.draft_type,overall),pick=pickByOverall.get(overall),round=Math.floor(index/session.team_order.length)+1,isCurrent=overall===session.current_overall_pick;return <div ref={isCurrent?currentPickRef:undefined} key={overall} onClick={() => pick && setSelectedPlayerId(pick.player_id)} className={`group relative w-[132px] shrink-0 rounded-[6px] border px-2.5 py-2 ${pick?'cursor-pointer':''} ${isCurrent?'border-[#c9f958]/40 bg-[#c9f958]/10':'border-white/[.055] bg-white/[.018]'}`}><div className="flex items-center justify-between text-[8px] uppercase tracking-[.08em] text-[#687063]"><span>R{round} · {overall}</span>{pick&&<button aria-label={`Remove ${pick.player.name}`} onClick={(event)=>{event.stopPropagation();remove.mutate(overall)}} className="text-transparent group-hover:text-[#78847e]">×</button>}</div><p className={`mt-1 truncate text-[10px] ${pick?'font-medium text-[#d5dbcf]':'text-[#7d8578]'}`}>{pick?.player.name||teamById.get(teamId)?.name}</p><p className="mt-0.5 truncate text-[8px] text-[#5f675c]">{teamById.get(teamId)?.name}</p></div>})}</div>
     </section>
     <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(520px,1fr)_minmax(460px,.85fr)]">

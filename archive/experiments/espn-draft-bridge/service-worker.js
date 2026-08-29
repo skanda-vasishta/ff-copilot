@@ -75,6 +75,7 @@ async function acceptFrame(payload) {
     session.pageUrl = payload.pageUrl;
     session.socketUrl = payload.socketUrl;
     session.lastFrameAt = payload.capturedAt;
+    session.transport = "websocket";
     session.diagnostics.unshift({
       capturedAt: payload.capturedAt,
       direction: payload.direction,
@@ -83,6 +84,27 @@ async function acceptFrame(payload) {
     });
     session.diagnostics = session.diagnostics.slice(0, MAX_DIAGNOSTICS);
     for (const pick of parsed.picks) mergePick(session, pick);
+    for (const event of parsed.events || []) {
+      if (event.type === "selected") {
+        const existing = Object.values(session.picks).find(
+          (pick) => pick.playerId === event.playerId,
+        );
+        if (!existing) {
+          const used = Object.values(session.picks)
+            .map((pick) => Number(pick.overallPickNumber))
+            .filter((pick) => Number.isFinite(pick) && pick > 0);
+          mergePick(session, {
+            ...event,
+            overallPickNumber: used.length ? Math.max(...used) + 1 : 1,
+          });
+        }
+      } else if (event.type === "undone") {
+        delete session.picks[`overall:${event.overallPickNumber}`];
+      } else if (event.type === "selecting") {
+        session.onTheClockTeamId = event.teamId;
+        session.timeToPick = event.timeToPick;
+      }
+    }
   }
   await persist(state);
 }
@@ -115,6 +137,8 @@ async function getState(leagueId) {
         (b.overallPickNumber || Number.MAX_SAFE_INTEGER),
     ),
     diagnostics: session?.diagnostics || [],
+    onTheClockTeamId: session?.onTheClockTeamId || null,
+    timeToPick: session?.timeToPick || null,
   };
 }
 

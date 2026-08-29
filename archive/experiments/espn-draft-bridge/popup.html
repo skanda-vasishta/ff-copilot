@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body { width: 310px; margin: 0; padding: 16px; color: #dfe5d8; background: #0b0e0b; font: 13px system-ui, sans-serif; }
+      h1 { margin: 0; font-size: 14px; } p { margin: 6px 0 0; color: #7f897b; line-height: 1.45; }
+      .status { margin-top: 14px; padding-top: 12px; border-top: 1px solid #242a23; }
+      .live { color: #baf153; } .value { color: #dfe5d8; }
+      button { width: 100%; margin-top: 14px; padding: 8px; border: 1px solid #30382d; border-radius: 5px; color: #dfe5d8; background: #151a14; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>ESPN Draft Bridge</h1>
+    <p id="message">Open an ESPN draft room to begin.</p>
+    <div class="status">
+      <p>League <span class="value" id="league">—</span></p>
+      <p>Picks captured <span class="value" id="picks">0</span></p>
+      <p>Last update <span class="value" id="updated">—</span></p>
+    </div>
+    <button id="refresh">Refresh status</button>
+    <script src="popup.js"></script>
+  </body>
+</html>

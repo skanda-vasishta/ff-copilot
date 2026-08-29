@@ -32,6 +32,22 @@ const stomp = parseFrame(
 assert.equal(stomp.picks.length, 1);
 assert.equal(stomp.picks[0].overallPickNumber, 7);
 
+const selected = parseFrame(
+  "SELECTED 1 4430807 2\n",
+  "2026-08-09T00:00:01.500Z",
+);
+assert.deepEqual(selected.events, [{
+  type: "selected",
+  teamId: 1,
+  playerId: 4430807,
+  slotId: 2,
+  capturedAt: "2026-08-09T00:00:01.500Z",
+}]);
+
+const undone = parseFrame("UNDONE 12", "2026-08-09T00:00:01.750Z");
+assert.equal(undone.events[0].type, "undone");
+assert.equal(undone.events[0].overallPickNumber, 12);
+
 const visibleHistory = parsePickHistory(
   "Picks\nJahmyr Gibbs / DET RB R1, P1 - Skanda's Smart Team\n" +
     "Bijan Robinson / ATL RB R1, P2 - Team 2\n" +

@@ -58,6 +58,27 @@
   }
 
   function parseFrame(frame, capturedAt) {
+    const textFrame = typeof frame === "string" ? frame.trim().replace(/\0+$/g, "") : "";
+    const selected = textFrame.match(/^SELECTED\s+(\d+)\s+(\d+)\s+(\d+)/);
+    if (selected) {
+      return { leagueIds: [], picks: [], events: [{
+        type: "selected", teamId: Number(selected[1]), playerId: Number(selected[2]),
+        slotId: Number(selected[3]), capturedAt,
+      }] };
+    }
+    const undone = textFrame.match(/^UNDONE\s+(\d+)/);
+    if (undone) {
+      return { leagueIds: [], picks: [], events: [{
+        type: "undone", overallPickNumber: Number(undone[1]), capturedAt,
+      }] };
+    }
+    const selecting = textFrame.match(/^SELECTING\s+(\d+)\s+(\d+)/);
+    if (selecting) {
+      return { leagueIds: [], picks: [], events: [{
+        type: "selecting", teamId: Number(selecting[1]),
+        timeToPick: Number(selecting[2]), capturedAt,
+      }] };
+    }
     const objects = [];
     collectDecoded(frame, objects);
     const leagueIds = new Set();
@@ -96,7 +117,7 @@
         : `player:${pick.playerId}`;
       unique.set(key, pick);
     }
-    return { leagueIds: [...leagueIds], picks: [...unique.values()] };
+    return { leagueIds: [...leagueIds], picks: [...unique.values()], events: [] };
   }
 
   const api = { decodeStrings, parseFrame };
