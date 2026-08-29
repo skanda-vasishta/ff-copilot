@@ -166,7 +166,7 @@ function EspnDraftSetup({ scope, onCreated, onManual, onCancel }: { scope: NonNu
   </div>
 }
 
-type EspnBridgeState = { installed: boolean; connected: boolean; leagueId: string | null; lastFrameAt: string | null; picks: Array<{ overallPickNumber: number; teamId: number; playerId: number }>; config?: EspnBridgeConfig | null }
+type EspnBridgeState = { installed: boolean; connected: boolean; leagueId: string | null; lastFrameAt: string | null; picks: Array<{ overallPickNumber: number; teamId?: number; playerId?: number; playerName?: string; nflTeam?: string; position?: string }>; config?: EspnBridgeConfig | null }
 
 function espnLeagueId(value: string) {
   const trimmed = value.trim()
@@ -239,12 +239,15 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   useEffect(() => {
     if (!bridgeState?.connected || !bridgeState.picks.length || !pool.data?.items.length || bridgeSyncing.current) return
     const byEspnId = new Map(pool.data.items.map((player) => [String(player.espn_id), player.id]))
+    const normalize = (value: string | null | undefined) => (value || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const byIdentity = new Map(pool.data.items.map((player) => [`${normalize(player.name)}:${player.position || ''}:${player.nfl_team || ''}`, player.id]))
     const captured = bridgeState.picks
-      .filter((pick) => Number.isFinite(Number(pick.overallPickNumber)) && Number(pick.overallPickNumber) > 0 && Number.isFinite(Number(pick.playerId)) && Number(pick.playerId) > 0)
+      .filter((pick) => Number.isFinite(Number(pick.overallPickNumber)) && Number(pick.overallPickNumber) > 0)
       .sort((a, b) => a.overallPickNumber - b.overallPickNumber)
-    const unresolved = captured.filter((pick) => !byEspnId.has(String(pick.playerId)))
+    const resolvePlayer = (pick: EspnBridgeState['picks'][number]) => byEspnId.get(String(pick.playerId)) || byIdentity.get(`${normalize(pick.playerName)}:${pick.position || ''}:${pick.nflTeam || ''}`)
+    const unresolved = captured.filter((pick) => !resolvePlayer(pick))
     if (unresolved.length) { setBridgeError(`${unresolved.length} ESPN player${unresolved.length === 1 ? '' : 's'} could not be matched`); return }
-    const snapshot = captured.map((pick) => ({ overall_pick: Number(pick.overallPickNumber), player_id: byEspnId.get(String(pick.playerId))! }))
+    const snapshot = captured.map((pick) => ({ overall_pick: Number(pick.overallPickNumber), player_id: resolvePlayer(pick)! }))
     const fingerprint = snapshot.map((pick) => `${pick.overall_pick}:${pick.player_id}`).join('|')
     if (!snapshot.length || fingerprint === syncedSnapshot.current) return
     bridgeSyncing.current = true

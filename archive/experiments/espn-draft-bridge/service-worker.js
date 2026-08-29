@@ -43,8 +43,10 @@ async function acceptDomSnapshot(payload) {
   session.transport = "dom";
   if (payload.config) {
     session.config = payload.config;
-    session.picks = {};
-    for (const pick of payload.config.picks || []) mergePick(session, pick);
+    if (payload.config.picks?.length) {
+      session.picks = {};
+      for (const pick of payload.config.picks) mergePick(session, pick);
+    }
   }
   for (const pick of payload.picks || []) mergePick(session, pick);
   session.diagnostics.unshift({
@@ -127,6 +129,7 @@ async function getState(leagueId) {
   const capturedPicks = session?.config?.picks?.length
     ? session.config.picks
     : Object.values(session?.picks || {});
+  const teamCount = session?.config?.teams?.length || 0;
   return {
     installed: true,
     matched,
@@ -134,7 +137,13 @@ async function getState(leagueId) {
     leagueId: session?.leagueId || null,
     lastFrameAt: session?.lastFrameAt || null,
     picks: capturedPicks
-      .filter((pick) => Number(pick.overallPickNumber) > 0 && Number(pick.playerId) > 0)
+      .map((pick) => ({
+        ...pick,
+        overallPickNumber: Number(pick.overallPickNumber) || (teamCount && Number(pick.roundId) > 0 && Number(pick.roundPickNumber) > 0
+          ? (Number(pick.roundId) - 1) * teamCount + Number(pick.roundPickNumber)
+          : 0),
+      }))
+      .filter((pick) => Number(pick.overallPickNumber) > 0 && (Number(pick.playerId) > 0 || pick.playerName))
       .sort((a, b) => Number(a.overallPickNumber) - Number(b.overallPickNumber)),
     diagnostics: session?.diagnostics || [],
     onTheClockTeamId: session?.onTheClockTeamId || null,

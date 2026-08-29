@@ -46,7 +46,7 @@
     };
   }
 
-  async function scan() {
+  async function scan(force = false) {
     timer = null;
     const text = document.body?.innerText || "";
     const capturedAt = new Date().toISOString();
@@ -57,7 +57,7 @@
     const digest = picks
       .map((pick) => `${pick.roundId}:${pick.roundPickNumber}:${pick.playerName}`)
       .join("|");
-    if (digest === lastDigest && Date.now() - lastSentAt < 2500) return;
+    if (!force && digest === lastDigest && Date.now() - lastSentAt < 2500) return;
     lastDigest = digest;
     lastSentAt = Date.now();
     const config = await loadDraftConfig().catch(() => null);
@@ -73,6 +73,18 @@
     });
   }
 
+  async function scanFullHistory() {
+    const candidates = Array.from(document.querySelectorAll('[role="tab"], button, a'));
+    const history = candidates.find((node) => node.textContent?.trim() === "Pick History");
+    const players = candidates.find((node) => node.textContent?.trim() === "Players");
+    if (history) {
+      history.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    }
+    await scan(true);
+    if (players) players.click();
+  }
+
   function schedule() {
     if (timer != null) return;
     timer = window.setTimeout(scan, 150);
@@ -80,7 +92,7 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "FF_COPILOT_FORCE_REFRESH") return;
-    scan().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    scanFullHistory().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;
   });
 
