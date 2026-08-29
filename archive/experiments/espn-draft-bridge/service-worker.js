@@ -124,17 +124,18 @@ async function getState(leagueId) {
     : Number.NaN;
   const connected =
     Number.isFinite(lastFrameMs) && Date.now() - lastFrameMs < 15_000;
+  const capturedPicks = session?.config?.picks?.length
+    ? session.config.picks
+    : Object.values(session?.picks || {});
   return {
     installed: true,
     matched,
     connected,
     leagueId: session?.leagueId || null,
     lastFrameAt: session?.lastFrameAt || null,
-    picks: Object.values(session?.picks || {}).sort(
-      (a, b) =>
-        (a.overallPickNumber || Number.MAX_SAFE_INTEGER) -
-        (b.overallPickNumber || Number.MAX_SAFE_INTEGER),
-    ),
+    picks: capturedPicks
+      .filter((pick) => Number(pick.overallPickNumber) > 0 && Number(pick.playerId) > 0)
+      .sort((a, b) => Number(a.overallPickNumber) - Number(b.overallPickNumber)),
     diagnostics: session?.diagnostics || [],
     onTheClockTeamId: session?.onTheClockTeamId || null,
     timeToPick: session?.timeToPick || null,

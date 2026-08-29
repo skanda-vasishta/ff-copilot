@@ -240,7 +240,8 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
     const existing = new Map(state.picks.map((pick) => [pick.overall_pick, pick.player_id]))
     const byEspnId = new Map(pool.data.items.map((player) => [String(player.espn_id), player.id]))
     const pending = bridgeState.picks
-      .filter((pick) => !existing.has(pick.overallPickNumber) && !importedPicks.current.has(pick.overallPickNumber))
+      .filter((pick) => Number.isFinite(Number(pick.overallPickNumber)) && Number(pick.overallPickNumber) > 0 && Number.isFinite(Number(pick.playerId)) && Number(pick.playerId) > 0)
+      .filter((pick) => !existing.has(Number(pick.overallPickNumber)) && !importedPicks.current.has(Number(pick.overallPickNumber)))
       .sort((a, b) => a.overallPickNumber - b.overallPickNumber)
     if (!pending.length) return
     bridgeSyncing.current = true
