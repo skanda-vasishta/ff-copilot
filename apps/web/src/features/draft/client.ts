@@ -68,6 +68,15 @@ export async function recordDraftPick(sessionId: string, playerId: string, overa
   return data as DraftSession
 }
 
+export async function syncEspnDraftSnapshot(sessionId: string, picks: Array<{ overall_pick: number; player_id: string }>) {
+  const { data, error } = await createClient().rpc('sync_espn_draft_snapshot', {
+    p_session_id: sessionId,
+    p_picks: picks,
+  })
+  if (error) throw error
+  return data as DraftSession
+}
+
 export async function removeDraftPick(sessionId: string, overallPick: number, revision: number) {
   const { data, error } = await createClient().rpc('remove_draft_pick', { p_session_id: sessionId, p_overall_pick: overallPick, p_expected_revision: revision })
   if (error) throw error

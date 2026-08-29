@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useActiveScope } from '@/lib/scope'
 import { createClient } from '@/lib/supabase/client'
-import { createDraftSession, getDraftState, listDraftSessions, recordDraftPick, removeDraftPick, renameDraftSession } from './client'
+import { createDraftSession, getDraftState, listDraftSessions, recordDraftPick, removeDraftPick, renameDraftSession, syncEspnDraftSnapshot } from './client'
 import type { DraftPlayer, DraftSession, DraftTeam } from './types'
 import { DraftCopilot } from './DraftCopilot'
 import { PlayerDetailModal } from '@/components/features/players/PlayerDetailModal'
@@ -188,7 +188,7 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   const [bridgeError, setBridgeError] = useState('')
   const [bridgeRefreshing, setBridgeRefreshing] = useState(false)
   const bridgeSyncing = useRef(false)
-  const importedPicks = useRef(new Set<number>())
+  const syncedSnapshot = useRef('')
   const tickerRef = useRef<HTMLDivElement>(null)
   const currentPickRef = useRef<HTMLDivElement>(null)
   const pool = useQuery({ queryKey: ['draft-player-pool', session.season], queryFn: () => api<{ items: DraftPlayer[] }>(`/v1/draft/player-pool?season=${session.season}`) })
@@ -238,24 +238,20 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   }, [bridgeLeagueId])
   useEffect(() => {
     if (!bridgeState?.connected || !bridgeState.picks.length || !pool.data?.items.length || bridgeSyncing.current) return
-    const existing = new Map(state.picks.map((pick) => [pick.overall_pick, pick.player_id]))
     const byEspnId = new Map(pool.data.items.map((player) => [String(player.espn_id), player.id]))
-    const pending = bridgeState.picks
+    const captured = bridgeState.picks
       .filter((pick) => Number.isFinite(Number(pick.overallPickNumber)) && Number(pick.overallPickNumber) > 0 && Number.isFinite(Number(pick.playerId)) && Number(pick.playerId) > 0)
-      .filter((pick) => !existing.has(Number(pick.overallPickNumber)) && !importedPicks.current.has(Number(pick.overallPickNumber)))
       .sort((a, b) => a.overallPickNumber - b.overallPickNumber)
-    if (!pending.length) return
+    const unresolved = captured.filter((pick) => !byEspnId.has(String(pick.playerId)))
+    if (unresolved.length) { setBridgeError(`${unresolved.length} ESPN player${unresolved.length === 1 ? '' : 's'} could not be matched`); return }
+    const snapshot = captured.map((pick) => ({ overall_pick: Number(pick.overallPickNumber), player_id: byEspnId.get(String(pick.playerId))! }))
+    const fingerprint = snapshot.map((pick) => `${pick.overall_pick}:${pick.player_id}`).join('|')
+    if (!snapshot.length || fingerprint === syncedSnapshot.current) return
     bridgeSyncing.current = true
     void (async () => {
-      let revision = session.revision
       try {
-        for (const pick of pending) {
-          const playerId = byEspnId.get(String(pick.playerId))
-          if (!playerId) throw new Error(`ESPN player ${pick.playerId} is missing from the player dataset`)
-          const updated = await recordDraftPick(session.id, playerId, pick.overallPickNumber, revision)
-          revision = updated.revision
-          importedPicks.current.add(pick.overallPickNumber)
-        }
+        await syncEspnDraftSnapshot(session.id, snapshot)
+        syncedSnapshot.current = fingerprint
         setBridgeError('')
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : typeof cause === 'object' && cause && 'message' in cause ? String(cause.message) : 'Could not import ESPN picks'
@@ -278,6 +274,7 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   }
   function refreshBridge() {
     if (!bridgeLeagueId) return
+    syncedSnapshot.current = ''
     setBridgeRefreshing(true)
     window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail: { leagueId: bridgeLeagueId, refresh: true } }))
     window.setTimeout(() => { setBridgeRefreshing(false); onChanged() }, 1200)
