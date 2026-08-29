@@ -186,6 +186,7 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   const [bridgeLeagueId, setBridgeLeagueId] = useState<string | null>(null)
   const [bridgeState, setBridgeState] = useState<EspnBridgeState | null>(null)
   const [bridgeError, setBridgeError] = useState('')
+  const [bridgeRefreshing, setBridgeRefreshing] = useState(false)
   const bridgeSyncing = useRef(false)
   const importedPicks = useRef(new Set<number>())
   const tickerRef = useRef<HTMLDivElement>(null)
@@ -275,10 +276,16 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
     setBridgeState(null)
     setBridgeError('')
   }
+  function refreshBridge() {
+    if (!bridgeLeagueId) return
+    setBridgeRefreshing(true)
+    window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail: { leagueId: bridgeLeagueId, refresh: true } }))
+    window.setTimeout(() => { setBridgeRefreshing(false); onChanged() }, 1200)
+  }
   useEffect(() => { requestAnimationFrame(goToLatestPick) }, [session.current_overall_pick])
   return <div className="flex min-h-0 flex-1 flex-col">
     <section className="shrink-0 border-b border-white/[.06] bg-white/[.012]">
-      <div className="flex items-center justify-between px-4 py-2"><div><p className="text-[9px] uppercase tracking-[.12em] text-[#687063]">On the clock</p><p className="mt-0.5 text-xs font-semibold text-white">Pick {session.current_overall_pick} · {currentTeam?.name || 'Complete'}</p></div><div className="flex items-center gap-3">{tickerAway&&<button onClick={goToLatestPick} className="rounded-[5px] bg-[#c9f958]/10 px-2 py-1 text-[9px] font-medium text-[#b8e65b]">Latest pick →</button>}{session.source==='espn_live'&&<button onClick={connectBridge} className={`rounded-[5px] border px-2 py-1 text-[9px] ${bridgeState?.connected?'border-[#c9f958]/25 text-[#b8e65b]':'border-white/[.08] text-[#7f897b]'}`}>{bridgeState?.connected?`ESPN connected · ${bridgeState.picks.length} picks`:bridgeLeagueId?'Waiting for ESPN bridge':'Connect ESPN'}</button>}<p className="text-[9px] text-[#687063]">Scroll to review · click × to remove</p></div></div>
+      <div className="flex items-center justify-between px-4 py-2"><div><p className="text-[9px] uppercase tracking-[.12em] text-[#687063]">On the clock</p><p className="mt-0.5 text-xs font-semibold text-white">Pick {session.current_overall_pick} · {currentTeam?.name || 'Complete'}</p></div><div className="flex items-center gap-3">{tickerAway&&<button onClick={goToLatestPick} className="rounded-[5px] bg-[#c9f958]/10 px-2 py-1 text-[9px] font-medium text-[#b8e65b]">Latest pick →</button>}{session.source==='espn_live'&&<><button onClick={connectBridge} className={`rounded-[5px] border px-2 py-1 text-[9px] ${bridgeState?.connected?'border-[#c9f958]/25 text-[#b8e65b]':'border-white/[.08] text-[#7f897b]'}`}>{bridgeState?.connected?`ESPN connected · ${bridgeState.picks.length} picks`:bridgeLeagueId?'Waiting for ESPN bridge':'Connect ESPN'}</button><button disabled={bridgeRefreshing||!bridgeLeagueId} onClick={refreshBridge} className="rounded-[5px] border border-white/[.08] px-2 py-1 text-[9px] text-[#929b8e] disabled:opacity-40">{bridgeRefreshing?'Refreshing…':'Refresh ESPN'}</button></>}<p className="text-[9px] text-[#687063]">Scroll to review · click × to remove</p></div></div>
       {bridgeError&&<p className="px-4 pb-2 text-[10px] text-red-300">{bridgeError}</p>}
       <div ref={tickerRef} onScroll={updateTickerPosition} className="flex gap-1.5 overflow-x-auto px-3 pb-3">{Array.from({length:total},(_,index)=>{const overall=index+1,teamId=teamForPick(session.team_order,session.draft_type,overall),pick=pickByOverall.get(overall),round=Math.floor(index/session.team_order.length)+1,isCurrent=overall===session.current_overall_pick;return <div ref={isCurrent?currentPickRef:undefined} key={overall} onClick={() => pick && setSelectedPlayerId(pick.player_id)} className={`group relative w-[132px] shrink-0 rounded-[6px] border px-2.5 py-2 ${pick?'cursor-pointer':''} ${isCurrent?'border-[#c9f958]/40 bg-[#c9f958]/10':'border-white/[.055] bg-white/[.018]'}`}><div className="flex items-center justify-between text-[8px] uppercase tracking-[.08em] text-[#687063]"><span>R{round} · {overall}</span>{pick&&<button aria-label={`Remove ${pick.player.name}`} onClick={(event)=>{event.stopPropagation();remove.mutate(overall)}} className="text-transparent group-hover:text-[#78847e]">×</button>}</div><p className={`mt-1 truncate text-[10px] ${pick?'font-medium text-[#d5dbcf]':'text-[#7d8578]'}`}>{pick?.player.name||teamById.get(teamId)?.name}</p><p className="mt-0.5 truncate text-[8px] text-[#5f675c]">{teamById.get(teamId)?.name}</p></div>})}</div>
     </section>

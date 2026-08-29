@@ -78,6 +78,12 @@
     timer = window.setTimeout(scan, 150);
   }
 
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "FF_COPILOT_FORCE_REFRESH") return;
+    scan().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  });
+
   const observer = new MutationObserver(schedule);
   function start() {
     if (!document.body) return window.setTimeout(start, 50);

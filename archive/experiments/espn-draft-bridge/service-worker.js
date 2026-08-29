@@ -156,4 +156,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     getState(message.leagueId).then(sendResponse);
     return true;
   }
+  if (message?.type === "FF_COPILOT_REFRESH_DRAFT") {
+    chrome.tabs.query({ url: ["https://fantasy.espn.com/*", "https://*.fantasy.espn.com/*"] })
+      .then((tabs) => Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, { type: "FF_COPILOT_FORCE_REFRESH" }).catch(() => null)
+        : null)))
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
 });
