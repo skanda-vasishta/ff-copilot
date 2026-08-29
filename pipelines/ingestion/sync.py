@@ -177,12 +177,16 @@ def snapshot_payload(player_id: str, player: Any, season: int, week: int | None,
     raw["projection_scope"] = "full_season_cumulative"
     payload = {
         "player_id": player_id, "source": "espn", "season": season, "week": week,
-        "position_rank": getattr(player, "posRank", None), "injury_status": getattr(player, "injuryStatus", None),
-        "injured": getattr(player, "injured", None), "total_points": getattr(player, "total_points", None),
-        "average_points": getattr(player, "avg_points", None),
-        "projected_total_points": getattr(player, "projected_total_points", None),
-        "projected_average_points": getattr(player, "projected_avg_points", None),
-        "percent_owned": getattr(player, "percent_owned", None), "percent_started": getattr(player, "percent_started", None),
+        # ESPN occasionally represents absent numeric values as [] rather than
+        # null. Normalize every numeric column before sending it to Postgres.
+        "position_rank": clean_number(getattr(player, "posRank", None)), "injury_status": getattr(player, "injuryStatus", None),
+        "injured": getattr(player, "injured", None) if isinstance(getattr(player, "injured", None), bool) else None,
+        "total_points": clean_number(getattr(player, "total_points", None)),
+        "average_points": clean_number(getattr(player, "avg_points", None)),
+        "projected_total_points": clean_number(getattr(player, "projected_total_points", None)),
+        "projected_average_points": clean_number(getattr(player, "projected_avg_points", None)),
+        "percent_owned": clean_number(getattr(player, "percent_owned", None)),
+        "percent_started": clean_number(getattr(player, "percent_started", None)),
         "raw_payload": raw, "fetched_at": fetched_at,
     }
     payload["data_hash"] = digest({key: value for key, value in payload.items() if key != "fetched_at"})
@@ -465,12 +469,13 @@ def sync_global(args):
                     "week": args.week, "scoring_format": "ppr", "ranking_type": "current_draft_rank",
                     "overall_rank": draft_ranks[external_id],
                     "position_rank": draft_position_ranks.get(external_id), "fetched_at": fetched_at})
-            if getattr(player, "posRank", None) is not None:
+            position_rank = clean_number(getattr(player, "posRank", None))
+            if position_rank is not None:
                 preseason = not (clean_number(getattr(player, "total_points", None)) or 0)
                 rankings.append({"player_id": player_id, "source": "espn", "season": args.season,
                     "week": args.week, "scoring_format": "league",
                     "ranking_type": "previous_season_position_finish" if preseason else "season_to_date_position_rank",
-                    "overall_rank": None, "position_rank": player.posRank, "fetched_at": fetched_at})
+                    "overall_rank": None, "position_rank": position_rank, "fetched_at": fetched_at})
 
         for batch in chunks(player_rows):
             db.upsert("players", batch, "id")
@@ -516,6 +521,13 @@ def sync_global(args):
                     raise ProviderContractError(
                         f"FantasyPros matched only {len(fantasypros_ranking_rows)} players; refusing partial import"
                     )
+                existing_fantasypros_ids = db.request("GET", "player_external_ids", params={
+                    "provider": "eq.fantasypros", "select": "player_id,external_id", "limit": 1000,
+                })
+                mapped_players = {row["player_id"] for row in existing_fantasypros_ids}
+                mapped_external_ids = {row["external_id"] for row in existing_fantasypros_ids}
+                fantasypros_ids = [row for row in fantasypros_ids
+                    if row["player_id"] not in mapped_players and row["external_id"] not in mapped_external_ids]
                 for batch in chunks(fantasypros_ids):
                     db.upsert("player_external_ids", batch, "provider,external_id")
                 for batch in chunks(fantasypros_ranking_rows):
@@ -648,14 +660,28 @@ def sync_global(args):
 
 def coverage_report(args):
     db = SupabaseAdmin()
-    snapshots = db.request("GET", "player_snapshots", params={
-        "season": f"eq.{args.season}", "select": "player_id,source,fetched_at", "limit": 10000
+    def all_rows(table: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        # Supabase projects commonly cap a single PostgREST response at 1,000
+        # rows even when a larger limit is requested. Coverage must paginate or
+        # it can falsely report only whichever source appears in the first page.
+        rows: list[dict[str, Any]] = []
+        page_size = 1000
+        while True:
+            page = db.request("GET", table, params={
+                **params, "limit": page_size, "offset": len(rows),
+            })
+            rows.extend(page)
+            if len(page) < page_size:
+                return rows
+
+    snapshots = all_rows("player_snapshots", {
+        "season": f"eq.{args.season}", "select": "player_id,source,fetched_at",
     })
-    rankings = db.request("GET", "player_rankings", params={
-        "season": f"eq.{args.season}", "select": "player_id,source,fetched_at", "limit": 10000
+    rankings = all_rows("player_rankings", {
+        "season": f"eq.{args.season}", "select": "player_id,source,fetched_at",
     })
-    documents = db.request("GET", "source_documents", params={
-        "select": "player_id,source,fetched_at", "limit": 10000
+    documents = all_rows("source_documents", {
+        "select": "player_id,source,fetched_at",
     })
     runs = db.request("GET", "sync_runs", params={
         "season": f"eq.{args.season}", "select": "status,records_read,records_written,source_errors,started_at,finished_at",

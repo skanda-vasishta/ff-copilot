@@ -14,6 +14,7 @@ from pipelines.ingestion.sync import (
     parse_fftoday_projections,
     parse_json,
     parser,
+    snapshot_payload,
 )
 
 
@@ -26,6 +27,29 @@ def test_legacy_helpers_tolerate_missing_values():
     assert clean_number("4") == 4
     assert parse_json("not json", {}) == {}
     assert digest({"b": 2, "a": 1}) == digest({"a": 1, "b": 2})
+
+
+def test_snapshot_normalizes_espn_array_placeholders():
+    class Player:
+        posRank = []
+        injuryStatus = None
+        injured = False
+        total_points = 0
+        avg_points = []
+        projected_total_points = []
+        projected_avg_points = []
+        percent_owned = []
+        percent_started = []
+        eligibleSlots = []
+        lineupSlot = None
+        acquisitionType = None
+        stats = []
+        onTeamId = None
+
+    payload = snapshot_payload("00000000-0000-0000-0000-000000000000", Player(), 2026, None, "2026-08-29T00:00:00Z")
+    assert payload["position_rank"] is None
+    assert payload["projected_total_points"] is None
+    assert payload["percent_owned"] is None
 
 
 def test_global_parser_is_2026_ready(monkeypatch):

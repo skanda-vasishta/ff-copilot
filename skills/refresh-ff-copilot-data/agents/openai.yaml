@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refresh FF Copilot Data"
+  short_description: "Run and verify every FF Copilot ingestion job"
+  default_prompt: "Use $refresh-ff-copilot-data to refresh all FF Copilot player, source, and league data."
