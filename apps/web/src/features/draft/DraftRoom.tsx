@@ -230,11 +230,20 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   useEffect(() => {
     if (!bridgeLeagueId) return
     const receive = (event: Event) => setBridgeState((event as CustomEvent<EspnBridgeState>).detail)
+    const receiveMessage = (event: MessageEvent) => {
+      if (event.source !== window || event.data?.source !== 'ff-copilot-extension' || event.data?.type !== 'draft-bridge-state') return
+      setBridgeState(event.data.state as EspnBridgeState)
+    }
     window.addEventListener('ff-copilot:draft-bridge-state', receive)
-    const request = () => window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail: { leagueId: bridgeLeagueId } }))
+    window.addEventListener('message', receiveMessage)
+    const request = () => {
+      const detail = { leagueId: bridgeLeagueId }
+      window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail }))
+      window.postMessage({ source: 'ff-copilot-page', type: 'draft-bridge-request', ...detail }, window.location.origin)
+    }
     request()
     const timer = window.setInterval(request, 1000)
-    return () => { window.clearInterval(timer); window.removeEventListener('ff-copilot:draft-bridge-state', receive) }
+    return () => { window.clearInterval(timer); window.removeEventListener('ff-copilot:draft-bridge-state', receive); window.removeEventListener('message', receiveMessage) }
   }, [bridgeLeagueId])
   useEffect(() => {
     if (!bridgeState?.connected || !bridgeState.picks.length || !pool.data?.items.length || bridgeSyncing.current) return
@@ -279,7 +288,9 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
     if (!bridgeLeagueId) return
     syncedSnapshot.current = ''
     setBridgeRefreshing(true)
-    window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail: { leagueId: bridgeLeagueId, refresh: true } }))
+    const detail = { leagueId: bridgeLeagueId, refresh: true }
+    window.dispatchEvent(new CustomEvent('ff-copilot:draft-bridge-request', { detail }))
+    window.postMessage({ source: 'ff-copilot-page', type: 'draft-bridge-request', ...detail }, window.location.origin)
     window.setTimeout(() => { setBridgeRefreshing(false); onChanged() }, 1200)
   }
   useEffect(() => { requestAnimationFrame(goToLatestPick) }, [session.current_overall_pick])
