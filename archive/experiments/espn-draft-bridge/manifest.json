@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FF Copilot ESPN Draft Bridge",
-  "version": "1.0.0",
-  "description": "Reads ESPN's persistent draft history and syncs complete pick snapshots to FF Copilot.",
+  "version": "1.1.0",
+  "description": "Reads ESPN's persistent draft board and syncs complete pick snapshots to FF Copilot.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://fantasy.espn.com/*",

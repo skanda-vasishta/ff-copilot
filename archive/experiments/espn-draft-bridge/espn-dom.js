@@ -9,6 +9,7 @@
   let configLoadedAt = 0;
 
   const HISTORY_SELECTOR = ".pick-history-tables";
+  const BOARD_SELECTOR = ".draftBoardGrid__container";
   const HEARTBEAT_MS = 10_000;
   const POLL_MS = 2_000;
 
@@ -66,25 +67,38 @@
 
   async function scan(force = false) {
     timer = null;
+    const board = document.querySelector(BOARD_SELECTOR);
     const history = document.querySelector(HISTORY_SELECTOR);
-    if (!history) return;
-    // ESPN keeps every round table mounted beneath .pick-history-tables even
-    // while the Players or Board tab is selected. Reading this subtree gives
-    // us a complete, ordered snapshot without opening a tab or intercepting
-    // ESPN's private WebSocket protocol.
-    const text = history.innerText || history.textContent || "";
+    if (!board && !history) return;
+    // ESPN keeps its board mounted with explicit completed-pick cells. This is
+    // the canonical snapshot because it remains complete when the user joins
+    // late; Pick History and the league API are compatibility fallbacks.
     const capturedAt = new Date().toISOString();
-    const picks = window.FFCopilotEspnDomParser.parsePickHistory(
-      text,
-      capturedAt,
-    );
+    const config = await loadDraftConfig().catch(() => null);
+    let picks = board
+      ? window.FFCopilotEspnDomParser.parseDraftBoard(board, capturedAt)
+      : [];
+    if (!picks.length && history) {
+      picks = window.FFCopilotEspnDomParser.parsePickHistoryDom(
+        history,
+        capturedAt,
+        (config?.teams || []).map((team) => team.name),
+      );
+    }
+    // Keep the textual parser as a compatibility fallback if ESPN changes its
+    // table component but leaves the visible pick feed intact.
+    if (!picks.length) {
+      picks = window.FFCopilotEspnDomParser.parsePickHistory(
+        document.body?.innerText || "",
+        capturedAt,
+      );
+    }
     const digest = picks
       .map((pick) => `${pick.roundId}:${pick.roundPickNumber}:${pick.playerName}`)
       .join("|");
     if (!force && digest === lastDigest && Date.now() - lastSentAt < HEARTBEAT_MS) return;
     lastDigest = digest;
     lastSentAt = Date.now();
-    const config = await loadDraftConfig().catch(() => null);
     chrome.runtime.sendMessage({
       type: "FF_COPILOT_ESPN_DOM_SNAPSHOT",
       payload: {
@@ -93,6 +107,16 @@
         capturedAt,
         picks,
         config,
+        debug: {
+          boardPicks: board?.querySelectorAll(".draft-board-grid-pick-cell.completedPick").length || 0,
+          rounds: history?.querySelectorAll(".pick-history-table").length || 0,
+          tableRows: history?.querySelectorAll(".Table__TR").length || 0,
+          roleRows: history?.querySelectorAll("[role='row']").length || 0,
+          htmlRows: history?.querySelectorAll("tr").length || 0,
+          hiddenSample: Array.from(history?.querySelectorAll(".Table__TR") || [])
+            .find((row) => !row.querySelector(".playerinfo__playername, a") && /^\s*\d/.test(row.textContent || ""))
+            ?.textContent?.slice(0, 240) || "",
+        },
       },
     });
   }
@@ -114,16 +138,16 @@
     return true;
   });
 
-  let observedHistory = null;
+  let observedRoot = null;
   const observer = new MutationObserver(schedule);
   const mountObserver = new MutationObserver(() => observeHistory());
 
   function observeHistory() {
-    const history = document.querySelector(HISTORY_SELECTOR);
-    if (!history || history === observedHistory) return;
+    const root = document.querySelector(BOARD_SELECTOR) || document.querySelector(HISTORY_SELECTOR);
+    if (!root || root === observedRoot) return;
     observer.disconnect();
-    observedHistory = history;
-    observer.observe(history, {
+    observedRoot = root;
+    observer.observe(root, {
       childList: true,
       characterData: true,
       subtree: true,

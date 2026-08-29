@@ -11,6 +11,11 @@ async function render() {
   document.getElementById("updated").textContent = session?.lastFrameAt
     ? new Date(session.lastFrameAt).toLocaleTimeString()
     : "—";
+  const scan = session?.diagnostics?.[0];
+  document.getElementById("scan").textContent = scan
+    ? `${scan.parsedPicks} parsed / ${scan.boardPicks || 0} completed board cells`
+    : "—";
+  document.getElementById("sample").textContent = scan?.hiddenSample || "";
   document.getElementById("message").innerHTML = session
     ? '<span class="live">Connected.</span> Keep the ESPN draft tab open.'
     : "Open an ESPN draft room, then reload that tab.";

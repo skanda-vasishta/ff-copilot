@@ -1,6 +1,6 @@
 # FF Copilot ESPN Draft Bridge
 
-This Manifest V3 extension reads ESPN's persistent Pick History DOM and makes
+This Manifest V3 extension reads ESPN's persistent draft-board DOM and makes
 complete, normalized draft snapshots available to an open FF Copilot tab.
 It does not read or transmit ESPN cookies, passwords, or account tokens.
 
@@ -13,8 +13,10 @@ It does not read or transmit ESPN cookies, passwords, or account tokens.
 5. Reload both the ESPN draft room and FF Copilot Draft Room.
 
 Keep the ESPN draft tab open during the draft. The extension observes
-`.pick-history-tables`, polls it every two seconds as a fallback, and sends a
-new complete snapshot whenever the picks change. FF Copilot reconciles repeated
+`.draftBoardGrid__container`, parses every `.completedPick` cell, polls every
+two seconds as a fallback, and sends a complete ordered snapshot whenever the
+board changes. Pick History and ESPN's league API are compatibility fallbacks;
+they never replace a complete board snapshot. FF Copilot reconciles repeated
 snapshots idempotently.
 
 ## Verify the parser

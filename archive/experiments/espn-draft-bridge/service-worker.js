@@ -30,18 +30,19 @@ async function acceptDomSnapshot(payload) {
   session.pageUrl = payload.pageUrl;
   session.lastFrameAt = payload.capturedAt;
   session.transport = "dom";
+  const boardIsComplete = Number(payload.debug?.boardPicks) > 0
+    && Number(payload.debug.boardPicks) === Number(payload.picks?.length || 0);
+  if (boardIsComplete) session.picks = {};
   if (payload.config) {
     session.config = payload.config;
-    if (payload.config.picks?.length) {
-      session.picks = {};
-      for (const pick of payload.config.picks) mergePick(session, pick);
-    }
+    for (const pick of payload.config.picks || []) mergePick(session, pick);
   }
   for (const pick of payload.picks || []) mergePick(session, pick);
   session.diagnostics.unshift({
     capturedAt: payload.capturedAt,
     direction: "dom",
     parsedPicks: payload.picks?.length || 0,
+    ...payload.debug,
   });
   session.diagnostics = session.diagnostics.slice(0, MAX_DIAGNOSTICS);
   await persist(state);
@@ -63,9 +64,7 @@ async function getState(leagueId) {
     : Number.NaN;
   const connected =
     Number.isFinite(lastFrameMs) && Date.now() - lastFrameMs < 15_000;
-  const capturedPicks = session?.config?.picks?.length
-    ? session.config.picks
-    : Object.values(session?.picks || {});
+  const capturedPicks = Object.values(session?.picks || {});
   const teamCount = session?.config?.teams?.length || 0;
   return {
     installed: true,
