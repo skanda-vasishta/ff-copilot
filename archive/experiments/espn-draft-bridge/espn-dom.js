@@ -5,6 +5,12 @@
   let timer = null;
   let lastDigest = "";
   let lastSentAt = 0;
+  let configPromise = null;
+  let configLoadedAt = 0;
+
+  const HISTORY_SELECTOR = ".pick-history-tables";
+  const HEARTBEAT_MS = 10_000;
+  const POLL_MS = 2_000;
 
   function leagueId() {
     const url = new URL(window.location.href);
@@ -12,6 +18,18 @@
   }
 
   async function loadDraftConfig() {
+    if (configPromise && Date.now() - configLoadedAt < 60_000) {
+      return configPromise;
+    }
+    configLoadedAt = Date.now();
+    configPromise = fetchDraftConfig().catch((error) => {
+      configPromise = null;
+      throw error;
+    });
+    return configPromise;
+  }
+
+  async function fetchDraftConfig() {
     const id = leagueId();
     if (!id) return null;
     const url = new URL(`https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${new URL(window.location.href).searchParams.get("seasonId") || new Date().getFullYear()}/segments/0/leagues/${id}`);
@@ -48,7 +66,13 @@
 
   async function scan(force = false) {
     timer = null;
-    const text = document.body?.innerText || "";
+    const history = document.querySelector(HISTORY_SELECTOR);
+    if (!history) return;
+    // ESPN keeps every round table mounted beneath .pick-history-tables even
+    // while the Players or Board tab is selected. Reading this subtree gives
+    // us a complete, ordered snapshot without opening a tab or intercepting
+    // ESPN's private WebSocket protocol.
+    const text = history.innerText || history.textContent || "";
     const capturedAt = new Date().toISOString();
     const picks = window.FFCopilotEspnDomParser.parsePickHistory(
       text,
@@ -57,7 +81,7 @@
     const digest = picks
       .map((pick) => `${pick.roundId}:${pick.roundPickNumber}:${pick.playerName}`)
       .join("|");
-    if (!force && digest === lastDigest && Date.now() - lastSentAt < 2500) return;
+    if (!force && digest === lastDigest && Date.now() - lastSentAt < HEARTBEAT_MS) return;
     lastDigest = digest;
     lastSentAt = Date.now();
     const config = await loadDraftConfig().catch(() => null);
@@ -74,15 +98,9 @@
   }
 
   async function scanFullHistory() {
-    const candidates = Array.from(document.querySelectorAll('[role="tab"], button, a'));
-    const history = candidates.find((node) => node.textContent?.trim() === "Pick History");
-    const players = candidates.find((node) => node.textContent?.trim() === "Players");
-    if (history) {
-      history.click();
-      await new Promise((resolve) => window.setTimeout(resolve, 350));
-    }
+    // The history subtree is persistent, so a refresh never needs to alter the
+    // user's selected ESPN tab.
     await scan(true);
-    if (players) players.click();
   }
 
   function schedule() {
@@ -96,16 +114,31 @@
     return true;
   });
 
+  let observedHistory = null;
   const observer = new MutationObserver(schedule);
-  function start() {
-    if (!document.body) return window.setTimeout(start, 50);
-    observer.observe(document.body, {
+  const mountObserver = new MutationObserver(() => observeHistory());
+
+  function observeHistory() {
+    const history = document.querySelector(HISTORY_SELECTOR);
+    if (!history || history === observedHistory) return;
+    observer.disconnect();
+    observedHistory = history;
+    observer.observe(history, {
       childList: true,
       characterData: true,
       subtree: true,
     });
-    scan();
-    window.setInterval(scan, 3000);
+    scan(true);
+  }
+
+  function start() {
+    if (!document.body) return window.setTimeout(start, 50);
+    mountObserver.observe(document.body, { childList: true, subtree: true });
+    observeHistory();
+    window.setInterval(() => {
+      observeHistory();
+      scan();
+    }, POLL_MS);
   }
   start();
 })();

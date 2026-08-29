@@ -1,19 +1,8 @@
-importScripts("parser.js");
-
 const STORAGE_KEY = "ffCopilotEspnDraftState";
 const MAX_DIAGNOSTICS = 20;
 let statePromise = chrome.storage.local
   .get(STORAGE_KEY)
   .then((result) => result[STORAGE_KEY] || { sessions: {} });
-
-function leagueIdFromUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.searchParams.get("leagueId") || url.searchParams.get("league_id");
-  } catch {
-    return null;
-  }
-}
 
 async function persist(state) {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
@@ -55,58 +44,6 @@ async function acceptDomSnapshot(payload) {
     parsedPicks: payload.picks?.length || 0,
   });
   session.diagnostics = session.diagnostics.slice(0, MAX_DIAGNOSTICS);
-  await persist(state);
-}
-
-async function acceptFrame(payload) {
-  const state = await statePromise;
-  const parsed = self.FFCopilotEspnParser.parseFrame(
-    payload.frame,
-    payload.capturedAt,
-  );
-  const urlLeagueId = leagueIdFromUrl(payload.pageUrl);
-  const leagueIds = parsed.leagueIds.length
-    ? parsed.leagueIds
-    : urlLeagueId
-      ? [urlLeagueId]
-      : ["unknown"];
-
-  for (const leagueId of leagueIds) {
-    const session = (state.sessions[leagueId] ||= {
-      leagueId: leagueId === "unknown" ? null : leagueId,
-      picks: {},
-      diagnostics: [],
-      connected: true,
-    });
-    session.connected = true;
-    session.pageUrl = payload.pageUrl;
-    session.socketUrl = payload.socketUrl;
-    session.lastFrameAt = payload.capturedAt;
-    session.transport = "websocket";
-    session.diagnostics.unshift({
-      capturedAt: payload.capturedAt,
-      direction: payload.direction,
-      length: payload.frame.length,
-      parsedPicks: parsed.picks.length,
-    });
-    session.diagnostics = session.diagnostics.slice(0, MAX_DIAGNOSTICS);
-    for (const pick of parsed.picks) mergePick(session, pick);
-    for (const event of parsed.events || []) {
-      if (event.type === "selected") {
-        const existing = Object.values(session.picks).find(
-          (pick) => pick.playerId === event.playerId,
-        );
-        // SELECTED lacks a reliable overall pick number. The authenticated
-        // draft-detail poll supplies the authoritative pick on the next scan.
-        if (existing) mergePick(session, existing);
-      } else if (event.type === "undone") {
-        delete session.picks[`overall:${event.overallPickNumber}`];
-      } else if (event.type === "selecting") {
-        session.onTheClockTeamId = event.teamId;
-        session.timeToPick = event.timeToPick;
-      }
-    }
-  }
   await persist(state);
 }
 
@@ -153,10 +90,6 @@ async function getState(leagueId) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "FF_COPILOT_ESPN_FRAME") {
-    acceptFrame(message.payload).catch(() => undefined);
-    return;
-  }
   if (message?.type === "FF_COPILOT_ESPN_DOM_SNAPSHOT") {
     acceptDomSnapshot(message.payload).catch(() => undefined);
     return;

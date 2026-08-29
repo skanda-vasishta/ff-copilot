@@ -1,8 +1,7 @@
 # FF Copilot ESPN Draft Bridge
 
-This Manifest V3 extension captures the ESPN draft room's incoming WebSocket
-frames and reconciles them against its visible Pick History. Normalized draft
-picks are then made available to an open FF Copilot tab.
+This Manifest V3 extension reads ESPN's persistent Pick History DOM and makes
+complete, normalized draft snapshots available to an open FF Copilot tab.
 It does not read or transmit ESPN cookies, passwords, or account tokens.
 
 ## Install
@@ -11,11 +10,12 @@ It does not read or transmit ESPN cookies, passwords, or account tokens.
 2. Open `chrome://extensions` in Chrome.
 3. Enable **Developer mode**.
 4. Choose **Load unpacked** and select the unzipped folder.
-5. Reload both the ESPN draft room and FF Copilot Draft Room. The ESPN tab must
-   be reloaded because interception starts at `document_start`.
+5. Reload both the ESPN draft room and FF Copilot Draft Room.
 
-Keep the ESPN draft tab open during the draft. FF Copilot requests the latest
-captured board once per second and merges it over ESPN's public league snapshot.
+Keep the ESPN draft tab open during the draft. The extension observes
+`.pick-history-tables`, polls it every two seconds as a fallback, and sends a
+new complete snapshot whenever the picks change. FF Copilot reconciles repeated
+snapshots idempotently.
 
 ## Verify the parser
 
@@ -23,8 +23,5 @@ captured board once per second and merges it over ESPN's public league snapshot.
 node parser.test.cjs
 ```
 
-ESPN's protocol is undocumented. The bridge understands the current 2026
-`SELECTED`, `SELECTING`, and `UNDONE` messages, while visible Pick History remains
-the authoritative fallback. Recent diagnostics remain inside `chrome.storage.local`
-to make upstream message-shape changes diagnosable; raw frame contents are not
-retained.
+Recent diagnostics remain inside `chrome.storage.local` to make upstream DOM
+changes diagnosable. No ESPN WebSocket frames are intercepted or retained.
