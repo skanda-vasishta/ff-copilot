@@ -5,7 +5,6 @@
   let timer = null;
   let lastDigest = "";
   let lastSentAt = 0;
-  let configLoaded = false;
 
   function leagueId() {
     const url = new URL(window.location.href);
@@ -13,7 +12,6 @@
   }
 
   async function loadDraftConfig() {
-    if (configLoaded) return null;
     const id = leagueId();
     if (!id) return null;
     const url = new URL(`/apis/v3/games/ffl/seasons/${new URL(window.location.href).searchParams.get("seasonId") || new Date().getFullYear()}/segments/0/leagues/${id}`, window.location.origin);
@@ -21,7 +19,6 @@
     const response = await fetch(url, { credentials: "include", cache: "no-store" });
     if (!response.ok) return null;
     const data = await response.json();
-    configLoaded = true;
     return {
       leagueId: String(data.id || id),
       seasonId: data.seasonId,
@@ -36,6 +33,16 @@
         name: team.name || [team.location, team.nickname].filter(Boolean).join(" ") || `Team ${team.id}`,
         abbrev: team.abbrev || null,
       })),
+      picks: (data.draftDetail?.picks || [])
+        .filter((pick) => pick.playerId && (pick.overallPickNumber || pick.id))
+        .map((pick) => ({
+          overallPickNumber: pick.overallPickNumber || pick.id,
+          roundId: pick.roundId || null,
+          roundPickNumber: pick.roundPickNumber || null,
+          teamId: pick.teamId || null,
+          playerId: pick.playerId,
+          capturedAt: new Date().toISOString(),
+        })),
     };
   }
 

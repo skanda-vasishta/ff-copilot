@@ -41,7 +41,11 @@ async function acceptDomSnapshot(payload) {
   session.pageUrl = payload.pageUrl;
   session.lastFrameAt = payload.capturedAt;
   session.transport = "dom";
-  if (payload.config) session.config = payload.config;
+  if (payload.config) {
+    session.config = payload.config;
+    session.picks = {};
+    for (const pick of payload.config.picks || []) mergePick(session, pick);
+  }
   for (const pick of payload.picks || []) mergePick(session, pick);
   session.diagnostics.unshift({
     capturedAt: payload.capturedAt,
@@ -90,15 +94,9 @@ async function acceptFrame(payload) {
         const existing = Object.values(session.picks).find(
           (pick) => pick.playerId === event.playerId,
         );
-        if (!existing) {
-          const used = Object.values(session.picks)
-            .map((pick) => Number(pick.overallPickNumber))
-            .filter((pick) => Number.isFinite(pick) && pick > 0);
-          mergePick(session, {
-            ...event,
-            overallPickNumber: used.length ? Math.max(...used) + 1 : 1,
-          });
-        }
+        // SELECTED lacks a reliable overall pick number. The authenticated
+        // draft-detail poll supplies the authoritative pick on the next scan.
+        if (existing) mergePick(session, existing);
       } else if (event.type === "undone") {
         delete session.picks[`overall:${event.overallPickNumber}`];
       } else if (event.type === "selecting") {

@@ -255,10 +255,13 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
           importedPicks.current.add(pick.overallPickNumber)
         }
         setBridgeError('')
-        onChanged()
       } catch (cause) {
-        setBridgeError(cause instanceof Error ? cause.message : 'Could not import ESPN picks')
-      } finally { bridgeSyncing.current = false }
+        const message = cause instanceof Error ? cause.message : typeof cause === 'object' && cause && 'message' in cause ? String(cause.message) : 'Could not import ESPN picks'
+        setBridgeError(message)
+      } finally {
+        bridgeSyncing.current = false
+        onChanged()
+      }
     })()
   }, [bridgeState, onChanged, pool.data?.items, session.id, session.revision, state.picks])
   function connectBridge() {
