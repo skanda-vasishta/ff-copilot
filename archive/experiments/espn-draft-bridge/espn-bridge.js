@@ -11,8 +11,14 @@ window.addEventListener("ff-copilot:espn-ws-frame", (event) => {
   } catch {
     return;
   }
-  chrome.runtime.sendMessage({
-    type: "FF_COPILOT_ESPN_FRAME",
-    payload: detail,
-  });
+  try {
+    const request = chrome.runtime.sendMessage({
+      type: "FF_COPILOT_ESPN_FRAME",
+      payload: detail,
+    });
+    request?.catch?.(() => undefined);
+  } catch {
+    // Reloading an unpacked extension invalidates content scripts that were
+    // already injected. The ESPN tab reload installs a fresh bridge.
+  }
 });
