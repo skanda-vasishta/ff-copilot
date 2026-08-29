@@ -41,6 +41,7 @@ async function acceptDomSnapshot(payload) {
   session.pageUrl = payload.pageUrl;
   session.lastFrameAt = payload.capturedAt;
   session.transport = "dom";
+  if (payload.config) session.config = payload.config;
   for (const pick of payload.picks || []) mergePick(session, pick);
   session.diagnostics.unshift({
     capturedAt: payload.capturedAt,
@@ -139,6 +140,7 @@ async function getState(leagueId) {
     diagnostics: session?.diagnostics || [],
     onTheClockTeamId: session?.onTheClockTeamId || null,
     timeToPick: session?.timeToPick || null,
+    config: session?.config || null,
   };
 }
 
