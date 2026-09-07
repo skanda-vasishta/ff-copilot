@@ -269,13 +269,25 @@ def sync_sleeper_global(db: SupabaseAdmin, season: int, week: int | None, run: R
         "player_external_ids", {"provider": "eq.sleeper", "select": "external_id,player_id"})}
     espn_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
         "player_external_ids", {"provider": "eq.espn", "select": "external_id,player_id"})}
+    # Sleeper frequently omits espn_id even for established players. Prefer the
+    # existing ESPN-backed player with the same normalized name and position so
+    # projections and ADP land on the profile users already see.
+    espn_player_ids = set(espn_ids.values())
+    canonical_by_name_position = {
+        (normalize_player_name(row["name"]), row.get("position")): row["id"]
+        for row in db.select_all("players", {"select": "id,name,position"})
+        if row["id"] in espn_player_ids
+    }
     resolved: dict[str, str] = {}
     player_rows, id_rows = [], []
     for external_id, player in candidates.items():
-        player_id = sleeper_ids.get(external_id) or espn_ids.get(str(player.get("espn_id"))) or str(uuid.uuid4())
+        canonical_id = espn_ids.get(str(player.get("espn_id"))) or canonical_by_name_position.get(
+            (normalize_player_name(player.get("full_name") or player.get("search_full_name") or ""), player.get("position"))
+        )
+        player_id = canonical_id or sleeper_ids.get(external_id) or str(uuid.uuid4())
         resolved[external_id] = player_id
         player_rows.append({"id": player_id, **sleeper_player_payload({**player, "player_id": external_id})})
-        if external_id not in sleeper_ids:
+        if sleeper_ids.get(external_id) != player_id:
             id_rows.append({"player_id": player_id, "provider": "sleeper", "external_id": external_id})
     for batch in chunks(player_rows):
         db.upsert("players", batch, "id")
