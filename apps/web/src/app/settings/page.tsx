@@ -10,6 +10,7 @@ type League = { id: string; name: string | null; provider: 'espn' | 'sleeper'; e
 type LinkedLeague = { state: 'available' | 'being_prepared'; league: League }
 type LeagueTeam = { id: string; name: string; league_id: string }
 type WorkspaceTeam = { created_at: string; team: LeagueTeam & { league: League } }
+type ConnectResult = { state: 'available' | 'being_prepared'; league?: League }
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -18,6 +19,8 @@ export default function SettingsPage() {
   const [externalId, setExternalId] = useState('')
   const [provider, setProvider] = useState<'espn' | 'sleeper'>('espn')
   const [season, setSeason] = useState(2026)
+  const [connectMessage, setConnectMessage] = useState<string | null>(null)
+  const [slowConnect, setSlowConnect] = useState(false)
 
   const leagues = useQuery({ queryKey: ['my-leagues'], queryFn: () => api<LinkedLeague[]>('/v1/me/leagues') })
   const workspaceTeams = useQuery({ queryKey: ['my-teams'], queryFn: () => api<WorkspaceTeam[]>('/v1/me/teams') })
@@ -29,9 +32,23 @@ export default function SettingsPage() {
   const addedIds = new Set(workspaceTeams.data?.map(({ team }) => team.id))
 
   const connect = useMutation({
-    mutationFn: () => api<{ state: string }>('/v1/me/leagues', { method: 'POST', body: JSON.stringify({ provider, external_id: externalId.trim(), season }) }),
-    onSuccess: () => { setExternalId(''); queryClient.invalidateQueries({ queryKey: ['my-leagues'] }) },
+    mutationFn: () => api<ConnectResult>('/v1/me/leagues', { method: 'POST', body: JSON.stringify({ provider, external_id: externalId.trim(), season }) }),
+    onMutate: () => { setConnectMessage(null); setSlowConnect(false) },
+    onSuccess: async (result) => {
+      setExternalId('')
+      if (result.league) setLeagueId(result.league.id)
+      setConnectMessage(result.state === 'available'
+        ? `${result.league?.name || provider.toUpperCase() + ' league'} connected. Choose your team below.`
+        : 'League accepted and is being imported. Teams will appear here automatically.')
+      await queryClient.invalidateQueries({ queryKey: ['my-leagues'] })
+    },
+    onSettled: () => setSlowConnect(false),
   })
+  useEffect(() => {
+    if (!connect.isPending) return
+    const timer = window.setTimeout(() => setSlowConnect(true), 8000)
+    return () => window.clearTimeout(timer)
+  }, [connect.isPending])
   const addTeam = useMutation({
     mutationFn: (teamId: string) => api('/v1/me/teams', { method: 'POST', body: JSON.stringify({ team_id: teamId }) }),
     onSuccess: async (_, teamId) => {
@@ -75,7 +92,7 @@ export default function SettingsPage() {
 
       <form onSubmit={submit} className="self-start rounded-[11px] border border-white/[.075] bg-[#10120f]/85 p-5">
         <h2 className="text-[14px] font-semibold text-[#eef1e9]">Connect a fantasy league</h2>
-        <p className="mt-1 text-[11px] leading-5 text-[#737b70]">Public league data is imported by league ID and season.</p>
+        <p className="mt-1 text-[11px] leading-5 text-[#737b70]">Select the platform, paste its league ID, and choose the matching season. Public leagues connect without a password.</p>
         <label className="mt-5 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">Platform</label>
         <select value={provider} onChange={(event) => setProvider(event.target.value as 'espn' | 'sleeper')} className="focus-ring mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-[#090a08] px-3 text-xs text-white"><option value="espn">ESPN</option><option value="sleeper">Sleeper</option></select>
         <label className="mt-4 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">League ID</label>
@@ -83,7 +100,9 @@ export default function SettingsPage() {
         <label className="mt-4 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">Season</label>
         <input required type="number" min="2020" max="2100" value={season} onChange={(event) => setSeason(Number(event.target.value))} className="focus-ring mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-[#090a08] px-3 text-xs text-white" />
         {connect.error && <p className="mt-3 text-[11px] text-red-300">{connect.error.message}</p>}
-        <button disabled={connect.isPending} className="focus-ring mt-4 h-9 w-full rounded-[6px] bg-[#c9f958] px-3 text-xs font-semibold text-[#12170b] transition hover:bg-[#d7ff78] disabled:opacity-50">{connect.isPending ? 'Connecting…' : 'Connect league'}</button>
+        {connectMessage && <p role="status" className="mt-3 rounded-[6px] border border-[#c9f958]/15 bg-[#c9f958]/5 px-3 py-2 text-[11px] leading-5 text-[#b9d982]">{connectMessage}</p>}
+        <button disabled={connect.isPending} className="focus-ring mt-4 h-9 w-full rounded-[6px] bg-[#c9f958] px-3 text-xs font-semibold text-[#12170b] transition hover:bg-[#d7ff78] disabled:opacity-50">{connect.isPending ? (slowConnect ? 'Still connecting — please keep this page open…' : `Connecting ${provider === 'sleeper' ? 'Sleeper' : 'ESPN'} league…`) : 'Connect league'}</button>
+        {connect.isPending && <p className="mt-2 text-center text-[10px] leading-4 text-[#737b70]">We’re checking the league and linking its teams. This normally takes a few seconds.</p>}
       </form>
     </div>
 
