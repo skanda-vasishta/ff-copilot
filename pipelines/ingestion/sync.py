@@ -598,10 +598,17 @@ def sync_global(args):
             "provider": "eq.espn", "select": "external_id,player_id", "limit": 1000
         })
         existing = {row["external_id"]: row["player_id"] for row in external_rows}
+        identity_rows = db.select_all("players", {"select": "id,name,position"})
+        identity_groups: dict[tuple[str, str | None], list[str]] = {}
+        for row in identity_rows:
+            identity_groups.setdefault((normalize_player_name(row["name"]), row.get("position")), []).append(row["id"])
+        unique_identity = {key: ids[0] for key, ids in identity_groups.items() if len(ids) == 1}
         player_rows, id_rows, snapshots, rankings = [], [], [], []
         resolved: dict[str, str] = {}
         for external_id, player in unique.items():
-            player_id = existing.get(external_id, str(uuid.uuid4()))
+            player_id = existing.get(external_id) or unique_identity.get(
+                (normalize_player_name(player.name), getattr(player, "position", None))
+            ) or str(uuid.uuid4())
             resolved[external_id] = player_id
             player_rows.append({"id": player_id, **player_payload(player)})
             id_rows.append({"player_id": player_id, "provider": "espn", "external_id": external_id})
