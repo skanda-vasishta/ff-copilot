@@ -267,6 +267,7 @@ def sync_sleeper_global(db: SupabaseAdmin, season: int, week: int | None, run: R
     }
     sleeper_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
         "player_external_ids", {"provider": "eq.sleeper", "select": "external_id,player_id"})}
+    sleeper_id_by_player = {player_id: external_id for external_id, player_id in sleeper_ids.items()}
     espn_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
         "player_external_ids", {"provider": "eq.espn", "select": "external_id,player_id"})}
     # Sleeper frequently omits espn_id even for established players. Prefer the
@@ -287,7 +288,11 @@ def sync_sleeper_global(db: SupabaseAdmin, season: int, week: int | None, run: R
         player_id = canonical_id or sleeper_ids.get(external_id) or str(uuid.uuid4())
         resolved[external_id] = player_id
         player_rows.append({"id": player_id, **sleeper_player_payload({**player, "player_id": external_id})})
-        if sleeper_ids.get(external_id) != player_id:
+        # A small number of providers expose multiple IDs for the same player.
+        # Keep the canonical player's existing Sleeper alias rather than letting
+        # one conflicting row abort the entire reconciliation batch.
+        canonical_sleeper_id = sleeper_id_by_player.get(player_id)
+        if sleeper_ids.get(external_id) != player_id and canonical_sleeper_id in (None, external_id):
             id_rows.append({"player_id": player_id, "provider": "sleeper", "external_id": external_id})
     for batch in chunks(player_rows):
         db.upsert("players", batch, "id")
