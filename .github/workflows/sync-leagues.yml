@@ -12,8 +12,13 @@ on:
         description: Optional week
         required: false
       league_id:
-        description: ESPN league ID; leave blank to process pending requests
+        description: ESPN or Sleeper league ID; leave blank to process pending requests
         required: false
+      provider:
+        description: League provider for a manual league ID
+        type: choice
+        options: [espn, sleeper]
+        default: espn
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -32,6 +37,7 @@ jobs:
           SEASON: ${{ inputs.season || '2026' }}
           WEEK: ${{ inputs.week }}
           LEAGUE_ID: ${{ inputs.league_id }}
+          PROVIDER: ${{ inputs.provider || 'espn' }}
         run: |
           if [ "$EVENT_NAME" = "schedule" ]; then
             python -m pipelines.ingestion.sync sync-league --season "$SEASON" --all-linked
@@ -40,5 +46,5 @@ jobs:
           fi
           args=(sync-league --season "$SEASON")
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
-          if [ -n "$LEAGUE_ID" ]; then args+=(--league-id "$LEAGUE_ID"); else args+=(--pending); fi
+          if [ -n "$LEAGUE_ID" ]; then args+=(--provider "$PROVIDER" --league-id "$LEAGUE_ID"); else args+=(--pending); fi
           python -m pipelines.ingestion.sync "${args[@]}"

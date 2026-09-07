@@ -73,6 +73,19 @@ def test_league_parser_supports_full_history_backfill():
     assert args.history is True
 
 
+def test_cli_supports_sleeper_league_and_global_data():
+    league_args = parser().parse_args([
+        "sync-league", "--provider", "sleeper", "--season", "2026",
+        "--league-id", "123456789", "--history",
+    ])
+    global_args = parser().parse_args([
+        "sync-global", "--season", "2026", "--league-id", "123", "--sleeper",
+    ])
+    assert league_args.provider == "sleeper"
+    assert league_args.history is True
+    assert global_args.sleeper is True
+
+
 def test_batches_are_stable():
     assert list(chunks(list(range(5)), 2)) == [[0, 1], [2, 3], [4]]
 

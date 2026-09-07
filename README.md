@@ -1,6 +1,6 @@
 # FF Copilot
 
-An authenticated fantasy-football workspace and in-season assistant grounded in ESPN, FantasyPros, and Reddit data.
+An authenticated fantasy-football workspace and in-season assistant grounded in ESPN, Sleeper, FantasyPros, and Reddit data.
 
 ## Repository map
 
@@ -42,10 +42,13 @@ npm --prefix apps/web run build
 python -m pytest services/api/test_main.py pipelines/ingestion/test_sync.py -q
 
 # Current global facts and raw source documents
-python -m pipelines.ingestion.sync sync-global --season 2026 --league-id ESPN_LEAGUE_ID --sources
+python -m pipelines.ingestion.sync sync-global --season 2026 --league-id ESPN_LEAGUE_ID --sleeper --sources
 
-# All stored ESPN leagues
+# All stored ESPN and Sleeper leagues
 python -m pipelines.ingestion.sync sync-league --season 2026 --all-linked
+
+# One Sleeper league (the league ID is season-specific)
+python -m pipelines.ingestion.sync sync-league --provider sleeper --season 2026 --league-id SLEEPER_LEAGUE_ID --history
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for request flows, ownership boundaries, and extension points.

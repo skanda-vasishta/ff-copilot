@@ -6,7 +6,7 @@ import { api } from '@/lib/api'
 import { useActiveScope } from '@/lib/scope'
 import { createClient } from '@/lib/supabase/client'
 
-type League = { id: string; name: string | null; external_id: string; season: number; last_synced_at: string | null }
+type League = { id: string; name: string | null; provider: 'espn' | 'sleeper'; external_id: string; season: number; last_synced_at: string | null }
 type LinkedLeague = { state: 'available' | 'being_prepared'; league: League }
 type LeagueTeam = { id: string; name: string; league_id: string }
 type WorkspaceTeam = { created_at: string; team: LeagueTeam & { league: League } }
@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const { scope, setTeam } = useActiveScope()
   const [leagueId, setLeagueId] = useState('')
   const [externalId, setExternalId] = useState('')
+  const [provider, setProvider] = useState<'espn' | 'sleeper'>('espn')
   const [season, setSeason] = useState(2026)
 
   const leagues = useQuery({ queryKey: ['my-leagues'], queryFn: () => api<LinkedLeague[]>('/v1/me/leagues') })
@@ -28,7 +29,7 @@ export default function SettingsPage() {
   const addedIds = new Set(workspaceTeams.data?.map(({ team }) => team.id))
 
   const connect = useMutation({
-    mutationFn: () => api<{ state: string }>('/v1/me/leagues', { method: 'POST', body: JSON.stringify({ provider: 'espn', external_id: externalId.trim(), season }) }),
+    mutationFn: () => api<{ state: string }>('/v1/me/leagues', { method: 'POST', body: JSON.stringify({ provider, external_id: externalId.trim(), season }) }),
     onSuccess: () => { setExternalId(''); queryClient.invalidateQueries({ queryKey: ['my-leagues'] }) },
   })
   const addTeam = useMutation({
@@ -49,7 +50,7 @@ export default function SettingsPage() {
     <div className="max-w-xl">
       <p className="text-[9px] font-semibold uppercase tracking-[.18em] text-[#91b944]">Settings</p>
       <h1 className="mt-2 text-[26px] font-semibold tracking-[-.035em] text-[#f1f3ed]">Teams and leagues</h1>
-      <p className="mt-2 text-[13px] leading-6 text-[#81897c]">Add ESPN leagues and choose which teams belong in your workspace. Switch between added teams from the header.</p>
+      <p className="mt-2 text-[13px] leading-6 text-[#81897c]">Add ESPN or Sleeper leagues and choose which teams belong in your workspace. Switch between added teams from the header.</p>
     </div>
 
     <div className="mt-9 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
@@ -64,7 +65,7 @@ export default function SettingsPage() {
             const active = scope?.team.id === team.id
             return <div key={team.id} className="flex items-center gap-3 px-5 py-3.5">
               <span className={`grid size-8 shrink-0 place-items-center rounded-[6px] border text-[10px] font-bold ${active ? 'border-[#c9f958]/25 bg-[#c9f958]/10 text-[#c9f958]' : 'border-white/[.075] text-[#798173]'}`}>{team.name.slice(0, 2).toUpperCase()}</span>
-              <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-medium text-[#e4e7df]">{team.name}</p><p className="mt-0.5 truncate text-[10px] text-[#697166]">{team.league.name || `ESPN ${team.league.external_id}`} · {team.league.season}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-medium text-[#e4e7df]">{team.name}</p><p className="mt-0.5 truncate text-[10px] text-[#697166]">{team.league.name || `${team.league.provider.toUpperCase()} ${team.league.external_id}`} · {team.league.provider} · {team.league.season}</p></div>
               {active ? <span className="text-[9px] font-semibold uppercase tracking-[.12em] text-[#a8d94c]">Active</span> : <button type="button" onClick={() => removeTeam.mutate(team.id)} disabled={removeTeam.isPending} className="focus-ring rounded-[6px] px-2 py-1.5 text-[10px] text-[#737b70] hover:bg-white/[.04] hover:text-red-200 disabled:opacity-40">Remove</button>}
             </div>
           })}
@@ -73,9 +74,11 @@ export default function SettingsPage() {
       </section>
 
       <form onSubmit={submit} className="self-start rounded-[11px] border border-white/[.075] bg-[#10120f]/85 p-5">
-        <h2 className="text-[14px] font-semibold text-[#eef1e9]">Connect an ESPN league</h2>
+        <h2 className="text-[14px] font-semibold text-[#eef1e9]">Connect a fantasy league</h2>
         <p className="mt-1 text-[11px] leading-5 text-[#737b70]">Public league data is imported by league ID and season.</p>
-        <label className="mt-5 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">League ID</label>
+        <label className="mt-5 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">Platform</label>
+        <select value={provider} onChange={(event) => setProvider(event.target.value as 'espn' | 'sleeper')} className="focus-ring mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-[#090a08] px-3 text-xs text-white"><option value="espn">ESPN</option><option value="sleeper">Sleeper</option></select>
+        <label className="mt-4 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">League ID</label>
         <input required inputMode="numeric" value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="e.g. 1232540066" className="focus-ring mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-[#090a08] px-3 text-xs text-white placeholder:text-[#4f554c]" />
         <label className="mt-4 block text-[9px] font-semibold uppercase tracking-[.14em] text-[#687063]">Season</label>
         <input required type="number" min="2020" max="2100" value={season} onChange={(event) => setSeason(Number(event.target.value))} className="focus-ring mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-[#090a08] px-3 text-xs text-white" />
@@ -89,7 +92,7 @@ export default function SettingsPage() {
         <div><h2 className="text-[14px] font-semibold text-[#eef1e9]">Add a team</h2><p className="mt-1 text-[11px] text-[#737b70]">Choose a connected league, then add one or more teams.</p></div>
         <select value={leagueId} onChange={(event) => setLeagueId(event.target.value)} className="focus-ring h-8 min-w-56 rounded-[6px] border border-white/[.08] bg-[#090a08] px-2.5 text-[11px] text-[#c5cbc0]">
           {!availableLeagues.length && <option value="">No connected leagues</option>}
-          {availableLeagues.map(({ league }) => <option key={league.id} value={league.id}>{league.name || `ESPN ${league.external_id}`} · {league.season}</option>)}
+          {availableLeagues.map(({ league }) => <option key={league.id} value={league.id}>{league.name || `${league.provider.toUpperCase()} ${league.external_id}`} · {league.provider} · {league.season}</option>)}
         </select>
       </div>
       <div className="grid gap-px bg-white/[.055] sm:grid-cols-2 lg:grid-cols-3">

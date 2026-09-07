@@ -19,7 +19,7 @@ export async function renameDraftSession(id: string, name: string) {
   return data as DraftSession
 }
 
-export async function createDraftSession(input: { leagueId: string; selectedTeamId: string; season: number; name: string; draftType: 'snake' | 'linear'; teamOrder: string[]; roundCount: number; source?: 'manual' | 'espn_live'; externalLeagueId?: string; externalTeamId?: string; participants?: Array<{ id: string; externalTeamId: string; name: string; abbreviation?: string | null; draftPosition: number; isUser: boolean }> }) {
+export async function createDraftSession(input: { leagueId: string; selectedTeamId: string; season: number; name: string; draftType: 'snake' | 'linear'; teamOrder: string[]; roundCount: number; source?: 'manual' | 'espn_live' | 'sleeper_live'; externalLeagueId?: string; externalTeamId?: string; participants?: Array<{ id: string; externalTeamId: string; name: string; abbreviation?: string | null; draftPosition: number; isUser: boolean }> }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('You must sign in')

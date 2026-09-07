@@ -9,11 +9,13 @@ export type ActiveScope = {
   team: {
     id: string;
     name: string;
+    external_id: string;
     league_id: string;
     league: {
       id: string;
       name: string | null;
       external_id: string;
+      provider: "espn" | "sleeper";
       season: number;
       scoring_format_label: string | null;
       last_synced_at: string | null;
@@ -37,7 +39,7 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
       const { data: { user } } = await createClient().auth.getUser();
       if (!user) return null;
       const { data, error } = await createClient().from("user_active_scopes")
-        .select("team:fantasy_teams(id,name,league_id,league:leagues(id,name,external_id,season,scoring_format_label,last_synced_at))")
+        .select("team:fantasy_teams(id,name,external_id,league_id,league:leagues(id,name,external_id,provider,season,scoring_format_label,last_synced_at))")
         .eq("user_id", user.id).maybeSingle();
       if (error) throw error;
       return data as unknown as ActiveScope | null;
@@ -62,4 +64,3 @@ export function useActiveScope() {
   if (!value) throw new Error("useActiveScope must be used inside ScopeProvider");
   return value;
 }
-

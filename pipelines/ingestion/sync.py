@@ -7,6 +7,7 @@ import re
 import sys
 import time
 import uuid
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ FFTODAY_POSITION_IDS = {"QB": 10, "RB": 20, "WR": 30, "TE": 40}
 FFTODAY_PPR_LEAGUE_ID = 107644
 FFTODAY_PROJECTIONS_URL = "https://www.fftoday.com/rankings/playerproj.php"
 FANTASYPROS_PPR_RANKINGS_URL = "https://www.fantasypros.com/nfl/rankings/ppr-cheatsheets.php"
+SLEEPER_API_URL = "https://api.sleeper.app/v1"
 
 
 def now() -> str:
@@ -102,6 +104,14 @@ class SupabaseAdmin:
         params["select"] = "*"
         return self.request("GET", table, params=params)
 
+    def select_all(self, table: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = self.request("GET", table, params={**params, "limit": 1000, "offset": len(rows)})
+            rows.extend(page)
+            if len(page) < 1000:
+                return rows
+
     def patch(self, table: str, filters: dict[str, Any], data: dict):
         return self.request("PATCH", table, params={key: f"eq.{value}" for key, value in filters.items()}, data=data,
                             prefer="return=representation")
@@ -129,6 +139,7 @@ class Run:
     season: int
     week: int | None = None
     request_id: str | None = None
+    provider: str = "espn"
     id: str | None = None
     read: int = 0
     written: int = 0
@@ -136,7 +147,7 @@ class Run:
 
     def __enter__(self):
         self.id = self.db.insert("sync_runs", {"request_id": self.request_id, "kind": self.kind,
-            "provider": "espn", "season": self.season, "week": self.week, "status": "running"})[0]["id"]
+            "provider": self.provider, "season": self.season, "week": self.week, "status": "running"})[0]["id"]
         if self.request_id:
             self.db.patch("sync_requests", {"id": self.request_id}, {"status": "running"})
         return self
@@ -203,6 +214,120 @@ def resolve_player(db: SupabaseAdmin, external_id: str, payload: dict[str, Any])
     player_id = db.insert("players", payload)[0]["id"]
     db.insert("player_external_ids", {"player_id": player_id, "provider": "espn", "external_id": external_id})
     return player_id
+
+
+def sleeper_get(path: str) -> Any:
+    response = httpx.get(f"{SLEEPER_API_URL}/{path.lstrip('/')}", timeout=45, follow_redirects=True)
+    response.raise_for_status()
+    return response.json()
+
+
+@lru_cache(maxsize=1)
+def sleeper_players() -> dict[str, dict[str, Any]]:
+    return sleeper_get("players/nfl")
+
+
+def sleeper_player_payload(player: dict[str, Any]) -> dict[str, Any]:
+    name = player.get("full_name") or " ".join(filter(None, (player.get("first_name"), player.get("last_name"))))
+    return {
+        "name": name or f"Sleeper player {player.get('player_id', 'unknown')}",
+        "position": player.get("position"), "nfl_team": player.get("team"),
+        "active": bool(player.get("active", True)), "updated_at": now(),
+    }
+
+
+def resolve_sleeper_player(db: SupabaseAdmin, external_id: str, player: dict[str, Any]) -> str:
+    rows = db.select("player_external_ids", provider="sleeper", external_id=external_id)
+    if rows:
+        db.patch("players", {"id": rows[0]["player_id"]}, {
+            key: value for key, value in sleeper_player_payload(player).items() if value is not None
+        })
+        return rows[0]["player_id"]
+    espn_id = player.get("espn_id")
+    espn_rows = db.select("player_external_ids", provider="espn", external_id=str(espn_id)) if espn_id else []
+    if espn_rows:
+        player_id = espn_rows[0]["player_id"]
+    else:
+        player_id = db.insert("players", sleeper_player_payload(player))[0]["id"]
+    # A player may already have a stale Sleeper alias. Only insert when this
+    # provider is not mapped; the unique player/provider constraint protects identity.
+    existing_for_player = db.select("player_external_ids", player_id=player_id, provider="sleeper")
+    if not existing_for_player:
+        db.insert("player_external_ids", {"player_id": player_id, "provider": "sleeper", "external_id": external_id})
+    return player_id
+
+
+def sync_sleeper_global(db: SupabaseAdmin, season: int, week: int | None, run: Run, fetched_at: str):
+    players = sleeper_players()
+    projections = sleeper_get(f"projections/nfl/regular/{season}")
+    stats = sleeper_get(f"stats/nfl/regular/{season}")
+    candidates = {
+        external_id: player for external_id, player in players.items()
+        if player.get("position") in FANTASY_POSITIONS and player.get("active")
+    }
+    sleeper_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
+        "player_external_ids", {"provider": "eq.sleeper", "select": "external_id,player_id"})}
+    espn_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
+        "player_external_ids", {"provider": "eq.espn", "select": "external_id,player_id"})}
+    resolved: dict[str, str] = {}
+    player_rows, id_rows = [], []
+    for external_id, player in candidates.items():
+        player_id = sleeper_ids.get(external_id) or espn_ids.get(str(player.get("espn_id"))) or str(uuid.uuid4())
+        resolved[external_id] = player_id
+        player_rows.append({"id": player_id, **sleeper_player_payload({**player, "player_id": external_id})})
+        if external_id not in sleeper_ids:
+            id_rows.append({"player_id": player_id, "provider": "sleeper", "external_id": external_id})
+    for batch in chunks(player_rows):
+        db.upsert("players", batch, "id")
+    for batch in chunks(id_rows):
+        db.upsert("player_external_ids", batch, "provider,external_id")
+    ranked = sorted(
+        ((external_id, clean_number(projections.get(external_id, {}).get("adp_ppr"))) for external_id in resolved),
+        key=lambda item: float(item[1] if item[1] is not None else 10000),
+    )
+    position_counters: dict[str, int] = {}
+    position_ranks: dict[str, int] = {}
+    for external_id, adp in ranked:
+        if adp is None or float(adp) >= 999:
+            continue
+        position = candidates[external_id].get("position")
+        position_counters[position] = position_counters.get(position, 0) + 1
+        position_ranks[external_id] = position_counters[position]
+    snapshots, rankings = [], []
+    for external_id, player_id in resolved.items():
+        projection = projections.get(external_id, {}) or {}
+        actual = stats.get(external_id, {}) or {}
+        adp = clean_number(projection.get("adp_ppr"))
+        projected_points = clean_number(projection.get("pts_ppr"))
+        total_points = clean_number(actual.get("pts_ppr"))
+        games = clean_number(actual.get("gp"))
+        payload = {
+            "player_id": player_id, "source": "sleeper", "season": season, "week": week,
+            "position_rank": clean_number(actual.get("pos_rank_ppr")),
+            "injury_status": candidates[external_id].get("injury_status"),
+            "injured": bool(candidates[external_id].get("injury_status")),
+            "total_points": total_points,
+            "average_points": (float(total_points) / float(games)) if total_points is not None and games else None,
+            "projected_total_points": projected_points,
+            "projected_average_points": (float(projected_points) / 17) if projected_points is not None else None,
+            "raw_payload": {"scoring_format": "ppr", "projection_scope": "full_season_cumulative",
+                            "projection": projection, "stats": actual}, "fetched_at": fetched_at,
+        }
+        payload["data_hash"] = digest({key: value for key, value in payload.items() if key != "fetched_at"})
+        snapshots.append(payload)
+        if adp is not None and float(adp) < 999:
+            rankings.append({"player_id": player_id, "source": "sleeper", "season": season, "week": week,
+                "scoring_format": "ppr", "ranking_type": "platform_adp", "overall_rank": adp,
+                "position_rank": position_ranks.get(external_id), "fetched_at": fetched_at})
+    for batch in chunks(snapshots, 50):
+        persisted = db.upsert("player_snapshots", batch, "player_id,source,season,week,data_hash")
+        db.touch("player_snapshots", [row["id"] for row in persisted], fetched_at)
+    for batch in chunks(rankings):
+        persisted = db.upsert("player_rankings", batch,
+                              "player_id,source,season,week,scoring_format,ranking_type,overall_rank,position_rank")
+        db.touch("player_rankings", [row["id"] for row in persisted], fetched_at)
+    run.read += len(candidates)
+    run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
 
 
 def parse_fantasypros_html(html: str) -> str:
@@ -494,6 +619,12 @@ def sync_global(args):
             db.touch("player_rankings", [row["id"] for row in persisted], fetched_at)
         run.written += len(player_rows) + len(id_rows) + len(snapshots) + len(rankings)
 
+        if args.sleeper:
+            try:
+                sync_sleeper_global(db, args.season, args.week, run, fetched_at)
+            except Exception as exc:
+                run.error("sleeper", exc)
+
         if args.fantasypros_rankings:
             try:
                 fantasypros_rows = fantasypros_rankings(args.season)
@@ -765,7 +896,8 @@ def sync_one_league(
             str(slot): count for slot, count in (getattr(settings, "position_slot_counts", {}) or {}).items()
             if count
         }
-        league = db.upsert("leagues", {"provider": "espn", "external_id": external_id, "season": season,
+        league = db.upsert("leagues", {"provider": "espn", "external_id": external_id,
+            "league_series_id": external_id, "season": season,
             "name": getattr(settings, "name", None), "status": "succeeded", "last_synced_at": fetched_at,
             "team_count": getattr(settings, "team_count", None),
             "playoff_team_count": getattr(settings, "playoff_team_count", None),
@@ -871,17 +1003,169 @@ def sync_one_league(
                 ], "user_id,league_id")
 
 
+def sync_one_sleeper_league(
+    db: SupabaseAdmin,
+    external_id: str,
+    season: int,
+    week: int | None,
+    request_id: str | None = None,
+    sync_history: bool = False,
+    series_id: str | None = None,
+):
+    with Run(db, "league", season, week, request_id, provider="sleeper") as run:
+        league_data = sleeper_get(f"league/{external_id}")
+        if not league_data or league_data.get("sport") != "nfl":
+            raise ProviderContractError(f"Sleeper league {external_id} was not found or is not an NFL league")
+        actual_season = int(league_data.get("season") or season)
+        if actual_season != season:
+            raise ProviderContractError(
+                f"Sleeper league {external_id} belongs to {actual_season}, not requested season {season}"
+            )
+        fetched_at = now()
+        rosters = sleeper_get(f"league/{external_id}/rosters") or []
+        users = sleeper_get(f"league/{external_id}/users") or []
+        drafts = sleeper_get(f"league/{external_id}/drafts") or []
+        players = sleeper_players()
+        users_by_id = {str(user.get("user_id")): user for user in users}
+        settings = league_data.get("settings") or {}
+        scoring = league_data.get("scoring_settings") or {}
+        reception_points = clean_number(scoring.get("rec"))
+        scoring_label = "ppr" if reception_points == 1 else "half_ppr" if reception_points == .5 else "standard" if reception_points == 0 else "custom"
+        lineup_counts: dict[str, int] = {}
+        for slot in league_data.get("roster_positions") or []:
+            lineup_counts[slot] = lineup_counts.get(slot, 0) + 1
+        primary_draft = drafts[0] if drafts else {}
+        slot_to_roster = primary_draft.get("slot_to_roster_id") or {}
+        pick_order = [str(roster_id) for _, roster_id in sorted(slot_to_roster.items(), key=lambda pair: int(pair[0]))]
+        raw_settings = {
+            "provider": "sleeper", "status": league_data.get("status"),
+            "scoring_settings": scoring, "settings": settings,
+            "previous_league_id": league_data.get("previous_league_id"),
+            "draft_settings": {
+                "draft_id": primary_draft.get("draft_id"), "type": primary_draft.get("type"),
+                "order_type": "manual" if primary_draft.get("draft_order") else None,
+                "pick_order": pick_order, "date": primary_draft.get("start_time"),
+                "time_per_selection": (primary_draft.get("settings") or {}).get("pick_timer"),
+                "drafted": primary_draft.get("status") == "complete",
+                "in_progress": primary_draft.get("status") == "drafting", "pick_assignments": [],
+            },
+        }
+        league = db.upsert("leagues", {
+            "provider": "sleeper", "external_id": external_id, "league_series_id": series_id or external_id,
+            "season": season, "name": league_data.get("name"), "status": "succeeded",
+            "last_synced_at": fetched_at, "team_count": league_data.get("total_rosters") or len(rosters),
+            "playoff_team_count": settings.get("playoff_teams"),
+            "regular_season_weeks": settings.get("playoff_week_start", 15) - 1 if settings.get("playoff_week_start") else None,
+            "scoring_type": scoring_label, "reception_points": reception_points,
+            "scoring_format_label": scoring_label, "lineup_slot_counts": lineup_counts,
+            "league_settings": raw_settings,
+        }, "provider,external_id,season")[0]
+        ordered_rosters = sorted(rosters, key=lambda roster: (
+            -int((roster.get("settings") or {}).get("wins") or 0),
+            -float((roster.get("settings") or {}).get("fpts") or 0), int(roster.get("roster_id") or 0)))
+        standing_by_roster = {str(roster.get("roster_id")): index for index, roster in enumerate(ordered_rosters, 1)}
+        teams_by_external_id: dict[str, dict[str, Any]] = {}
+        for roster in rosters:
+            roster_id = str(roster.get("roster_id"))
+            owner = users_by_id.get(str(roster.get("owner_id")), {})
+            metadata = owner.get("metadata") or {}
+            team_name = metadata.get("team_name") or owner.get("display_name") or owner.get("username") or f"Team {roster_id}"
+            team_settings = roster.get("settings") or {}
+            points_for = float(team_settings.get("fpts") or 0) + float(team_settings.get("fpts_decimal") or 0) / 100
+            points_against = float(team_settings.get("fpts_against") or 0) + float(team_settings.get("fpts_against_decimal") or 0) / 100
+            db_team = db.upsert("fantasy_teams", {
+                "league_id": league["id"], "external_id": roster_id, "name": team_name,
+                "updated_at": fetched_at, "wins": team_settings.get("wins"), "losses": team_settings.get("losses"),
+                "ties": team_settings.get("ties"), "points_for": points_for, "points_against": points_against,
+                "standing": standing_by_roster.get(roster_id),
+            }, "league_id,external_id")[0]
+            teams_by_external_id[roster_id] = db_team
+            starters, reserve, taxi = set(map(str, roster.get("starters") or [])), set(map(str, roster.get("reserve") or [])), set(map(str, roster.get("taxi") or []))
+            roster_key = [{"id": str(player_id), "slot": "STARTER" if str(player_id) in starters else "IR" if str(player_id) in reserve else "TAXI" if str(player_id) in taxi else "BN"} for player_id in (roster.get("players") or [])]
+            snapshot = db.upsert("roster_snapshots", {
+                "team_id": db_team["id"], "season": season, "week": week, "fetched_at": fetched_at,
+                "raw_payload": roster, "data_hash": digest(roster_key),
+            }, "team_id,season,week,data_hash")[0]
+            rows = []
+            for external_player_id in roster.get("players") or []:
+                external_player_id = str(external_player_id)
+                player = players.get(external_player_id) or {"player_id": external_player_id, "full_name": f"Sleeper player {external_player_id}", "active": True}
+                player_id = resolve_sleeper_player(db, external_player_id, player)
+                slot = "STARTER" if external_player_id in starters else "IR" if external_player_id in reserve else "TAXI" if external_player_id in taxi else "BN"
+                rows.append({"roster_snapshot_id": snapshot["id"], "player_id": player_id, "lineup_slot": slot, "acquisition_type": None})
+            if rows:
+                db.upsert("roster_players", rows, "roster_snapshot_id,player_id")
+            run.read += len(rows)
+            run.written += len(rows) + 2
+        if primary_draft.get("draft_id"):
+            picks = sleeper_get(f"draft/{primary_draft['draft_id']}/picks") or []
+            draft_rows = []
+            assignments = []
+            team_count = max(1, len(rosters))
+            for pick in picks:
+                external_player_id = str(pick.get("player_id"))
+                metadata = pick.get("metadata") or {}
+                player = players.get(external_player_id) or {
+                    "player_id": external_player_id,
+                    "full_name": " ".join(filter(None, (metadata.get("first_name"), metadata.get("last_name")))) or f"Sleeper player {external_player_id}",
+                    "position": metadata.get("position"), "team": metadata.get("team"), "active": True,
+                }
+                player_id = resolve_sleeper_player(db, external_player_id, player)
+                overall = int(pick.get("pick_no"))
+                roster_id = str(pick.get("roster_id"))
+                round_number = int(pick.get("round") or ((overall - 1) // team_count + 1))
+                round_pick = ((overall - 1) % team_count) + 1
+                assignments.append({"overall_pick": overall, "round": round_number, "round_pick": round_pick, "team_external_id": roster_id, "previous_owner_external_ids": []})
+                draft_rows.append({
+                    "league_id": league["id"], "overall_pick": overall, "round_number": round_number,
+                    "round_pick": round_pick, "team_id": teams_by_external_id.get(roster_id, {}).get("id"),
+                    "team_external_id": roster_id, "team_name": teams_by_external_id.get(roster_id, {}).get("name"),
+                    "player_id": player_id, "player_external_id": external_player_id,
+                    "player_name": player.get("full_name") or sleeper_player_payload(player)["name"],
+                    "player_position": player.get("position"), "nfl_team": player.get("team"),
+                    "keeper_status": pick.get("is_keeper"), "raw_payload": {"provider": "sleeper", "draft_id": primary_draft["draft_id"]},
+                    "fetched_at": fetched_at,
+                })
+            raw_settings["draft_settings"]["pick_assignments"] = assignments
+            db.patch("leagues", {"id": league["id"]}, {"league_settings": raw_settings})
+            for batch in chunks(draft_rows, 50):
+                db.upsert("league_draft_picks", batch, "league_id,overall_pick")
+            run.read += len(draft_rows)
+            run.written += len(draft_rows)
+        previous_id = str(league_data.get("previous_league_id") or "0")
+        if sync_history and previous_id not in ("", "0", external_id):
+            previous = sleeper_get(f"league/{previous_id}")
+            if previous:
+                try:
+                    sync_one_sleeper_league(db, previous_id, int(previous["season"]), None, sync_history=True, series_id=series_id or external_id)
+                except Exception as exc:
+                    run.error(f"league_history:{previous.get('season', previous_id)}", exc)
+        if request_id:
+            request = db.select("sync_requests", id=request_id)[0]
+            if request.get("requested_by"):
+                linked = db.request("GET", "leagues", params={"provider": "eq.sleeper", "league_series_id": f"eq.{series_id or external_id}", "select": "id"}) if sync_history else [league]
+                db.upsert("user_leagues", [{"user_id": request["requested_by"], "league_id": item["id"]} for item in linked], "user_id,league_id")
+
+
+def sync_provider_league(db, provider, external_id, season, week, request_id=None, sync_history=False):
+    if provider == "espn":
+        return sync_one_league(db, external_id, season, week, request_id, sync_history)
+    if provider == "sleeper":
+        return sync_one_sleeper_league(db, external_id, season, week, request_id, sync_history)
+    raise ProviderContractError(f"Unsupported league provider: {provider}")
+
+
 def sync_league(args):
     db = SupabaseAdmin()
     if args.all_linked:
         leagues = db.request("GET", "leagues", params={
-            "provider": "eq.espn", "season": f"eq.{args.season}",
-            "select": "external_id", "order": "external_id.asc",
+            "season": f"eq.{args.season}",
+            "select": "provider,external_id", "order": "provider.asc,external_id.asc",
         })
         failures = []
         for league in leagues:
             try:
-                sync_one_league(db, league["external_id"], args.season, args.week, sync_history=args.history)
+                sync_provider_league(db, league["provider"], league["external_id"], args.season, args.week, sync_history=args.history)
             except Exception as exc:
                 failures.append((league["external_id"], str(exc)))
                 print(f"Failed league {league['external_id']}: {exc}", file=sys.stderr)
@@ -893,11 +1177,11 @@ def sync_league(args):
         grouped: dict[tuple[str, str, int, int | None], list[dict[str, Any]]] = {}
         for request in requests:
             grouped.setdefault((request["provider"], request["external_id"], request["season"], request.get("week")), []).append(request)
-        for (_provider, external_id, season, week), group in grouped.items():
+        for (provider, external_id, season, week), group in grouped.items():
             primary = group[0]
             try:
-                sync_one_league(db, external_id, season, week, primary["id"], sync_history=True)
-                leagues = db.select("leagues", provider="espn", external_id=external_id, season=season)
+                sync_provider_league(db, provider, external_id, season, week, primary["id"], sync_history=True)
+                leagues = db.select("leagues", provider=provider, external_id=external_id, season=season)
                 for duplicate in group[1:]:
                     if leagues and duplicate.get("requested_by"):
                         db.upsert("user_leagues", {"user_id": duplicate["requested_by"], "league_id": leagues[0]["id"]},
@@ -912,7 +1196,7 @@ def sync_league(args):
                     })
                 print(f"Failed request group {primary['id']}: {exc}", file=sys.stderr)
     elif args.league_id:
-        sync_one_league(db, args.league_id, args.season, args.week, sync_history=args.history)
+        sync_provider_league(db, args.provider, args.league_id, args.season, args.week, sync_history=args.history)
     else:
         raise SystemExit("Provide --league-id, --pending, or --all-linked")
 
@@ -977,6 +1261,10 @@ def parser():
     )
     global_sync.add_argument("--sources", action="store_true")
     global_sync.add_argument(
+        "--sleeper", action="store_true",
+        help="Refresh Sleeper player identities, PPR projections, ADP, and season stats",
+    )
+    global_sync.add_argument(
         "--fftoday", action="store_true",
         help="Refresh attributed FFToday full-PPR projections and projected positional ranks",
     )
@@ -1009,6 +1297,7 @@ def parser():
     league_sync.add_argument("--season", type=int, default=datetime.now().year)
     league_sync.add_argument("--week", type=int)
     league_sync.add_argument("--league-id")
+    league_sync.add_argument("--provider", choices=("espn", "sleeper"), default="espn")
     league_sync.add_argument("--pending", action="store_true")
     league_sync.add_argument("--all-linked", action="store_true")
     league_sync.add_argument(

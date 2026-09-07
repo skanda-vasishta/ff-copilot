@@ -79,12 +79,14 @@ type PlayerDetail = {
 
 const sourceNames: Record<string, string> = {
   espn: "ESPN",
+  sleeper: "Sleeper",
   fftoday: "FFToday",
   fantasypros: "FantasyPros",
   reddit: "Reddit",
 };
 const sourceLinks: Record<string, string> = {
   espn: "https://fantasy.espn.com/football/players/projections",
+  sleeper: "https://sleeper.com/projections/nfl",
   fftoday: "https://www.fftoday.com/rankings/playerproj.php",
   fantasypros: "https://www.fantasypros.com/nfl/rankings/ppr-cheatsheets.php",
 };
@@ -116,7 +118,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
   const rankings = detail.data?.rankings;
   const projections = detail.data?.projections;
   const sources = detail.data?.sources || [];
-  const latest = detail.data?.snapshots.find((snapshot) => snapshot.source === "espn");
+  const latest = detail.data?.snapshots.find((snapshot) => snapshot.source === "espn") || detail.data?.snapshots.find((snapshot) => snapshot.source === "sleeper");
 
   if (loadingScope || detail.isLoading)
     return (
@@ -154,8 +156,8 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
       return items;
     }, new Map<string, Ranking>()).values(),
   ).filter((ranking) =>
-    ["current_draft_rank", "expert_consensus_rank", "projected_position_rank"].includes(ranking.ranking_type),
-  ).sort((left, right) => ["espn", "fantasypros", "fftoday"].indexOf(left.source) - ["espn", "fantasypros", "fftoday"].indexOf(right.source));
+    ["current_draft_rank", "platform_adp", "expert_consensus_rank", "projected_position_rank"].includes(ranking.ranking_type),
+  ).sort((left, right) => ["espn", "sleeper", "fantasypros", "fftoday"].indexOf(left.source) - ["espn", "sleeper", "fantasypros", "fftoday"].indexOf(right.source));
 
   return (
     <div className="mt-6 space-y-5">

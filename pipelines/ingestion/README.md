@@ -2,9 +2,10 @@
 
 Run from the repository root with `python -m pipelines.ingestion.sync`.
 
-The global workflow refreshes ESPN projections, injury designations, ownership, and
+The global workflow refreshes ESPN and Sleeper projections, injury designations, ownership, and
 rankings every six hours. Its 08:17 UTC run also refreshes FantasyPros full-PPR
 overall/positional ECR, FFToday full-PPR projections/projected positional ranks,
+Sleeper full-PPR projections/platform ADP/season statistics,
 and raw ESPN, FantasyPros, and Reddit source documents. A manual run can include
 the daily sources with the `include_sources` input.
 

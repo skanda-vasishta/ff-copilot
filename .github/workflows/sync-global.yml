@@ -45,7 +45,7 @@ jobs:
           SCHEDULE: ${{ github.event.schedule }}
           INCLUDE_SOURCES: ${{ inputs.include_sources || false }}
         run: |
-          args=(sync-global --season "$SEASON")
+          args=(sync-global --season "$SEASON" --sleeper)
           if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
           # FFToday and source pages are refreshed once daily (08:17 UTC).
           # FFToday is fetched only once per position and visibly attributed in-product.

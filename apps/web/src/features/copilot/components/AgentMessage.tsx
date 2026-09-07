@@ -7,6 +7,7 @@ const TOOL_LABELS: Record<string, string> = {
   search_players: "Searched players",
   get_player_overview: "Opened player overview",
   get_player_espn: "Checked ESPN",
+  get_player_sleeper: "Checked Sleeper",
   get_player_fantasypros: "Checked FantasyPros",
   get_player_fftoday: "Checked FFToday",
   get_player_reddit: "Checked Reddit",

@@ -14,7 +14,7 @@ type WorkspaceTeam = {
     id: string
     name: string
     league_id: string
-    league: { id: string; name: string | null; external_id: string; season: number }
+    league: { id: string; name: string | null; provider: 'espn' | 'sleeper'; external_id: string; season: number }
   }
 }
 
@@ -82,7 +82,7 @@ export function Header() {
               const active = team.id === scope?.team.id
               return <button key={team.id} role="menuitem" type="button" onClick={async () => { await setTeam(team.id); setOpen(false) }} className={`focus-ring flex w-full items-center gap-2.5 rounded-[6px] px-2.5 py-2 text-left transition ${active ? 'bg-[#c9f958]/10 text-[#d9ff83]' : 'text-[#aab1a4] hover:bg-white/[.05] hover:text-white'}`}>
                 <span className={`grid size-6 shrink-0 place-items-center rounded-[5px] border text-[9px] font-bold ${active ? 'border-[#c9f958]/25 bg-[#c9f958]/10 text-[#c9f958]' : 'border-white/[.07] text-[#777f72]'}`}>{team.name.slice(0, 2).toUpperCase()}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{team.name}</span><span className="block truncate text-[9px] text-[#666e63]">{team.league.name || `ESPN ${team.league.external_id}`} · {team.league.season}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{team.name}</span><span className="block truncate text-[9px] text-[#666e63]">{team.league.name || `${team.league.provider.toUpperCase()} ${team.league.external_id}`} · {team.league.provider} · {team.league.season}</span></span>
                 {active && <span className="text-[11px] text-[#c9f958]">✓</span>}
               </button>
             })}

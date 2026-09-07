@@ -56,7 +56,7 @@ function DraftLanding({ sessions, loading, leagueName, season, onOpen, onCreate,
 }
 
 function DraftSetup({ scope, onCreated, onCancel }: { scope: NonNullable<ReturnType<typeof useActiveScope>['scope']>; onCreated: (id: string) => void; onCancel?: () => void }) {
-  const [mode, setMode] = useState<'manual' | 'espn_live'>('manual')
+  const [mode, setMode] = useState<'manual' | 'espn_live' | 'sleeper_live'>('manual')
   const [name, setName] = useState(`${scope.team.league.season} Draft`)
   const [draftType, setDraftType] = useState<'snake' | 'linear'>('snake')
   const [roundCount, setRoundCount] = useState(16)
@@ -75,14 +75,45 @@ function DraftSetup({ scope, onCreated, onCancel }: { scope: NonNullable<ReturnT
   function move(index: number, delta: number) { setOrder((current) => { const next = [...current], target = index + delta; if (target < 0 || target >= next.length) return current; [next[index], next[target]] = [next[target], next[index]]; return next }) }
   async function submit(event: FormEvent) { event.preventDefault(); setError(''); try { const session = await createDraftSession({ leagueId: scope.team.league_id, selectedTeamId: scope.team.id, season: scope.team.league.season, name, draftType, teamOrder: order, roundCount }); onCreated(session.id) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not create draft') } }
   if (mode === 'espn_live') return <EspnDraftSetup scope={scope} onCreated={onCreated} onManual={() => setMode('manual')} onCancel={onCancel}/>
+  if (mode === 'sleeper_live') return <SleeperDraftSetup scope={scope} onCreated={onCreated} onManual={() => setMode('manual')} onCancel={onCancel}/>
   return <div className="mx-auto w-full max-w-[760px] px-5 py-10"><div className="flex items-start justify-between"><div><p className="text-[10px] uppercase tracking-[.14em] text-[#8daa48]">Manual draft</p><h1 className="mt-2 text-2xl font-semibold text-white">Create draft workspace</h1></div>{onCancel && <button onClick={onCancel} className="text-xs text-[#78847e]">Cancel</button>}</div>
-    <div className="mt-6 flex border-b border-white/[.07]"><button onClick={() => setMode('manual')} className="border-b border-[#c9f958] px-3 py-2 text-xs text-white">Manual</button><button onClick={() => setMode('espn_live')} className="border-b border-transparent px-3 py-2 text-xs text-[#78847e] hover:text-white">ESPN Live</button></div>
+    <div className="mt-6 flex border-b border-white/[.07]"><button onClick={() => setMode('manual')} className="border-b border-[#c9f958] px-3 py-2 text-xs text-white">Manual</button><button onClick={() => setMode('espn_live')} className="border-b border-transparent px-3 py-2 text-xs text-[#78847e] hover:text-white">ESPN Live</button>{scope.team.league.provider==='sleeper'&&<button onClick={() => setMode('sleeper_live')} className="border-b border-transparent px-3 py-2 text-xs text-[#78847e] hover:text-white">Sleeper Live</button>}</div>
     <form onSubmit={submit} className="mt-7 grid gap-5 rounded-[10px] border border-white/[.07] bg-white/[.02] p-5">
       <div className="grid gap-4 sm:grid-cols-3"><label className="text-[10px] uppercase tracking-[.1em] text-[#687063]">Name<input value={name} onChange={(e) => setName(e.target.value)} className="mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-black/15 px-3 text-xs normal-case tracking-normal text-white"/></label><label className="text-[10px] uppercase tracking-[.1em] text-[#687063]">Type<select value={draftType} onChange={(e) => setDraftType(e.target.value as 'snake' | 'linear')} className="mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-black/15 px-3 text-xs normal-case tracking-normal text-white"><option value="snake">Snake</option><option value="linear">Linear</option></select></label><label className="text-[10px] uppercase tracking-[.1em] text-[#687063]">Rounds<input type="number" min={1} max={40} value={roundCount} onChange={(e) => setRoundCount(Number(e.target.value))} className="mt-1.5 h-9 w-full rounded-[6px] border border-white/[.08] bg-black/15 px-3 text-xs normal-case tracking-normal text-white"/></label></div>
       <div><div className="flex items-center justify-between"><p className="text-[10px] uppercase tracking-[.1em] text-[#687063]">Draft order</p><p className="text-[10px] text-[#687063]">Imported from ESPN when available</p></div><div className="mt-2 divide-y divide-white/[.055] rounded-[7px] border border-white/[.07]">{order.map((id, index) => <div key={id} className="flex h-9 items-center gap-3 px-3 text-xs"><span className="w-5 font-mono text-[10px] text-[#687063]">{index + 1}</span><span className="flex-1 text-[#c8cec2]">{byId.get(id)?.name || id}{id === scope.team.id ? ' (your team)' : ''}</span><button type="button" onClick={() => move(index,-1)} className="text-[#687063] hover:text-white">↑</button><button type="button" onClick={() => move(index,1)} className="text-[#687063] hover:text-white">↓</button></div>)}</div></div>
       {error && <p className="text-xs text-red-300">{error}</p>}<button disabled={order.length < 2} className="h-9 rounded-[6px] bg-[#c9f958] text-xs font-semibold text-[#13190d] disabled:opacity-30">Create draft</button>
     </form>
   </div>
+}
+
+type SleeperDraft = { draft_id: string; status: string; type: string; season: string; settings: { rounds?: number }; slot_to_roster_id?: Record<string,string|number> }
+
+function SleeperDraftSetup({ scope, onCreated, onManual, onCancel }: { scope: NonNullable<ReturnType<typeof useActiveScope>['scope']>; onCreated: (id: string) => void; onManual: () => void; onCancel?: () => void }) {
+  const [loading, setLoading] = useState(false), [error, setError] = useState('')
+  const [name, setName] = useState(`${scope.team.league.season} Sleeper Draft`)
+  const teams = useQuery({ queryKey: ['league-teams', scope.team.league_id], queryFn: () => api<DraftTeam[]>(`/v1/leagues/${scope.team.league_id}/teams`) })
+  async function create() {
+    setLoading(true); setError('')
+    try {
+      const response = await fetch(`https://api.sleeper.app/v1/league/${scope.team.league.external_id}/drafts`, { cache: 'no-store' })
+      if (!response.ok) throw new Error(`Sleeper returned ${response.status}`)
+      const drafts = await response.json() as SleeperDraft[], draft = drafts[0]
+      if (!draft) throw new Error('Sleeper has not created a draft for this league')
+      const orderedRosterIds = Object.entries(draft.slot_to_roster_id || {}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([,id])=>String(id))
+      const byExternal = new Map((teams.data || []).map((team)=>[String(team.external_id),team]))
+      if (!orderedRosterIds.length || orderedRosterIds.some((id)=>!byExternal.has(id))) throw new Error('Sleeper draft order is not ready or does not match the linked teams')
+      const participantIds = new Map(orderedRosterIds.map((id)=>[id,crypto.randomUUID()]))
+      const session = await createDraftSession({ leagueId: scope.team.league_id, selectedTeamId: scope.team.id,
+        season: Number(draft.season), name, draftType: draft.type === 'snake' ? 'snake' : 'linear',
+        teamOrder: orderedRosterIds.map((id)=>participantIds.get(id)!), roundCount: draft.settings.rounds || 16,
+        source: 'sleeper_live', externalLeagueId: draft.draft_id, externalTeamId: scope.team.external_id,
+        participants: orderedRosterIds.map((id,index)=>({ id: participantIds.get(id)!, externalTeamId:id,
+          name:byExternal.get(id)!.name, draftPosition:index+1, isUser:id===scope.team.external_id })) })
+      onCreated(session.id)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not connect Sleeper draft') }
+    finally { setLoading(false) }
+  }
+  return <div className="mx-auto w-full max-w-[760px] px-5 py-10"><div className="flex items-start justify-between"><div><p className="text-[10px] uppercase tracking-[.14em] text-[#8daa48]">Sleeper Live</p><h1 className="mt-2 text-2xl font-semibold text-white">Connect the league draft</h1></div>{onCancel&&<button onClick={onCancel} className="text-xs text-[#78847e]">Cancel</button>}</div><div className="mt-6 flex border-b border-white/[.07]"><button onClick={onManual} className="border-b border-transparent px-3 py-2 text-xs text-[#78847e]">Manual</button><button className="border-b border-[#c9f958] px-3 py-2 text-xs text-white">Sleeper Live</button></div><div className="mt-7 rounded-[10px] border border-white/[.07] bg-white/[.02] p-5"><label className="text-[10px] uppercase tracking-[.1em] text-[#687063]">Draft name<input value={name} onChange={(event)=>setName(event.target.value)} className="mt-2 h-9 w-full rounded-[6px] border border-white/[.08] bg-black/15 px-3 text-xs normal-case tracking-normal text-white"/></label><p className="mt-4 text-xs text-[#78847e]">Draft order and picks will be read directly from Sleeper. No browser extension is required.</p><button disabled={loading||!teams.data?.length||!name.trim()} onClick={create} className="mt-5 h-9 w-full rounded-[6px] bg-[#c9f958] text-xs font-semibold text-[#13190d] disabled:opacity-30">{loading?'Connecting…':'Create connected draft'}</button>{error&&<p className="mt-3 text-xs text-red-300">{error}</p>}</div></div>
 }
 
 type EspnDraftPreview = {
@@ -193,6 +224,7 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
   const currentPickRef = useRef<HTMLDivElement>(null)
   const pool = useQuery({ queryKey: ['draft-player-pool', session.season], queryFn: () => api<{ items: DraftPlayer[] }>(`/v1/draft/player-pool?season=${session.season}`) })
   const teams = useQuery({ queryKey: ['league-teams', session.league_id], queryFn: () => api<DraftTeam[]>(`/v1/leagues/${session.league_id}/teams`), enabled: session.source === 'manual' })
+  const sleeperPicks = useQuery({ queryKey: ['sleeper-live-picks', session.external_league_id], queryFn: async () => { const response = await fetch(`https://api.sleeper.app/v1/draft/${session.external_league_id}/picks`, { cache: 'no-store' }); if (!response.ok) throw new Error(`Sleeper returned ${response.status}`); return response.json() as Promise<Array<{pick_no:number;player_id:string}>> }, enabled: session.source === 'sleeper_live' && Boolean(session.external_league_id), refetchInterval: 2000 })
   const consensus = useQuery({ queryKey: ['draft-consensus', session.season], queryFn: async () => { const rows = await Promise.all(['QB','RB','WR','TE'].map((pos) => api<Consensus>(`/v1/rankings/consensus?season=${session.season}&position=${pos}&limit=100`))); return rows.flatMap((row) => row.items) } })
   const mutate = useMutation({ mutationFn: ({ playerId, overall }: { playerId: string; overall: number }) => recordDraftPick(session.id, playerId, overall, session.revision), onSuccess: onChanged })
   const remove = useMutation({ mutationFn: (overall: number) => removeDraftPick(session.id, overall, session.revision), onSuccess: onChanged })
@@ -203,7 +235,7 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
     if (position !== 'ALL') return (left?.position ?? 999) - (right?.position ?? 999)
     return (left?.overall ?? 9999) - (right?.overall ?? 9999) || (left?.position ?? 999) - (right?.position ?? 999)
   })
-  const displayTeams: DraftTeam[] = session.source === 'espn_live'
+  const displayTeams: DraftTeam[] = session.source !== 'manual'
     ? state.participants.map((participant) => ({ id: participant.id, name: participant.name, external_id: participant.external_team_id }))
     : teams.data || []
   const teamById = new Map(displayTeams.map((team) => [team.id, team]))
@@ -222,11 +254,24 @@ function ActiveDraft({ state, leagueExternalId, onChanged }: { state: Awaited<Re
     const saved = window.localStorage.getItem(`ff-copilot:espn-draft:${session.id}`)
     if (saved) setBridgeLeagueId(saved)
     else if (session.source === 'espn_live' && session.external_league_id) setBridgeLeagueId(session.external_league_id)
-    if (session.source === 'espn_live') {
+    if (session.source !== 'manual') {
       const selected = state.participants.find((participant) => participant.external_team_id === session.external_team_id)
       if (selected) setRosterTeamId(selected.id)
     }
   }, [session.external_league_id, session.external_team_id, session.id, session.source, state.participants])
+  useEffect(() => {
+    if (session.source !== 'sleeper_live' || !sleeperPicks.data || !pool.data?.items.length || bridgeSyncing.current) return
+    const bySleeperId = new Map(pool.data.items.map((player)=>[String(player.sleeper_id),player.id]))
+    const unresolved = sleeperPicks.data.filter((pick)=>!bySleeperId.has(String(pick.player_id)))
+    if (unresolved.length) { setBridgeError(`${unresolved.length} Sleeper player${unresolved.length===1?'':'s'} could not be matched`); return }
+    const snapshot = sleeperPicks.data.map((pick)=>({overall_pick:Number(pick.pick_no),player_id:bySleeperId.get(String(pick.player_id))!})).sort((a,b)=>a.overall_pick-b.overall_pick)
+    const fingerprint = snapshot.map((pick)=>`${pick.overall_pick}:${pick.player_id}`).join('|')
+    if (fingerprint === syncedSnapshot.current) return
+    bridgeSyncing.current = true
+    void (async()=>{ try { await syncEspnDraftSnapshot(session.id,snapshot); syncedSnapshot.current=fingerprint; setBridgeError('') }
+      catch(cause){setBridgeError(cause instanceof Error?cause.message:'Could not import Sleeper picks')}
+      finally{bridgeSyncing.current=false;onChanged()} })()
+  }, [onChanged,pool.data?.items,session.id,session.source,sleeperPicks.data])
   useEffect(() => {
     if (!bridgeLeagueId) return
     const receive = (event: Event) => setBridgeState((event as CustomEvent<EspnBridgeState>).detail)

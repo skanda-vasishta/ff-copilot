@@ -28,7 +28,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-consensus-rankings-v8";
+const CONTEXT_VERSION = "league-rosters-consensus-rankings-v9-sleeper";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -40,6 +40,8 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
   const rankings = snapshot.top_consensus_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
   const leagueSettings = (league.league_settings || {}) as Record<string, unknown>;
+  const provider = String(league.provider || "fantasy");
+  const providerLabel = provider === "espn" ? "ESPN" : provider === "sleeper" ? "Sleeper" : provider;
   const draftSettings = (leagueSettings.draft_settings || {}) as Record<string, unknown>;
   const pickOrder = Array.isArray(draftSettings.pick_order) ? draftSettings.pick_order.map(String) : [];
   const pickAssignments = Array.isArray(draftSettings.pick_assignments)
@@ -73,22 +75,22 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     const status = draftSettings.in_progress ? "in progress" : draftSettings.drafted ? "completed" : "scheduled / pre-draft";
     lines.push(
       "",
-      `## ${String(league.season)} ESPN draft order`,
+      `## ${String(league.season)} ${providerLabel} draft order`,
       `Draft format: ${String(league.team_count || teams.length)}-team, ${roundCount || "unknown-round"} ${draftType} draft. ${draftType === "snake" ? "The selection order reverses every round." : "Do not assume the order reverses between rounds."}`,
-      `Order configuration: ${orderType}; status: ${status}; ${clock}. Source: ESPN league settings, synced ${String(league.last_synced_at || snapshot.refreshed_at)}.`,
+      `Order configuration: ${orderType}; status: ${status}; ${clock}. Source: ${providerLabel} league settings, synced ${String(league.last_synced_at || snapshot.refreshed_at)}.`,
     );
     for (const [index, externalTeamId] of pickOrder.entries()) {
       const orderedTeam = teamByExternalId.get(externalTeamId);
-      lines.push(`${index + 1}. ${String(orderedTeam?.name || `ESPN team ${externalTeamId}`)}${orderedTeam?.id === selectedTeam.id ? " (YOUR TEAM)" : ""} | team_id ${String(orderedTeam?.id || "unknown")} | ESPN team ${externalTeamId}`);
+      lines.push(`${index + 1}. ${String(orderedTeam?.name || `${providerLabel} team ${externalTeamId}`)}${orderedTeam?.id === selectedTeam.id ? " (YOUR TEAM)" : ""} | team_id ${String(orderedTeam?.id || "unknown")} | ${providerLabel} team ${externalTeamId}`);
     }
     lines.push("", `### All picks currently assigned to ${String(selectedTeam.name)}`);
     if (userPicks.length) {
       lines.push(userPicks.map((pick) => `Round ${String(pick.round)}, pick ${String(pick.round_pick)} (overall ${String(pick.overall_pick)})`).join("; "));
     } else {
-      lines.push("No pick assignments were present in ESPN's latest draft grid.");
+      lines.push(`No pick assignments were present in ${providerLabel}'s latest draft grid.`);
     }
   } else {
-    lines.push("", `## ${String(league.season)} ESPN draft order`, "Not available in the latest stored ESPN league settings. Do not infer it from a previous season.");
+    lines.push("", `## ${String(league.season)} ${providerLabel} draft order`, `Not available in the latest stored ${providerLabel} league settings. Do not infer it from a previous season.`);
   }
 
   lines.push(
@@ -105,7 +107,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
   }
 
-  lines.push("", `## ${String(league.season)} full-PPR consensus rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by a simple average of every compatible current positional rank. ESPN is a platform draft rank, FantasyPros is expert consensus rank, and FFToday is projection-derived positional rank. Projected points separately average every compatible full-season PPR projection source.`);
+  lines.push("", `## ${String(league.season)} full-PPR consensus rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by a simple average of every compatible current positional rank. ESPN is a platform draft rank, Sleeper is platform PPR ADP, FantasyPros is expert consensus rank, and FFToday is projection-derived positional rank. Projected points separately average every compatible full-season PPR projection source.`);
   for (const position of CONTEXT_POSITIONS) {
     lines.push("", `### ${position}`);
     const players = rankings?.[position] || [];
@@ -161,7 +163,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   }
 
   const rankingQueries = await Promise.all([
-    ["espn", "current_draft_rank"], ["fantasypros", "expert_consensus_rank"], ["fftoday", "projected_position_rank"],
+    ["espn", "current_draft_rank"], ["sleeper", "platform_adp"], ["fantasypros", "expert_consensus_rank"], ["fftoday", "projected_position_rank"],
   ].map(([source, rankingType]) => supabase.from("player_rankings")
     .select("player_id,source,ranking_type,overall_rank,position_rank,fetched_at")
     .eq("season", thread.team.league.season).eq("source", source)

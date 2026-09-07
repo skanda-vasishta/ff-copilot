@@ -48,7 +48,7 @@ Each thread is permanently scoped to one team and league. Its context snapshot c
 ## Daily refresh
 
 - `sync-global.yml` runs at 08:17 UTC and ingests the 2026 player pool plus ESPN, FantasyPros, and Reddit raw documents.
-- `sync-leagues.yml` runs at 10:47 UTC and refreshes every stored 2026 ESPN league, then processes newly linked leagues.
+- `sync-leagues.yml` runs at 10:47 UTC and refreshes every stored 2026 ESPN and Sleeper league, then processes newly linked leagues.
 - Context snapshots rebuild from Supabase on the first thread request of a new UTC day. Manual context refresh rereads Supabase; it does not call upstream providers.
 
 ## Adding a feature

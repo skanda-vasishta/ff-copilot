@@ -82,7 +82,7 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       limit: Math.min(Number(input.limit) || 30, 100),
     })}`);
   }
-  const sourceMatch = call.name.match(/^get_player_(espn|fantasypros|fftoday|reddit)$/);
+  const sourceMatch = call.name.match(/^get_player_(espn|sleeper|fantasypros|fftoday|reddit)$/);
   if (sourceMatch) {
     const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
     const source = sourceMatch[1];

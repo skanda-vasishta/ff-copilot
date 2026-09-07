@@ -23,7 +23,7 @@ class AuthenticatedUser(BaseModel):
 
 
 class LeagueLink(BaseModel):
-    provider: Literal["espn"] = "espn"
+    provider: Literal["espn", "sleeper"] = "espn"
     external_id: str = Field(min_length=1, max_length=100)
     season: int = Field(ge=2000, le=2100)
     name: str | None = Field(default=None, max_length=200)
@@ -169,15 +169,16 @@ async def draft_player_pool(
         return rows
 
     external_ids = await all_rows("player_external_ids", {
-        "provider": "eq.espn", "select": "player_id,external_id",
+        "provider": "in.(espn,sleeper)", "select": "player_id,provider,external_id",
     })
     directory = await all_rows("player_directory_cache", {
         "season": f"eq.{season}", "select": "*",
     })
-    espn_by_player = {row["player_id"]: row["external_id"] for row in external_ids}
+    espn_by_player = {row["player_id"]: row["external_id"] for row in external_ids if row.get("provider", "espn") == "espn"}
+    sleeper_by_player = {row["player_id"]: row["external_id"] for row in external_ids if row.get("provider") == "sleeper"}
     return {"items": [
-        {**player, "espn_id": espn_by_player.get(player["id"])}
-        for player in directory if espn_by_player.get(player["id"])
+        {**player, "espn_id": espn_by_player.get(player["id"]), "sleeper_id": sleeper_by_player.get(player["id"])}
+        for player in directory if espn_by_player.get(player["id"]) or sleeper_by_player.get(player["id"])
     ]}
 
 
@@ -189,7 +190,7 @@ async def require_player(player_id: str, db: SupabaseREST) -> dict[str, Any]:
 
 
 def ranking_summary(data: list[dict[str, Any]]) -> dict[str, float | int | None]:
-    comparable_types = {"current_draft_rank", "expert_consensus_rank"}
+    comparable_types = {"current_draft_rank", "platform_adp", "expert_consensus_rank"}
     latest_by_source: dict[str, dict[str, Any]] = {}
     for row in sorted(data, key=lambda item: item.get("fetched_at") or "", reverse=True):
         if (
@@ -250,6 +251,7 @@ async def consensus_rankings(
 ):
     source_types = {
         "espn": "current_draft_rank",
+        "sleeper": "platform_adp",
         "fantasypros": "expert_consensus_rank",
         "fftoday": "projected_position_rank",
     }
@@ -296,7 +298,7 @@ async def consensus_rankings(
     items.sort(key=lambda item: (item["position_consensus_average"], item["player"].get("name") or ""))
     return {
         "season": season, "position": position, "scoring_format": "ppr",
-        "method": "Simple average of each source's latest comparable positional rank. FFToday is projection-derived; ESPN is platform draft rank; FantasyPros is expert consensus rank.",
+        "method": "Simple average of each source's latest comparable positional rank. ESPN is platform draft rank, Sleeper is platform PPR ADP, FantasyPros is expert consensus rank, and FFToday is projection-derived.",
         "items": items[:limit],
     }
 

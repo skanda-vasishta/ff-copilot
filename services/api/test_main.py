@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from services.api.main import AuthenticatedUser, app, current_user, db_for, projection_summary, source_freshness
+from services.api.main import AuthenticatedUser, app, current_user, db_for, projection_summary, ranking_summary, source_freshness
 
 
 client = TestClient(app)
@@ -63,7 +63,7 @@ def test_draft_pool_includes_espn_ids():
     try:
         response = client.get("/v1/draft/player-pool?season=2026")
         assert response.status_code == 200
-        assert response.json() == {"items": [{"id": "player-1", "name": "Draft Player", "espn_id": "123"}]}
+        assert response.json() == {"items": [{"id": "player-1", "name": "Draft Player", "espn_id": "123", "sleeper_id": None}]}
     finally:
         app.dependency_overrides.clear()
 
@@ -200,6 +200,15 @@ def test_projection_summary_uses_latest_compatible_cumulative_value_per_source()
     assert summary["projected_average_points"] == 267.0 / 17
     assert summary["source_count"] == 2
     assert [source["source"] for source in summary["sources"]] == ["espn", "fftoday"]
+
+
+def test_ranking_summary_includes_sleeper_platform_adp():
+    summary = ranking_summary([
+        {"source": "espn", "ranking_type": "current_draft_rank", "scoring_format": "ppr", "overall_rank": 10, "fetched_at": "2026-09-01T00:00:00Z"},
+        {"source": "sleeper", "ranking_type": "platform_adp", "scoring_format": "ppr", "overall_rank": 20, "fetched_at": "2026-09-01T00:00:00Z"},
+        {"source": "fantasypros", "ranking_type": "expert_consensus_rank", "scoring_format": "ppr", "overall_rank": 30, "fetched_at": "2026-09-01T00:00:00Z"},
+    ])
+    assert summary == {"average": 20.0, "median": 20.0, "minimum": 10.0, "maximum": 30.0, "source_count": 3}
 
 
 def test_source_freshness_counts_unique_players_and_latest_fetch():

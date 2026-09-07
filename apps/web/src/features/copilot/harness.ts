@@ -21,7 +21,7 @@ export const TOOL_REGISTRY = {
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_consensus_rankings: {
-    description: "Retrieve current full-PPR positional consensus rankings built from every compatible stored source. ESPN contributes platform draft rank, FantasyPros contributes expert consensus rank, and FFToday contributes projection-derived positional rank. Returns the average/median and the complete per-source breakdown; use this instead of treating ESPN alone as the ranking authority.",
+    description: "Retrieve current full-PPR positional consensus rankings built from every compatible stored source. ESPN contributes platform draft rank, Sleeper contributes PPR ADP, FantasyPros contributes expert consensus rank, and FFToday contributes projection-derived positional rank. Returns the average/median and complete per-source breakdown.",
     schema: z.object({
       position: z.enum(["QB", "RB", "WR", "TE"]).describe("Position to rank"),
       limit: z.number().int().min(1).max(100).optional().describe("Number of ranked players; defaults to 30"),
@@ -29,6 +29,10 @@ export const TOOL_REGISTRY = {
   },
   get_player_espn: {
     description: "Retrieve stored ESPN rankings, projections/statistical snapshots, and news for one player with timestamps. ESPN's current PPR number is a platform draft rank, not a multi-source consensus.",
+    schema: z.object({ player_id: playerId }).strict(),
+  },
+  get_player_sleeper: {
+    description: "Retrieve stored Sleeper PPR ADP, full-season projections, season statistics, and injury data for one player with timestamps. Sleeper ADP is a platform market signal, not expert consensus.",
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_player_fantasypros: {
@@ -56,7 +60,7 @@ export const TOOL_REGISTRY = {
     schema: z.object({ team_id: z.uuid().describe("Fantasy team UUID returned by get_league_standings") }).strict(),
   },
   get_league_free_agents: {
-    description: "Retrieve players who are absent from every team's latest stored roster in this conversation's ESPN league. Use this for waiver, add/drop, and best-available-player questions. Results include full-PPR cumulative projection consensus values, injuries, ranking summaries, and the roster snapshot timestamp that availability is based on; never infer league availability from search_players.",
+    description: "Retrieve players who are absent from every team's latest stored roster in this conversation's fantasy league. Use this for waiver, add/drop, and best-available-player questions. Results include full-PPR cumulative projection consensus values, injuries, ranking summaries, and the roster snapshot timestamp that availability is based on; never infer league availability from search_players.",
     schema: z.object({
       position: z.enum(["QB", "RB", "WR", "TE"]).optional().describe("Optional position filter"),
       limit: z.number().int().min(1).max(50).optional().describe("Maximum results; defaults to 25"),
@@ -64,7 +68,7 @@ export const TOOL_REGISTRY = {
     }).strict(),
   },
   get_league_draft_history: {
-    description: "Query completed ESPN draft picks from this conversation's league across stored historical seasons. Use it to inspect a complete round, one team's draft, one position, or the picks immediately before and after a specific overall pick. Results are immutable completed-draft facts, not live draft state.",
+    description: "Query completed platform draft picks from this conversation's league across stored historical seasons. Use it to inspect a complete round, one team's draft, one position, or the picks immediately before and after a specific overall pick. Results are immutable completed-draft facts, not live draft state.",
     schema: z.object({
       season: z.number().int().min(2000).max(2100).optional().describe("Historical season; omit to query all stored seasons"),
       round_number: z.number().int().min(1).max(40).optional().describe("Return picks from this round"),
@@ -91,7 +95,7 @@ export const AGENT_TOOLS = Object.entries(TOOL_REGISTRY).map(([name, definition]
   },
 }));
 
-const DRAFT_TOOL_NAMES = new Set(['search_players', 'get_player_overview', 'get_consensus_rankings', 'get_player_espn', 'get_player_fantasypros', 'get_player_fftoday', 'get_player_reddit', 'get_league_draft_history']);
+const DRAFT_TOOL_NAMES = new Set(['search_players', 'get_player_overview', 'get_consensus_rankings', 'get_player_espn', 'get_player_sleeper', 'get_player_fantasypros', 'get_player_fftoday', 'get_player_reddit', 'get_league_draft_history']);
 export const DRAFT_AGENT_TOOLS = AGENT_TOOLS.filter((tool) => DRAFT_TOOL_NAMES.has(tool.function.name));
 
 export function validateToolInput(name: string, input: unknown) {
