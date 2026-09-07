@@ -1,6 +1,15 @@
 from fastapi.testclient import TestClient
 
-from services.api.main import AuthenticatedUser, app, current_user, db_for, projection_summary, ranking_summary, source_freshness
+from services.api.main import (
+    AuthenticatedUser,
+    app,
+    current_user,
+    db_for,
+    player_directory_responses,
+    projection_summary,
+    ranking_summary,
+    source_freshness,
+)
 
 
 client = TestClient(app)
@@ -23,7 +32,10 @@ def test_invalid_token_is_rejected():
 
 
 class FakeDB:
+    calls = 0
+
     async def request(self, method, table, **kwargs):
+        self.calls += 1
         assert method == "GET"
         assert table == "player_directory_cache"
         assert kwargs["params"]["limit"] == 25
@@ -31,17 +43,26 @@ class FakeDB:
 
 
 def test_players_are_paginated_from_directory_view():
-    app.dependency_overrides[db_for] = lambda: FakeDB()
+    fake_db = FakeDB()
+    player_directory_responses.clear()
+    app.dependency_overrides[db_for] = lambda: fake_db
     try:
-        response = client.get("/v1/players")
-        assert response.status_code == 200
-        assert response.json() == {
+        first = client.get("/v1/players")
+        second = client.get("/v1/players")
+        assert first.status_code == 200
+        assert first.json() == {
             "items": [{"id": "player-1", "name": "Test Player"}],
             "page": 1,
             "page_size": 25,
             "total": 1,
         }
+        assert first.headers["x-ff-cache"] == "MISS"
+        assert second.headers["x-ff-cache"] == "HIT"
+        assert second.headers["cache-control"] == "private, max-age=300, stale-while-revalidate=900"
+        assert second.headers["vary"] == "Authorization"
+        assert fake_db.calls == 1
     finally:
+        player_directory_responses.clear()
         app.dependency_overrides.clear()
 
 

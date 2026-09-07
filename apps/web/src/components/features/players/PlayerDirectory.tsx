@@ -21,7 +21,7 @@ export function PlayerDirectory() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search), 250); return () => window.clearTimeout(timer) }, [search])
   const query = queryString({ search: debouncedSearch, position, season: scope?.team.league.season, page, page_size: 25, sort, direction })
-  const players = useQuery({ queryKey: ['players', query], queryFn: () => api<Paginated<Player>>(`/v1/players?${query}`), enabled: Boolean(scope), staleTime: 5 * 60_000, placeholderData: (previous) => previous })
+  const players = useQuery({ queryKey: ['players', query], queryFn: () => api<Paginated<Player>>(`/v1/players?${query}`), enabled: Boolean(scope), staleTime: 15 * 60_000, placeholderData: (previous) => previous })
   const totalPages = Math.max(1, Math.ceil((players.data?.total || 0) / 25))
   function chooseSort(next: typeof sort) {
     if (sort === next) setDirection((current) => current === 'asc' ? 'desc' : 'asc')

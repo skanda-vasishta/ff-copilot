@@ -1,12 +1,14 @@
 import asyncio
 import os
 import statistics
+import time
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any, Literal
 
 import httpx
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -14,6 +16,28 @@ from pydantic import BaseModel, Field
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+PLAYER_DIRECTORY_CACHE_TTL = 300
+PLAYER_DIRECTORY_CACHE_LIMIT = 256
+player_directory_responses: OrderedDict[tuple[Any, ...], tuple[float, dict[str, Any]]] = OrderedDict()
+
+
+def cached_player_directory(key: tuple[Any, ...]) -> dict[str, Any] | None:
+    cached = player_directory_responses.get(key)
+    if not cached:
+        return None
+    expires_at, payload = cached
+    if expires_at <= time.monotonic():
+        player_directory_responses.pop(key, None)
+        return None
+    player_directory_responses.move_to_end(key)
+    return payload
+
+
+def cache_player_directory(key: tuple[Any, ...], payload: dict[str, Any]) -> None:
+    player_directory_responses[key] = (time.monotonic() + PLAYER_DIRECTORY_CACHE_TTL, payload)
+    player_directory_responses.move_to_end(key)
+    while len(player_directory_responses) > PLAYER_DIRECTORY_CACHE_LIMIT:
+        player_directory_responses.popitem(last=False)
 
 
 class AuthenticatedUser(BaseModel):
@@ -122,6 +146,7 @@ async def health() -> dict[str, str]:
 
 @app.get("/v1/players")
 async def list_players(
+    response: Response,
     search: str | None = None,
     position: str | None = None,
     nfl_team: str | None = None,
@@ -132,6 +157,13 @@ async def list_players(
     direction: Literal["asc", "desc"] = "asc",
     db: SupabaseREST = Depends(db_for),
 ):
+    response.headers["Cache-Control"] = "private, max-age=300, stale-while-revalidate=900"
+    response.headers["Vary"] = "Authorization"
+    cache_key = (search or "", position or "", nfl_team or "", season, page, page_size, sort, direction)
+    cached = cached_player_directory(cache_key)
+    if cached is not None:
+        response.headers["X-FF-Cache"] = "HIT"
+        return cached
     params: dict[str, Any] = {
         "select": "id,name,position,nfl_team,active,season,injury_status,projected_total_points,average_rank,median_rank,source_count,fetched_at",
         "limit": page_size,
@@ -148,7 +180,10 @@ async def list_players(
         params["season"] = f"eq.{season}"
     data, headers = await db.request("GET", "player_directory_cache", params=params, prefer="count=exact")
     total = int(headers.get("content-range", "0/0").split("/")[-1].replace("*", "0"))
-    return {"items": data, "page": page, "page_size": page_size, "total": total}
+    payload = {"items": data, "page": page, "page_size": page_size, "total": total}
+    cache_player_directory(cache_key, payload)
+    response.headers["X-FF-Cache"] = "MISS"
+    return payload
 
 
 @app.get("/v1/draft/player-pool")

@@ -36,9 +36,11 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const scopeQuery = useQuery({
     queryKey: ["active-scope"],
     queryFn: async () => {
-      const { data: { user } } = await createClient().auth.getUser();
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return null;
-      const { data, error } = await createClient().from("user_active_scopes")
+      const { data, error } = await supabase.from("user_active_scopes")
         .select("team:fantasy_teams(id,name,external_id,league_id,league:leagues(id,name,external_id,provider,season,scoring_format_label,last_synced_at))")
         .eq("user_id", user.id).maybeSingle();
       if (error) throw error;
@@ -48,9 +50,11 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const mutation = useMutation({
     mutationFn: async (teamId: string) => {
       await api("/v1/me/teams", { method: "POST", body: JSON.stringify({ team_id: teamId }) });
-      const { data: { user } } = await createClient().auth.getUser();
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) throw new Error("You must sign in");
-      const { error } = await createClient().from("user_active_scopes")
+      const { error } = await supabase.from("user_active_scopes")
         .upsert({ user_id: user.id, team_id: teamId, updated_at: new Date().toISOString() });
       if (error) throw error;
     },
