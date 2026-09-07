@@ -21,13 +21,27 @@ export default function SettingsPage() {
   const [season, setSeason] = useState(2026)
   const [connectMessage, setConnectMessage] = useState<string | null>(null)
   const [slowConnect, setSlowConnect] = useState(false)
+  const [pendingLeague, setPendingLeague] = useState<{ provider: 'espn' | 'sleeper'; externalId: string; season: number } | null>(null)
 
-  const leagues = useQuery({ queryKey: ['my-leagues'], queryFn: () => api<LinkedLeague[]>('/v1/me/leagues') })
+  const leagues = useQuery({
+    queryKey: ['my-leagues'],
+    queryFn: () => api<LinkedLeague[]>('/v1/me/leagues'),
+    refetchInterval: (query) => query.state.data?.some(({ state }) => state === 'being_prepared') ? 5000 : false,
+  })
   const workspaceTeams = useQuery({ queryKey: ['my-teams'], queryFn: () => api<WorkspaceTeam[]>('/v1/me/teams') })
   const availableLeagues = useMemo(() => leagues.data?.filter(({ state }) => state === 'available') || [], [leagues.data])
   useEffect(() => {
     if (!leagueId && availableLeagues.length) setLeagueId(scope?.team.league_id || availableLeagues[0].league.id)
   }, [availableLeagues, leagueId, scope])
+  useEffect(() => {
+    if (!pendingLeague) return
+    const connected = availableLeagues.find(({ league }) => league.provider === pendingLeague.provider
+      && league.external_id === pendingLeague.externalId && league.season === pendingLeague.season)
+    if (!connected) return
+    setLeagueId(connected.league.id)
+    setConnectMessage(`${connected.league.name || connected.league.provider.toUpperCase() + ' league'} connected. Choose your team below.`)
+    setPendingLeague(null)
+  }, [availableLeagues, pendingLeague])
   const leagueTeams = useQuery({ queryKey: ['league-teams', leagueId], queryFn: () => api<LeagueTeam[]>(`/v1/leagues/${leagueId}/teams`), enabled: Boolean(leagueId) })
   const addedIds = new Set(workspaceTeams.data?.map(({ team }) => team.id))
 
@@ -35,8 +49,10 @@ export default function SettingsPage() {
     mutationFn: () => api<ConnectResult>('/v1/me/leagues', { method: 'POST', body: JSON.stringify({ provider, external_id: externalId.trim(), season }) }),
     onMutate: () => { setConnectMessage(null); setSlowConnect(false) },
     onSuccess: async (result) => {
+      const submittedLeague = { provider, externalId: externalId.trim(), season }
       setExternalId('')
       if (result.league) setLeagueId(result.league.id)
+      else setPendingLeague(submittedLeague)
       setConnectMessage(result.state === 'available'
         ? `${result.league?.name || provider.toUpperCase() + ' league'} connected. Choose your team below.`
         : 'League accepted and is being imported. Teams will appear here automatically.')
