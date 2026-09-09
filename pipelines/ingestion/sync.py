@@ -89,6 +89,64 @@ def chunks(items: list[Any], size: int = 100):
         yield items[index:index + size]
 
 
+def espn_timestamp(value: Any) -> str | None:
+    """Convert ESPN's millisecond timestamps to an ISO timestamp."""
+    number = clean_number(value)
+    if number is None:
+        return None
+    return datetime.fromtimestamp(float(number) / 1000, timezone.utc).isoformat()
+
+
+def normalize_espn_transaction(
+    transaction: dict[str, Any],
+    league_id: str,
+    teams_by_external_id: dict[str, dict[str, Any]],
+    fetched_at: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Normalize both mTransactions2 and mPendingTransactions records."""
+    external_id = str(transaction.get("id") or digest(transaction))
+    initiating_external_id = (
+        transaction.get("teamId")
+        or transaction.get("proposedByTeamId")
+        or transaction.get("proposedBy")
+    )
+    initiating_key = str(initiating_external_id) if initiating_external_id is not None else None
+    status = str(transaction.get("status") or ("PENDING" if transaction.get("isPending") else "UNKNOWN")).upper()
+    item_types = {str(item.get("type") or "").upper() for item in transaction.get("items") or []}
+    transaction_type = str(transaction.get("type") or "UNKNOWN").upper()
+    if status == "PENDING" and "TRADE" in item_types and not transaction_type.startswith("TRADE"):
+        transaction_type = "TRADE_PROPOSAL"
+    row = {
+        "league_id": league_id,
+        "provider_transaction_id": external_id,
+        "transaction_type": transaction_type,
+        "status": status,
+        "initiated_by_team_id": teams_by_external_id.get(initiating_key or "", {}).get("id"),
+        "initiated_by_team_external_id": initiating_key,
+        "proposed_at": espn_timestamp(transaction.get("proposedDate")),
+        "processed_at": espn_timestamp(transaction.get("processDate") or transaction.get("acceptedDate")),
+        "expires_at": espn_timestamp(transaction.get("expirationDate")),
+        "bid_amount": clean_number(transaction.get("bidAmount")),
+        "raw_payload": transaction,
+        "fetched_at": fetched_at,
+    }
+    items = []
+    for index, item in enumerate(transaction.get("items") or []):
+        from_external_id = item.get("fromTeamId")
+        to_external_id = item.get("toTeamId")
+        items.append({
+            "item_index": index,
+            "item_type": str(item.get("type") or "UNKNOWN").upper(),
+            "player_external_id": str(item["playerId"]) if item.get("playerId") is not None else None,
+            "from_team_id": teams_by_external_id.get(str(from_external_id), {}).get("id") if from_external_id is not None else None,
+            "from_team_external_id": str(from_external_id) if from_external_id is not None else None,
+            "to_team_id": teams_by_external_id.get(str(to_external_id), {}).get("id") if to_external_id is not None else None,
+            "to_team_external_id": str(to_external_id) if to_external_id is not None else None,
+            "raw_payload": item,
+        })
+    return row, items
+
+
 class SupabaseAdmin:
     def __init__(self):
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -129,6 +187,9 @@ class SupabaseAdmin:
     def patch(self, table: str, filters: dict[str, Any], data: dict):
         return self.request("PATCH", table, params={key: f"eq.{value}" for key, value in filters.items()}, data=data,
                             prefer="return=representation")
+
+    def delete(self, table: str, **filters):
+        return self.request("DELETE", table, params={key: f"eq.{value}" for key, value in filters.items()})
 
     def touch(self, table: str, ids: list[str], fetched_at: str):
         if not ids:
@@ -1026,6 +1087,78 @@ def sync_one_league(
                 db.upsert("roster_players", rows, "roster_snapshot_id,player_id")
             run.read += len(team.roster)
             run.written += len(rows) + 2
+
+        # mTransactions2 is scoring-period scoped. Reading every elapsed period
+        # gives us the complete season feed; mPendingTransactions separately
+        # exposes outstanding trade proposals.
+        transaction_payloads: dict[str, dict[str, Any]] = {}
+        current_period = max(1, int(getattr(league_data, "current_week", None) or week or 1))
+        transaction_types = [
+            "FREEAGENT", "WAIVER", "TRADE_ACCEPT", "TRADE_PROPOSAL",
+            "TRADE_UPHOLD", "TRADE_VETO", "TRADE_DECLINE",
+        ]
+        transaction_filter = {"transactions": {"filterType": {"value": transaction_types}}}
+        for scoring_period in range(1, current_period + 1):
+            try:
+                payload = league_data.espn_request.league_get(
+                    params={"view": "mTransactions2", "scoringPeriodId": scoring_period},
+                    headers={"x-fantasy-filter": json.dumps(transaction_filter)},
+                )
+                for transaction in payload.get("transactions", []) or []:
+                    transaction_payloads[str(transaction.get("id") or digest(transaction))] = transaction
+            except Exception as exc:
+                run.error(f"league_transactions:{scoring_period}", exc)
+
+        pending_payloads: list[dict[str, Any]] = []
+        try:
+            pending_response = league_data.espn_request.league_get(params={"view": "mPendingTransactions"})
+            # Pending waivers can reveal blind bids. Persist only trade offers.
+            pending_payloads = [
+                transaction for transaction in (pending_response.get("pendingTransactions", []) or [])
+                if str(transaction.get("type") or "").upper().startswith("TRADE")
+                or any(str(item.get("type") or "").upper() == "TRADE" for item in transaction.get("items", []))
+            ]
+            # A successful response is authoritative for outstanding offers.
+            # Remove yesterday's pending copies before restoring the current set.
+            db.delete("league_transactions", league_id=league["id"], status="PENDING")
+            for transaction in pending_payloads:
+                transaction_payloads[str(transaction.get("id") or digest(transaction))] = transaction
+        except Exception as exc:
+            run.error("pending_transactions", exc)
+
+        if transaction_payloads:
+            normalized = [
+                normalize_espn_transaction(transaction, league["id"], teams_by_external_id, fetched_at)
+                for transaction in transaction_payloads.values()
+            ]
+            transaction_rows = db.upsert(
+                "league_transactions", [row for row, _ in normalized],
+                "league_id,provider_transaction_id",
+            )
+            stored_by_external_id = {row["provider_transaction_id"]: row for row in transaction_rows}
+            item_rows = []
+            for transaction_row, items in normalized:
+                stored = stored_by_external_id[transaction_row["provider_transaction_id"]]
+                for item in items:
+                    external_player_id = item["player_external_id"]
+                    player_id = None
+                    player_name = None
+                    if external_player_id:
+                        player = league_data.player_map.get(int(external_player_id))
+                        if not player:
+                            try:
+                                player = league_data.player_info(playerId=int(external_player_id))
+                            except Exception as exc:
+                                run.error(f"transaction_player:{external_player_id}", exc)
+                        if player:
+                            player_id = resolve_player(db, external_player_id, player_payload(player))
+                            player_name = getattr(player, "name", None)
+                    item_rows.append({**item, "transaction_id": stored["id"], "player_id": player_id,
+                                      "player_name": player_name})
+            if item_rows:
+                db.upsert("league_transaction_items", item_rows, "transaction_id,item_index")
+            run.read += len(transaction_payloads)
+            run.written += len(transaction_rows) + len(item_rows)
 
         draft = list(getattr(league_data, "draft", []) or [])
         if draft:
