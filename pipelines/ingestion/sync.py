@@ -1145,6 +1145,10 @@ def sync_one_league(
                     player_name = None
                     if external_player_id:
                         player = league_data.player_map.get(int(external_player_id))
+                        # espn-api uses this map for both IDs and display names;
+                        # depending on fetch path the value can be a plain name.
+                        if isinstance(player, str):
+                            player = None
                         if not player:
                             try:
                                 player = league_data.player_info(playerId=int(external_player_id))
