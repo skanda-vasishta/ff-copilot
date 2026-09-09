@@ -1,6 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 import type { AgentMessage, AgentThread } from "@ff-copilot/agent-runtime";
 
+const RECOMMENDATION_THREAD_TITLES = new Set([
+  "Free agent recommendations",
+  "Trade recommendations",
+]);
+
 export async function listThreads(teamId: string) {
   const { data, error } = await createClient()
     .from("agent_threads")
@@ -8,15 +13,15 @@ export async function listThreads(teamId: string) {
     .eq("team_id", teamId)
     .order("updated_at", { ascending: false });
   if (error) throw error;
-  return data as AgentThread[];
+  return (data as AgentThread[]).filter((thread) => !RECOMMENDATION_THREAD_TITLES.has(thread.title));
 }
 
-export async function createThread(input: { teamId?: string; leagueId?: string }) {
+export async function createThread(input: { teamId?: string; leagueId?: string; title?: string }) {
   const { data: { user } } = await createClient().auth.getUser();
   if (!user) throw new Error("You must sign in");
   const { data, error } = await createClient()
     .from("agent_threads")
-    .insert({ user_id: user.id, team_id: input.teamId || null, league_id: input.leagueId || null })
+    .insert({ user_id: user.id, team_id: input.teamId || null, league_id: input.leagueId || null, ...(input.title ? { title: input.title } : {}) })
     .select()
     .single();
   if (error) throw error;
