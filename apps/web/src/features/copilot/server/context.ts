@@ -28,7 +28,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-consensus-rankings-v8";
+const CONTEXT_VERSION = "league-rosters-consensus-rankings-activity-v9";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -39,6 +39,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   const selectedTeam = snapshot.selected_team as Record<string, unknown>;
   const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
   const rankings = snapshot.top_consensus_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
+  const recentActivity = (snapshot.recent_league_activity || []) as Array<Record<string, unknown>>;
   const leagueSettings = (league.league_settings || {}) as Record<string, unknown>;
   const draftSettings = (leagueSettings.draft_settings || {}) as Record<string, unknown>;
   const pickOrder = Array.isArray(draftSettings.pick_order) ? draftSettings.pick_order.map(String) : [];
@@ -105,6 +106,17 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
   }
 
+  lines.push("", "## 10 most recent league activity transactions", "Newest first. This is a convenience snapshot; use get_league_activity for a specific time window, more results, or team filtering.");
+  if (!recentActivity.length) lines.push("No stored activity transactions are available.");
+  for (const transaction of recentActivity) {
+    const items = (transaction.items || []) as Array<Record<string, unknown>>;
+    const itemSummary = items.map((item) => {
+      const movement = [item.from_team_name || item.from_team_id, item.to_team_name || item.to_team_id].filter(present).map(String).join(" → ");
+      return `${String(item.item_type)}: ${String(item.player_name || item.player_external_id || "unknown player")}${movement ? ` (${movement})` : ""}`;
+    }).join("; ");
+    lines.push(`- ${String(transaction.activity_at)} | ${String(transaction.transaction_type)} | ${String(transaction.status)}${present(transaction.initiated_by_team_name) ? ` | initiated by ${String(transaction.initiated_by_team_name)}` : ""}${present(transaction.bid_amount) ? ` | bid ${String(transaction.bid_amount)}` : ""}${itemSummary ? ` | ${itemSummary}` : ""}`);
+  }
+
   lines.push("", `## ${String(league.season)} full-PPR consensus rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by a simple average of every compatible current positional rank. ESPN is a platform draft rank, FantasyPros is expert consensus rank, and FFToday is projection-derived positional rank. Projected points separately average every compatible full-season PPR projection source.`);
   for (const position of CONTEXT_POSITIONS) {
     lines.push("", `### ${position}`);
@@ -125,7 +137,10 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
 }
 
 export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false) {
-  if (!force && thread.context_snapshot?.context_version === CONTEXT_VERSION && thread.context_date_utc === utcDate()) return thread.context_snapshot;
+  const leagueSyncedAt = thread.team.league.last_synced_at ? Date.parse(thread.team.league.last_synced_at) : 0;
+  const contextRefreshedAt = thread.context_refreshed_at ? Date.parse(thread.context_refreshed_at) : 0;
+  const contextIncludesLatestLeagueSync = !leagueSyncedAt || contextRefreshedAt >= leagueSyncedAt;
+  if (!force && contextIncludesLatestLeagueSync && thread.context_snapshot?.context_version === CONTEXT_VERSION && thread.context_date_utc === utcDate()) return thread.context_snapshot;
 
   const { data: teams, error: teamsError } = await supabase.from("fantasy_teams")
     .select("id,name,external_id,wins,losses,ties,points_for,points_against,standing,final_standing,playoff_pct")
@@ -158,6 +173,31 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     const entries = rosters.get(teamId) || [];
     entries.push({ player_id: player.id, name: player.name, position: player.position, nfl_team: player.nfl_team, lineup_slot: row.lineup_slot });
     rosters.set(teamId, entries);
+  }
+
+  const recentTransactionsQuery = await supabase.from("league_transactions")
+    .select("id,transaction_type,status,initiated_by_team_id,proposed_at,processed_at,activity_at,bid_amount,fetched_at")
+    .eq("league_id", thread.league_id)
+    .order("activity_at", { ascending: false })
+    .limit(10);
+  if (recentTransactionsQuery.error) throw new Error("Could not load recent league activity for context");
+  const recentTransactions = recentTransactionsQuery.data || [];
+  const recentTransactionIds = recentTransactions.map((transaction) => transaction.id);
+  const recentItemsQuery = recentTransactionIds.length ? await supabase.from("league_transaction_items")
+    .select("transaction_id,item_index,item_type,player_id,player_external_id,player_name,from_team_id,to_team_id")
+    .in("transaction_id", recentTransactionIds)
+    .order("item_index") : { data: [], error: null };
+  if (recentItemsQuery.error) throw new Error("Could not load recent league activity items for context");
+  const teamNameById = new Map((teams || []).map((team) => [team.id, team.name]));
+  const recentItemsByTransaction = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of recentItemsQuery.data || []) {
+    const entries = recentItemsByTransaction.get(item.transaction_id) || [];
+    entries.push({
+      ...item,
+      from_team_name: item.from_team_id ? teamNameById.get(item.from_team_id) || null : null,
+      to_team_name: item.to_team_id ? teamNameById.get(item.to_team_id) || null : null,
+    });
+    recentItemsByTransaction.set(item.transaction_id, entries);
   }
 
   const rankingQueries = await Promise.all([
@@ -240,6 +280,11 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     selected_team: { id: thread.team.id, name: thread.team.name },
     league: thread.team.league,
     top_consensus_ranked_players_by_position: topPlayersByPosition,
+    recent_league_activity: recentTransactions.map((transaction) => ({
+      ...transaction,
+      initiated_by_team_name: transaction.initiated_by_team_id ? teamNameById.get(transaction.initiated_by_team_id) || null : null,
+      items: recentItemsByTransaction.get(transaction.id) || [],
+    })),
     teams: (teams || []).map((team) => ({
       ...team,
       is_user_team: team.id === thread.team_id,
