@@ -30,7 +30,7 @@ export function Header() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const { scope, setTeam } = useActiveScope()
+  const { scope, setTeam, refresh, isRefreshing } = useActiveScope()
   const teams = useQuery({
     queryKey: ['my-teams'],
     queryFn: () => api<WorkspaceTeam[]>('/v1/me/teams'),
@@ -68,7 +68,10 @@ export function Header() {
         })}
       </nav>
 
-      <div className="ml-auto mr-1"><ThemeToggle /></div>
+      <div className="ml-auto flex items-center gap-1">
+        {scope && <button type="button" onClick={() => void refresh()} disabled={isRefreshing} aria-label="Refresh team data" title="Refresh team data everywhere" className="focus-ring grid size-8 place-items-center rounded-[6px] text-sm text-[#777f72] transition hover:bg-white/[.05] hover:text-[#eef1e9] disabled:opacity-40"><span className={isRefreshing ? 'animate-spin' : ''}>↻</span></button>}
+        <ThemeToggle />
+      </div>
       <div ref={menuRef} className="relative">
         <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} className="focus-ring flex h-8 max-w-52 items-center gap-2 rounded-[6px] border border-white/[.07] bg-white/[.025] px-2.5 text-left text-[11px] text-[#b9c0b3] transition hover:bg-white/[.05] hover:text-[#eef1e9]">
           <span className="hidden max-w-32 truncate font-medium sm:block">{scope?.team.name || 'Select team'}</span>
