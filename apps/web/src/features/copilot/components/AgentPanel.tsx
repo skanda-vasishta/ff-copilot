@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { useAgent } from "@/features/copilot/client/useAgent";
 import { createThread, deleteThread, listThreads, updateThread } from "@/features/copilot/client/threads";
 import type { AgentThread } from "@ff-copilot/agent-runtime";
@@ -11,6 +12,7 @@ import { getAgentModels, refreshThreadContext, setAgentPreferences } from "@/fea
 import type { AgentModelSelection } from "@/features/copilot/client/api";
 
 export function AgentPanel() {
+  const searchParams = useSearchParams();
   const [threads, setThreads] = useState<AgentThread[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadQuery, setThreadQuery] = useState("");
@@ -21,6 +23,7 @@ export function AgentPanel() {
   const [modelSelection, setModelSelection] = useState<AgentModelSelection | null>(null);
   const [savingModel, setSavingModel] = useState(false);
   const end = useRef<HTMLDivElement>(null);
+  const appliedPrompt = useRef(false);
   const { scope, isLoading: loadingScope } = useActiveScope();
   const models = useQuery({ queryKey: ["agent-models"], queryFn: getAgentModels });
   const thread = useMemo(() => {
@@ -53,6 +56,13 @@ export function AgentPanel() {
   useEffect(() => {
     if (models.data?.selected && !savingModel) setModelSelection(models.data.selected);
   }, [models.data?.selected, savingModel]);
+  useEffect(() => {
+    const prompt = searchParams.get("prompt");
+    if (prompt && !appliedPrompt.current) {
+      appliedPrompt.current = true;
+      setInput(prompt.slice(0, 1000));
+    }
+  }, [searchParams]);
 
   async function newThread() {
     if (!scope) return;

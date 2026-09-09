@@ -15,6 +15,7 @@ type League = {
   lineup_slot_counts: Record<string, number>;
   league_settings: Record<string, unknown>;
   last_synced_at: string | null;
+  current_week: number | null;
 };
 
 export type ContextThread = {
@@ -28,7 +29,7 @@ export type ContextThread = {
 };
 
 const utcDate = () => new Date().toISOString().slice(0, 10);
-const CONTEXT_VERSION = "league-rosters-consensus-rankings-v9-sleeper";
+const CONTEXT_VERSION = "league-rosters-matchup-rankings-v10";
 const CONTEXT_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 const CONTEXT_PLAYERS_PER_POSITION = 30;
 
@@ -39,6 +40,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
   const selectedTeam = snapshot.selected_team as Record<string, unknown>;
   const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
   const rankings = snapshot.top_consensus_ranked_players_by_position as Record<string, Array<Record<string, unknown>>>;
+  const matchup = snapshot.current_matchup as Record<string, unknown> | null;
   const leagueSettings = (league.league_settings || {}) as Record<string, unknown>;
   const provider = String(league.provider || "fantasy");
   const providerLabel = provider === "espn" ? "ESPN" : provider === "sleeper" ? "Sleeper" : provider;
@@ -67,6 +69,28 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     `Starting lineup and bench: ${lineup || "not available"}`,
     `Selected user team: ${String(selectedTeam.name)} (team_id: ${String(selectedTeam.id)})`,
   ];
+
+  if (matchup) {
+    const home = teamByExternalId.get(String(matchup.home_team_external_id));
+    const away = teamByExternalId.get(String(matchup.away_team_external_id));
+    const opponent = home?.id === selectedTeam.id ? away : home;
+    const userIsHome = home?.id === selectedTeam.id;
+    const userScore = userIsHome ? matchup.home_score : matchup.away_score;
+    const opponentScore = userIsHome ? matchup.away_score : matchup.home_score;
+    const userProjection = userIsHome ? matchup.home_projected : matchup.away_projected;
+    const opponentProjection = userIsHome ? matchup.away_projected : matchup.home_projected;
+    lines.push(
+      "",
+      `## Current matchup — Week ${String(matchup.week)}`,
+      `Opponent: ${String(opponent?.name || "Unknown opponent")} (team_id: ${String(opponent?.id || "unknown")})`,
+      `Status: ${String(matchup.status || "scheduled")}`,
+      `Score: ${present(userScore) ? String(userScore) : "not started"} — ${present(opponentScore) ? String(opponentScore) : "not started"}`,
+      `Provider projection: ${present(userProjection) ? String(userProjection) : "unavailable"} — ${present(opponentProjection) ? String(opponentProjection) : "unavailable"}`,
+      "Use the authoritative rosters below to compare the two starting lineups. Treat BN/BE/IR/TAXI slots as non-starters.",
+    );
+  } else {
+    lines.push("", "## Current matchup", "No head-to-head matchup is stored for the league's current week.");
+  }
 
   if (pickOrder.length) {
     const draftType = String(draftSettings.type || "unknown").toLowerCase();
@@ -138,6 +162,16 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     .order("name");
   if (teamsError) throw new Error("Could not load league teams for context");
   const teamIds = (teams || []).map((team) => team.id);
+
+  const matchupQuery = thread.team.league.current_week ? await supabase.from("league_matchups")
+    .select("week,status,home_team_id,away_team_id,home_score,away_score,home_projected,away_projected")
+    .eq("league_id", thread.league_id)
+    .eq("season", thread.team.league.season)
+    .eq("week", thread.team.league.current_week)
+    .or(`home_team_id.eq.${thread.team_id},away_team_id.eq.${thread.team_id}`)
+    .maybeSingle() : { data: null, error: null };
+  if (matchupQuery.error) throw new Error("Could not load the current matchup for context");
+  const currentMatchup = matchupQuery.data;
 
   const snapshots = teamIds.length ? await supabase.from("roster_snapshots")
     .select("id,team_id,season,week,fetched_at")
@@ -244,6 +278,11 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     refreshed_at: refreshedAt,
     selected_team: { id: thread.team.id, name: thread.team.name },
     league: thread.team.league,
+    current_matchup: currentMatchup ? {
+      ...currentMatchup,
+      home_team_external_id: (teams || []).find((team) => team.id === currentMatchup.home_team_id)?.external_id,
+      away_team_external_id: (teams || []).find((team) => team.id === currentMatchup.away_team_id)?.external_id,
+    } : null,
     top_consensus_ranked_players_by_position: topPlayersByPosition,
     teams: (teams || []).map((team) => ({
       ...team,
@@ -261,4 +300,4 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   return snapshot;
 }
 
-export const THREAD_CONTEXT_SELECT = "*, team:fantasy_teams(id,name,external_id,league:leagues(id,name,season,provider,external_id,team_count,playoff_team_count,regular_season_weeks,scoring_type,reception_points,scoring_format_label,lineup_slot_counts,league_settings,last_synced_at))";
+export const THREAD_CONTEXT_SELECT = "*, team:fantasy_teams(id,name,external_id,league:leagues(id,name,season,provider,external_id,team_count,playoff_team_count,regular_season_weeks,scoring_type,reception_points,scoring_format_label,lineup_slot_counts,league_settings,last_synced_at,current_week))";
