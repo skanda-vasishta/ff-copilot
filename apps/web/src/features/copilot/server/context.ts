@@ -127,7 +127,10 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
 }
 
 export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false) {
-  if (!force && thread.context_snapshot?.context_version === CONTEXT_VERSION && thread.context_date_utc === utcDate()) return thread.context_snapshot;
+  const leagueSyncedAt = thread.team.league.last_synced_at ? Date.parse(thread.team.league.last_synced_at) : 0;
+  const contextRefreshedAt = thread.context_refreshed_at ? Date.parse(thread.context_refreshed_at) : 0;
+  const contextIncludesLatestLeagueSync = !leagueSyncedAt || contextRefreshedAt >= leagueSyncedAt;
+  if (!force && contextIncludesLatestLeagueSync && thread.context_snapshot?.context_version === CONTEXT_VERSION && thread.context_date_utc === utcDate()) return thread.context_snapshot;
 
   const { data: teams, error: teamsError } = await supabase.from("fantasy_teams")
     .select("id,name,external_id,wins,losses,ties,points_for,points_against,standing,final_standing,playoff_pct")
