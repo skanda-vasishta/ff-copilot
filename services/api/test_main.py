@@ -141,7 +141,10 @@ class TransactionsDB:
             ]
             if kwargs["params"]["status"] == "eq.PENDING":
                 return ([row for row in rows if row["status"] == "PENDING"], {})
-            return ([row for row in rows if row["status"] == "EXECUTED"], {})
+            assert kwargs["params"]["limit"] == 20
+            assert kwargs["params"]["offset"] == 0
+            assert kwargs["prefer"] == "count=exact"
+            return ([row for row in rows if row["status"] == "EXECUTED"], {"content-range": "0-0/1"})
         raise AssertionError(table)
 
 
@@ -153,7 +156,8 @@ def test_league_transactions_separate_trade_offers_and_completed_feed():
         body = response.json()
         assert [row["id"] for row in body["incoming"]] == ["incoming"]
         assert [row["id"] for row in body["outgoing"]] == ["outgoing"]
-        assert [row["id"] for row in body["league"]] == ["waiver"]
+        assert [row["id"] for row in body["league"]["items"]] == ["waiver"]
+        assert body["league"] == {"items": body["league"]["items"], "page": 1, "page_size": 20, "total": 1, "total_pages": 1}
     finally:
         app.dependency_overrides.clear()
 

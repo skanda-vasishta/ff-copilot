@@ -3,6 +3,7 @@ import os
 import statistics
 import time
 from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -497,7 +498,11 @@ async def league_teams(league_id: str, db: SupabaseREST = Depends(db_for)):
 async def league_transactions(
     league_id: str,
     team_id: str,
-    limit: int = Query(100, ge=1, le=250),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    transaction_type: Literal["all", "trade", "waiver", "free_agent"] = "all",
+    time_range: Literal["all", "7d", "30d"] = "all",
+    filter_team_id: str | None = None,
     db: SupabaseREST = Depends(db_for),
 ):
     teams, _ = await db.request("GET", "fantasy_teams", params={
@@ -511,11 +516,43 @@ async def league_transactions(
         "league_id": f"eq.{league_id}", "status": "eq.PENDING", "select": select,
         "order": "proposed_at.desc.nullslast,fetched_at.desc", "limit": 100,
     })
-    completed, _ = await db.request("GET", "league_transactions", params={
+    completed_types = {
+        "all": "FREEAGENT,FREE_AGENT,WAIVER,TRADE,TRADE_ACCEPT,TRADE_ACCEPTED,TRADE_UPHOLD",
+        "trade": "TRADE,TRADE_ACCEPT,TRADE_ACCEPTED,TRADE_UPHOLD",
+        "waiver": "WAIVER",
+        "free_agent": "FREEAGENT,FREE_AGENT",
+    }
+    completed_params: dict[str, Any] = {
         "league_id": f"eq.{league_id}", "status": "in.(EXECUTED,PROCESSED,ACCEPTED,COMPLETED)",
         "select": select, "order": "processed_at.desc.nullslast,proposed_at.desc.nullslast",
-        "limit": limit,
-    })
+        "transaction_type": f"in.({completed_types[transaction_type]})",
+        "limit": page_size, "offset": (page - 1) * page_size,
+    }
+    if time_range != "all":
+        days = 7 if time_range == "7d" else 30
+        completed_params["processed_at"] = f"gte.{(datetime.now(timezone.utc) - timedelta(days=days)).isoformat()}"
+    no_matching_transactions = False
+    if filter_team_id:
+        filter_teams, _ = await db.request("GET", "fantasy_teams", params={
+            "league_id": f"eq.{league_id}", "id": f"eq.{filter_team_id}", "select": "id", "limit": 1,
+        })
+        if not filter_teams:
+            raise HTTPException(status_code=404, detail="Filter team not found in league")
+        matching_items, _ = await db.request("GET", "league_transaction_items", params={
+            "or": f"(from_team_id.eq.{filter_team_id},to_team_id.eq.{filter_team_id})",
+            "select": "transaction_id",
+        })
+        transaction_ids = sorted({item["transaction_id"] for item in matching_items})
+        if not transaction_ids:
+            no_matching_transactions = True
+        else:
+            completed_params["id"] = f"in.({','.join(transaction_ids)})"
+    if no_matching_transactions:
+        completed, completed_headers = [], {"content-range": "*/0"}
+    else:
+        completed, completed_headers = await db.request(
+            "GET", "league_transactions", params=completed_params, prefer="count=exact"
+        )
 
     def involves_selected_team(transaction: dict[str, Any]) -> bool:
         return any(
@@ -537,9 +574,11 @@ async def league_transactions(
         transaction for transaction in pending_trades
         if transaction.get("initiated_by_team_id") == team_id
     ]
-    completed_types = {"FREEAGENT", "FREE_AGENT", "WAIVER", "TRADE", "TRADE_ACCEPT", "TRADE_ACCEPTED", "TRADE_UPHOLD"}
-    league_feed = [transaction for transaction in completed if transaction.get("transaction_type") in completed_types]
-    return {"incoming": incoming, "outgoing": outgoing, "league": league_feed}
+    total = int(completed_headers.get("content-range", "0/0").split("/")[-1].replace("*", "0"))
+    return {"incoming": incoming, "outgoing": outgoing, "league": {
+        "items": completed, "page": page, "page_size": page_size, "total": total,
+        "total_pages": (total + page_size - 1) // page_size,
+    }}
 
 
 @app.get("/v1/leagues/{league_id}/seasons")
