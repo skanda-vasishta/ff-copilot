@@ -493,6 +493,55 @@ async def league_teams(league_id: str, db: SupabaseREST = Depends(db_for)):
     return data
 
 
+@app.get("/v1/leagues/{league_id}/transactions")
+async def league_transactions(
+    league_id: str,
+    team_id: str,
+    limit: int = Query(100, ge=1, le=250),
+    db: SupabaseREST = Depends(db_for),
+):
+    teams, _ = await db.request("GET", "fantasy_teams", params={
+        "league_id": f"eq.{league_id}", "id": f"eq.{team_id}", "select": "id", "limit": 1,
+    })
+    if not teams:
+        raise HTTPException(status_code=404, detail="Team not found in league")
+
+    select = "*,initiated_by_team:fantasy_teams!league_transactions_initiated_by_team_id_fkey(id,name),items:league_transaction_items(*,player:players(id,name,position,nfl_team),from_team:fantasy_teams!league_transaction_items_from_team_id_fkey(id,name),to_team:fantasy_teams!league_transaction_items_to_team_id_fkey(id,name))"
+    pending, _ = await db.request("GET", "league_transactions", params={
+        "league_id": f"eq.{league_id}", "status": "eq.PENDING", "select": select,
+        "order": "proposed_at.desc.nullslast,fetched_at.desc", "limit": 100,
+    })
+    completed, _ = await db.request("GET", "league_transactions", params={
+        "league_id": f"eq.{league_id}", "status": "in.(EXECUTED,PROCESSED,ACCEPTED,COMPLETED)",
+        "select": select, "order": "processed_at.desc.nullslast,proposed_at.desc.nullslast",
+        "limit": limit,
+    })
+
+    def involves_selected_team(transaction: dict[str, Any]) -> bool:
+        return any(
+            item.get("from_team_id") == team_id or item.get("to_team_id") == team_id
+            for item in transaction.get("items") or []
+        )
+
+    pending_trades = [
+        transaction for transaction in pending
+        if transaction.get("transaction_type") in {"TRADE", "TRADE_PROPOSAL"}
+        and involves_selected_team(transaction)
+    ]
+    incoming = [
+        transaction for transaction in pending_trades
+        if transaction.get("initiated_by_team_id") is not None
+        and transaction.get("initiated_by_team_id") != team_id
+    ]
+    outgoing = [
+        transaction for transaction in pending_trades
+        if transaction.get("initiated_by_team_id") == team_id
+    ]
+    completed_types = {"FREEAGENT", "FREE_AGENT", "WAIVER", "TRADE", "TRADE_ACCEPT", "TRADE_ACCEPTED", "TRADE_UPHOLD"}
+    league_feed = [transaction for transaction in completed if transaction.get("transaction_type") in completed_types]
+    return {"incoming": incoming, "outgoing": outgoing, "league": league_feed}
+
+
 @app.get("/v1/leagues/{league_id}/seasons")
 async def league_seasons(league_id: str, db: SupabaseREST = Depends(db_for)):
     data, _ = await db.request("POST", "rpc/link_league_history", json={"p_league_id": league_id})
