@@ -73,6 +73,38 @@ def chunks(items: list[Any], size: int = 100):
         yield items[index:index + size]
 
 
+def espn_matchup_rows(
+    schedule: list[dict[str, Any]], league_id: str, season: int,
+    teams_by_external_id: dict[str, dict[str, Any]], fetched_at: str,
+) -> list[dict[str, Any]]:
+    """Normalize ESPN's schedule payload without depending on espn-api internals."""
+    rows = []
+    for event in schedule:
+        week = clean_number(event.get("matchupPeriodId"))
+        home = event.get("home") or {}
+        away = event.get("away") or {}
+        if not week or not home.get("teamId") or not away.get("teamId"):
+            continue  # bye placeholders and aggregate playoff rows are not head-to-head matchups
+        home_team = teams_by_external_id.get(str(home["teamId"]))
+        away_team = teams_by_external_id.get(str(away["teamId"]))
+        if not home_team or not away_team:
+            continue
+        completed = event.get("winner") not in (None, "", "UNDECIDED")
+        rows.append({
+            "league_id": league_id, "season": season, "week": int(week),
+            "matchup_external_id": str(event.get("id") or f"{week}-{home['teamId']}-{away['teamId']}"),
+            "home_team_id": home_team["id"], "away_team_id": away_team["id"],
+            "home_score": clean_number(home.get("totalPoints")),
+            "away_score": clean_number(away.get("totalPoints")),
+            "home_projected": clean_number(home.get("totalProjectedPointsLive") or home.get("totalProjectedPoints")),
+            "away_projected": clean_number(away.get("totalProjectedPointsLive") or away.get("totalProjectedPoints")),
+            "status": "final" if completed else "scheduled",
+            "fetched_at": fetched_at,
+            "raw_payload": {"winner": event.get("winner"), "playoff_tier": event.get("playoffTierType")},
+        })
+    return rows
+
+
 class SupabaseAdmin:
     def __init__(self):
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -765,6 +797,7 @@ def sync_one_league(
             str(slot): count for slot, count in (getattr(settings, "position_slot_counts", {}) or {}).items()
             if count
         }
+        current_week = clean_number((league_payload.get("status", {}) or {}).get("currentMatchupPeriod"))
         league = db.upsert("leagues", {"provider": "espn", "external_id": external_id, "season": season,
             "name": getattr(settings, "name", None), "status": "succeeded", "last_synced_at": fetched_at,
             "team_count": getattr(settings, "team_count", None),
@@ -772,7 +805,8 @@ def sync_one_league(
             "regular_season_weeks": getattr(settings, "reg_season_count", None),
             "scoring_type": getattr(settings, "scoring_type", None),
             "reception_points": reception_points, "scoring_format_label": scoring_label,
-            "lineup_slot_counts": lineup_counts, "league_settings": raw_settings},
+            "lineup_slot_counts": lineup_counts, "league_settings": raw_settings,
+            "current_week": int(current_week) if current_week else week},
             "provider,external_id,season")[0]
         teams_by_external_id: dict[str, dict[str, Any]] = {}
         for team in league_data.teams:
@@ -798,6 +832,14 @@ def sync_one_league(
                 db.upsert("roster_players", rows, "roster_snapshot_id,player_id")
             run.read += len(team.roster)
             run.written += len(rows) + 2
+
+        matchup_rows = espn_matchup_rows(
+            league_payload.get("schedule", []) or [], league["id"], season, teams_by_external_id, fetched_at
+        )
+        for batch in chunks(matchup_rows, 50):
+            db.upsert("league_matchups", batch, "league_id,season,week,matchup_external_id")
+        run.read += len(matchup_rows)
+        run.written += len(matchup_rows)
 
         draft = list(getattr(league_data, "draft", []) or [])
         if draft:
