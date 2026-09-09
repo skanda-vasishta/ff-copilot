@@ -125,6 +125,39 @@ def test_league_free_agents_exclude_players_on_latest_rosters():
         app.dependency_overrides.clear()
 
 
+class TransactionsDB:
+    async def request(self, method, table, **kwargs):
+        assert method == "GET"
+        if table == "fantasy_teams":
+            return ([{"id": "my-team"}], {})
+        if table == "league_transactions":
+            rows = [
+                {"id": "incoming", "status": "PENDING", "transaction_type": "TRADE_PROPOSAL",
+                 "initiated_by_team_id": "other-team", "items": [{"to_team_id": "my-team"}]},
+                {"id": "outgoing", "status": "PENDING", "transaction_type": "TRADE_PROPOSAL",
+                 "initiated_by_team_id": "my-team", "items": [{"from_team_id": "my-team"}]},
+                {"id": "waiver", "status": "EXECUTED", "transaction_type": "WAIVER", "items": []},
+                {"id": "failed", "status": "CANCELED", "transaction_type": "WAIVER", "items": []},
+            ]
+            if kwargs["params"]["status"] == "eq.PENDING":
+                return ([row for row in rows if row["status"] == "PENDING"], {})
+            return ([row for row in rows if row["status"] == "EXECUTED"], {})
+        raise AssertionError(table)
+
+
+def test_league_transactions_separate_trade_offers_and_completed_feed():
+    app.dependency_overrides[db_for] = lambda: TransactionsDB()
+    try:
+        response = client.get("/v1/leagues/league-1/transactions?team_id=my-team")
+        assert response.status_code == 200
+        body = response.json()
+        assert [row["id"] for row in body["incoming"]] == ["incoming"]
+        assert [row["id"] for row in body["outgoing"]] == ["outgoing"]
+        assert [row["id"] for row in body["league"]] == ["waiver"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 class DraftHistoryDB:
     async def request(self, method, table, **kwargs):
         if table == "rpc/link_league_history":
