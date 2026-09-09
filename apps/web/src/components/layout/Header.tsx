@@ -22,6 +22,7 @@ const links = [
   { href: '/team', label: 'Team', icon: '◉' },
   { href: '/copilot', label: 'Copilot', icon: '✦' },
   { href: '/free-agents', label: 'Moves', icon: '↗' },
+  { href: '/transactions', label: 'Activity', icon: '⇄' },
   { href: '/draft', label: 'Draft', icon: '⌁' },
   { href: '/player-lookup', label: 'Rankings', icon: '⌕' },
 ]
