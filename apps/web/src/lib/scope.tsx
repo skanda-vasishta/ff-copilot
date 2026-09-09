@@ -28,6 +28,7 @@ type ScopeContextValue = {
   scope: ActiveScope | null;
   isLoading: boolean;
   isRefreshing: boolean;
+  refreshError: string | null;
   setTeam: (teamId: string) => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -37,6 +38,7 @@ const ScopeContext = createContext<ScopeContextValue | null>(null);
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const scopeQuery = useQuery({
     queryKey: ["active-scope"],
     queryFn: async () => {
@@ -65,16 +67,27 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["active-scope"] }),
   });
   async function refresh() {
-    if (isRefreshing) return;
+    if (isRefreshing || !scopeQuery.data) return;
     setIsRefreshing(true);
+    setRefreshError(null);
     try {
+      const response = await fetch("/api/league/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueId: scopeQuery.data.team.league.id }),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Could not refresh league");
       await queryClient.invalidateQueries({ refetchType: "active" });
       await scopeQuery.refetch();
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : "Could not refresh league");
+      throw error;
     } finally {
       setIsRefreshing(false);
     }
   }
-  return <ScopeContext.Provider value={{ scope: scopeQuery.data || null, isLoading: scopeQuery.isLoading, isRefreshing, setTeam: mutation.mutateAsync, refresh }}>{children}</ScopeContext.Provider>;
+  return <ScopeContext.Provider value={{ scope: scopeQuery.data || null, isLoading: scopeQuery.isLoading, isRefreshing, refreshError, setTeam: mutation.mutateAsync, refresh }}>{children}</ScopeContext.Provider>;
 }
 
 export function useActiveScope() {

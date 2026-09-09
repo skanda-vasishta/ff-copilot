@@ -31,7 +31,7 @@ export function Header() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const { scope, setTeam, refresh, isRefreshing } = useActiveScope()
+  const { scope, setTeam, refresh, isRefreshing, refreshError } = useActiveScope()
   const teams = useQuery({
     queryKey: ['my-teams'],
     queryFn: () => api<WorkspaceTeam[]>('/v1/me/teams'),
@@ -70,7 +70,7 @@ export function Header() {
       </nav>
 
       <div className="ml-auto flex items-center gap-1">
-        {scope && <button type="button" onClick={() => void refresh()} disabled={isRefreshing} aria-label="Refresh team data" title="Refresh team data everywhere" className="focus-ring grid size-8 place-items-center rounded-[6px] text-sm text-[#777f72] transition hover:bg-white/[.05] hover:text-[#eef1e9] disabled:opacity-40"><span className={isRefreshing ? 'animate-spin' : ''}>↻</span></button>}
+        {scope && <div className="relative"><button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={isRefreshing} aria-label="Refresh team data" title={refreshError || 'Refresh team data everywhere'} className={`focus-ring grid size-8 place-items-center rounded-[6px] text-sm transition hover:bg-white/[.05] hover:text-[#eef1e9] disabled:opacity-40 ${refreshError ? 'text-[#e88f8f]' : 'text-[#777f72]'}`}><span className={isRefreshing ? 'animate-spin' : ''}>↻</span></button>{refreshError && <div role="alert" className="absolute right-0 top-10 z-50 w-72 rounded-[7px] border border-[#8d3e3e]/60 bg-[#1c1110] px-3 py-2 text-[11px] leading-4 text-[#e9aaaa] shadow-xl">{refreshError}</div>}</div>}
         <ThemeToggle />
       </div>
       <div ref={menuRef} className="relative">
