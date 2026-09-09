@@ -8,6 +8,8 @@ import { completeAgentStep } from "@/features/copilot/server/model-provider";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { resolveAgentModelSettings } from "@/features/copilot/server/model-access";
 import { buildDraftContext, DRAFT_SYSTEM_PROMPT } from "@/features/draft/server/context";
+import { recommendationWorkflowSchema, schemaForWorkflow, type RecommendationWorkflow } from "@/features/recommendations/schema";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 // Reasoning models can legitimately take longer than one minute, especially
@@ -43,6 +45,7 @@ type AgentRunCheckpoint = {
   inputTokens: number;
   outputTokens: number;
   status: "running" | "completed";
+  workflow?: RecommendationWorkflow;
   signature: string;
 };
 
@@ -50,7 +53,7 @@ function runSignature(run: Omit<AgentRunCheckpoint, "signature">, threadId: stri
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET is not configured on the server");
   return createHmac("sha256", secret)
-    .update([run.id, threadId, userId, run.modelId, run.reasoningEffort, run.instructions, run.providerResponseId, run.stepCount, run.inputTokens, run.outputTokens, run.status].join("\u0000"))
+    .update([run.id, threadId, userId, run.modelId, run.reasoningEffort, run.instructions, run.providerResponseId, run.stepCount, run.inputTokens, run.outputTokens, run.status, run.workflow || ""].join("\u0000"))
     .digest("hex");
 }
 
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
 
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 250_000) return NextResponse.json({ error: "Request is too large" }, { status: 413 });
-  const body = await request.json().catch(() => null) as { threadId?: unknown; runId?: unknown; events?: unknown } | null;
+  const body = await request.json().catch(() => null) as { threadId?: unknown; runId?: unknown; events?: unknown; workflow?: unknown } | null;
   if (!body || typeof body.threadId !== "string") {
     return NextResponse.json({ error: "threadId is required" }, { status: 400 });
   }
@@ -100,6 +103,7 @@ export async function POST(request: Request) {
   // tool results from a tab running the previous client bundle, which does not
   // yet send runId; recover the latest signed checkpoint in that case.
   const continuing = events.every((event) => event.role === "tool");
+  const requestedWorkflow = recommendationWorkflowSchema.safeParse(body.workflow);
   if (continuing ? events.some((event) => event.role !== "tool") : events.length !== 1 || events[0].role !== "user") {
     return NextResponse.json({ error: continuing ? "A run continuation requires tool results" : "A new run requires one user message" }, { status: 400 });
   }
@@ -129,6 +133,9 @@ export async function POST(request: Request) {
       }
       const { signature: _signature, ...unsignedCheckpoint } = checkpoint;
       run = unsignedCheckpoint;
+      if (body.workflow != null && (!requestedWorkflow.success || requestedWorkflow.data !== run.workflow)) {
+        return NextResponse.json({ error: "The recommendation workflow changed during this run" }, { status: 409 });
+      }
       previousResponseId = run.providerResponseId;
       const { data: savedEvents, error: eventError } = await supabase.from("agent_messages").insert(events.map((event) => ({
         thread_id: thread.id,
@@ -172,6 +179,9 @@ export async function POST(request: Request) {
         const context = `\n\n${formatThreadContext(contextSnapshot)}\n\nContext rules: All team names and rosters are already present. Treat roster ownership as authoritative: before proposing a trade, verify every outgoing player is on the stated sender and every incoming player is on a different team; never recommend acquiring a player the user already owns. Use get_consensus_rankings for ranked lists and player tools for projection consensus, per-source breakdowns, news, and source documents. A positional consensus combines the latest compatible ESPN platform rank, FantasyPros expert consensus rank, and FFToday projection-derived rank; preserve those labels and never imply they are the same methodology. Zero records and points before games are played mean preseason, not missing context. Projection policy: use only cumulative full-season PPR consensus fields explicitly labeled for the ${thread.team.league.season} season. Never present ${previousSeason} projections as current; ${previousSeason} data may be used only as completed historical ground truth. During preseason, ESPN position_rank in a statistical snapshot is the ${previousSeason} positional finish—not a ${thread.team.league.season} draft, projection, or consensus rank. State that basis whenever using it. Older source documents may provide historical context but must not override ${thread.team.league.season} projections.`;
         instructions = IN_SEASON_SYSTEM_PROMPT + context;
       }
+      const workflow = requestedWorkflow.success ? requestedWorkflow.data : undefined;
+      if (workflow === "free-agents") instructions += `\n\n# FREE-AGENT RECOMMENDER\nThis is a dedicated agentic recommendation run. You must inspect get_my_team and get_league_free_agents for every requested position, then use rankings and player/source tools wherever useful. Return five genuinely available players for each requested position, ordered by fit for this specific roster—not merely raw projection. Never return a rostered player. Fill every structured field. Use an ISO timestamp or the factual availability timestamp for availability_as_of.`;
+      if (workflow === "trades") instructions += `\n\n# TRADE RECOMMENDER\nThis is a dedicated agentic recommendation run. You must inspect get_my_team, get_league_standings, and relevant opponent rosters with get_league_team_roster before answering. Return exactly five concrete, roster-valid trade concepts ordered by fit for this team. Each target must be on the named opponent and every offered player must be on the user's team. Consider both teams' roster needs and make no claim that an offer will be accepted. Fill every structured field and use an ISO timestamp for rosters_as_of.`;
       const modelSettings = await resolveAgentModelSettings(supabase);
       run = {
         type: "agent-run",
@@ -184,6 +194,7 @@ export async function POST(request: Request) {
         inputTokens: 0,
         outputTokens: 0,
         status: "running",
+        workflow,
       };
     }
 
@@ -194,6 +205,11 @@ export async function POST(request: Request) {
       messages: inferenceMessages,
       tools: [...((thread as unknown as { draft_session_id?: string | null }).draft_session_id ? DRAFT_AGENT_TOOLS : AGENT_TOOLS)] as ChatCompletionTool[],
       previousResponseId,
+      responseFormat: run.workflow ? {
+        name: run.workflow === "free-agents" ? "free_agent_recommendations" : "trade_recommendations",
+        schema: z.toJSONSchema(schemaForWorkflow(run.workflow), { target: "draft-7" }) as Record<string, unknown>,
+        description: "Validated fantasy-football recommendations for the dedicated recommender UI.",
+      } : undefined,
     });
     if (completion.usage) {
       const { error: usageError } = await supabase.rpc("record_agent_usage", {
@@ -234,6 +250,13 @@ export async function POST(request: Request) {
     const finalText = completion.text?.trim();
     if (!finalText) {
       throw new Error(completion.refusal || "The model returned an empty response. Please retry.");
+    }
+    if (run.workflow) {
+      try {
+        schemaForWorkflow(run.workflow).parse(JSON.parse(finalText));
+      } catch {
+        throw new Error("The model returned an invalid recommendation result. Please retry.");
+      }
     }
     const { data: saved, error: saveError } = await supabase.from("agent_messages").insert({
       thread_id: thread.id,

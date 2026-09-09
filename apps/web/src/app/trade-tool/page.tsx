@@ -1,2 +1,5 @@
-import { redirect } from 'next/navigation'
-export default function TradeToolPage() { redirect('/leagues') }
+import { RecommendationWorkspace } from "@/features/recommendations/RecommendationWorkspace";
+
+export default function TradeToolPage() {
+  return <RecommendationWorkspace workflow="trades" />;
+}
