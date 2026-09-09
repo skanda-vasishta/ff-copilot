@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api";
@@ -34,6 +34,7 @@ type ScopeContextValue = {
 };
 
 const ScopeContext = createContext<ScopeContextValue | null>(null);
+const LEAGUE_FRESHNESS_MS = 15 * 60 * 1000;
 
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
@@ -66,10 +67,10 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["active-scope"] }),
   });
-  async function refresh() {
+  const runRefresh = useCallback(async (silent: boolean) => {
     if (isRefreshing || !scopeQuery.data) return;
     setIsRefreshing(true);
-    setRefreshError(null);
+    if (!silent) setRefreshError(null);
     try {
       const response = await fetch("/api/league/refresh", {
         method: "POST",
@@ -81,12 +82,35 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
       await queryClient.invalidateQueries({ refetchType: "active" });
       await scopeQuery.refetch();
     } catch (error) {
-      setRefreshError(error instanceof Error ? error.message : "Could not refresh league");
-      throw error;
+      if (!silent) {
+        setRefreshError(error instanceof Error ? error.message : "Could not refresh league");
+        throw error;
+      }
     } finally {
       setIsRefreshing(false);
     }
-  }
+  }, [isRefreshing, queryClient, scopeQuery]);
+  const refresh = useCallback(() => runRefresh(false), [runRefresh]);
+
+  useEffect(() => {
+    const league = scopeQuery.data?.team.league;
+    if (!league) return;
+    const syncedAt = league.last_synced_at ? Date.parse(league.last_synced_at) : 0;
+    if (Date.now() - syncedAt < LEAGUE_FRESHNESS_MS) return;
+
+    const lockName = `ff-copilot:league-sync:${league.id}`;
+    const sync = () => runRefresh(true);
+    if (navigator.locks) {
+      void navigator.locks.request(lockName, { ifAvailable: true }, (lock) => {
+        if (lock) return sync();
+      });
+      return;
+    }
+    const claimedAt = Number(localStorage.getItem(lockName) || 0);
+    if (Date.now() - claimedAt < LEAGUE_FRESHNESS_MS) return;
+    localStorage.setItem(lockName, String(Date.now()));
+    void sync();
+  }, [runRefresh, scopeQuery.data?.team.league]);
   return <ScopeContext.Provider value={{ scope: scopeQuery.data || null, isLoading: scopeQuery.isLoading, isRefreshing, refreshError, setTeam: mutation.mutateAsync, refresh }}>{children}</ScopeContext.Provider>;
 }
 
