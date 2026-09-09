@@ -75,6 +75,11 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       sources: [...new Set(detail.sources.map((source) => source.source))],
     };
   }
+  if (call.name === "get_player_schedule") {
+    return api(`/v1/players/${String(input.player_id)}/schedule?${queryString({
+      season: typeof input.season === "number" ? input.season : season,
+    })}`);
+  }
   if (call.name === "get_consensus_rankings") {
     return api(`/v1/rankings/consensus?${queryString({
       season,

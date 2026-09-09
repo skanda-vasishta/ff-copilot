@@ -20,6 +20,13 @@ export const TOOL_REGISTRY = {
     description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, full-PPR cumulative projection consensus and source breakdown, injury status, ownership, explicitly labeled ranking basis, and available news sources. In preseason, ESPN position_rank is the previous season's positional finish, not a current draft rank. Use source-specific tools for underlying article text.",
     schema: z.object({ player_id: playerId }).strict(),
   },
+  get_player_schedule: {
+    description: "Retrieve an NFL player's complete regular-season schedule from ESPN, including each week's opponent, home/away designation, kickoff time, completed-game results, and bye week. Use for strength-of-schedule, fantasy playoff schedule, bye-week, and weekly opponent questions; never infer schedules from memory.",
+    schema: z.object({
+      player_id: playerId,
+      season: z.number().int().min(2000).max(2100).optional().describe("NFL season; defaults to the conversation season"),
+    }).strict(),
+  },
   get_consensus_rankings: {
     description: "Retrieve current full-PPR positional consensus rankings built from every compatible stored source. ESPN contributes platform draft rank, Sleeper contributes PPR ADP, FantasyPros contributes expert consensus rank, and FFToday contributes projection-derived positional rank. Returns the average/median and complete per-source breakdown.",
     schema: z.object({

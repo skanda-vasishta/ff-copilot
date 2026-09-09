@@ -7,6 +7,7 @@ from services.api.main import (
     db_for,
     player_directory_responses,
     projection_summary,
+    normalize_espn_nfl_schedule,
     ranking_summary,
     source_freshness,
 )
@@ -17,6 +18,24 @@ client = TestClient(app)
 
 def test_health_is_public():
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_espn_nfl_schedule_includes_opponents_and_bye_week():
+    payload = {"byeWeek": 6, "events": [{
+        "id": "game-1", "date": "2026-09-13T20:25Z", "seasonType": {"type": 2},
+        "week": {"number": 1}, "competitions": [{
+            "status": {"type": {"description": "Scheduled", "completed": False}},
+            "competitors": [
+                {"id": "25", "homeAway": "home", "team": {"id": "25", "abbreviation": "SF", "displayName": "San Francisco 49ers"}},
+                {"id": "26", "homeAway": "away", "team": {"id": "26", "abbreviation": "SEA", "displayName": "Seattle Seahawks"}},
+            ],
+        }],
+    }]}
+    games = normalize_espn_nfl_schedule(payload, "SF", 2026)
+    assert games[0]["opponent"] == "SEA"
+    assert games[0]["home_away"] == "home"
+    assert games[1]["week"] == 6
+    assert games[1]["status"] == "Bye"
 
 
 def test_v1_requires_authentication():

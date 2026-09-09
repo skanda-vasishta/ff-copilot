@@ -278,6 +278,49 @@ def projection_summary(data: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def normalize_espn_nfl_schedule(payload: dict[str, Any], team_key: str, season: int) -> list[dict[str, Any]]:
+    """Return a compact fantasy-friendly NFL schedule from ESPN's public team feed."""
+    def number(value: Any) -> float | int | None:
+        try:
+            parsed = float(value)
+            return int(parsed) if parsed.is_integer() else parsed
+        except (TypeError, ValueError):
+            return None
+
+    games = []
+    normalized_key = team_key.upper()
+    for event in payload.get("events", []):
+        if int((event.get("seasonType") or {}).get("type") or 0) != 2:
+            continue
+        competition = (event.get("competitions") or [{}])[0]
+        competitors = competition.get("competitors") or []
+        mine = next((item for item in competitors if normalized_key in {
+            str(item.get("id", "")).upper(), str((item.get("team") or {}).get("id", "")).upper(),
+            str((item.get("team") or {}).get("abbreviation", "")).upper(),
+        }), None)
+        if not mine:
+            continue
+        opponent = next((item for item in competitors if item is not mine), None)
+        if not opponent:
+            continue
+        status = ((competition.get("status") or {}).get("type") or {})
+        games.append({
+            "week": int((event.get("week") or {}).get("number") or 0),
+            "opponent": (opponent.get("team") or {}).get("abbreviation"),
+            "opponent_name": (opponent.get("team") or {}).get("displayName"),
+            "home_away": mine.get("homeAway"), "date": event.get("date"),
+            "status": status.get("description") or status.get("name") or "Scheduled",
+            "completed": bool(status.get("completed")), "team_score": number(mine.get("score")),
+            "opponent_score": number(opponent.get("score")), "event_id": event.get("id"),
+        })
+    bye_week = number(payload.get("byeWeek"))
+    if bye_week and not any(game["week"] == int(bye_week) for game in games):
+        games.append({"week": int(bye_week), "opponent": None, "opponent_name": "BYE",
+                      "home_away": None, "date": None, "status": "Bye", "completed": False,
+                      "team_score": None, "opponent_score": None, "event_id": None})
+    return sorted((game for game in games if game["week"]), key=lambda game: game["week"])
+
+
 @app.get("/v1/rankings/consensus")
 async def consensus_rankings(
     season: int = Query(2026, ge=2000, le=2100),
@@ -366,6 +409,30 @@ async def get_player_detail(player_id: str, season: int | None = None, db: Supab
         "rankings": {"items": rankings, "summary": ranking_summary(rankings)},
         "sources": sources,
     }
+
+
+@app.get("/v1/players/{player_id}/schedule")
+async def get_player_schedule(
+    player_id: str,
+    season: int = Query(2026, ge=2000, le=2100),
+    db: SupabaseREST = Depends(db_for),
+):
+    player = await require_player(player_id, db)
+    team = str(player.get("nfl_team") or "").strip()
+    if not team or team.upper() in {"FA", "FREE AGENT"}:
+        return {"player": player, "season": season, "team": team or None, "games": [],
+                "source": "ESPN", "note": "This player is not assigned to an NFL team."}
+    url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{team.lower()}/schedule"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(url, params={"season": season})
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="Could not load the NFL schedule from ESPN") from exc
+    return {"player": player, "season": season, "team": team,
+            "games": normalize_espn_nfl_schedule(payload, team, season),
+            "source": "ESPN", "fetched_at": datetime.now().astimezone().isoformat()}
 
 
 @app.get("/v1/players/{player_id}/snapshots")
