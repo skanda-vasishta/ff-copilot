@@ -44,11 +44,8 @@ python -m pytest services/api/test_main.py pipelines/ingestion/test_sync.py -q
 # Current global facts and raw source documents
 python -m pipelines.ingestion.sync sync-global --season 2026 --league-id ESPN_LEAGUE_ID --sleeper --sources
 
-# All stored ESPN and Sleeper leagues
-python -m pipelines.ingestion.sync sync-league --season 2026 --all-linked
-
-# One Sleeper league (the league ID is season-specific)
-python -m pipelines.ingestion.sync sync-league --provider sleeper --season 2026 --league-id SLEEPER_LEAGUE_ID --history
+# League data is connected and refreshed on demand by authenticated web routes.
+# No scheduled league ingestion is required.
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for request flows, ownership boundaries, and extension points.

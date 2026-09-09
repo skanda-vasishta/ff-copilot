@@ -1,6 +1,6 @@
 ---
 name: refresh-ff-copilot-data
-description: Refresh and verify FF Copilot's Supabase-backed 2026 player projections, ESPN rankings and snapshots, FFToday projections, FantasyPros rankings, Reddit/source documents, linked ESPN leagues, rosters, standings, draft history, and pending league requests. Use when data looks stale, a player or league is missing, source freshness is questioned, or an operator asks to rerun all ingestion/data jobs.
+description: Refresh and verify FF Copilot's Supabase-backed global player projections, rankings, injuries, and source documents. User league, roster, and standings refreshes are owned by authenticated app routes and must not be run as scheduled ingestion.
 ---
 
 # Refresh FF Copilot Data
@@ -19,11 +19,9 @@ Load `.env` without echoing it. Run sequentially:
 
 ```bash
 .venv/bin/python -m pipelines.ingestion.sync sync-global --season 2026 --fftoday --fantasypros-rankings --sources --source-player-limit 450
-.venv/bin/python -m pipelines.ingestion.sync sync-league --season 2026 --all-linked
-.venv/bin/python -m pipelines.ingestion.sync sync-league --season 2026 --pending
 ```
 
-The global command refreshes ESPN player facts and the additional ranking, projection, and source datasets. The league commands refresh every linked league and unresolved request.
+The global command refreshes ESPN player facts and the additional ranking, projection, and source datasets. Refresh league-scoped data through the app's refresh control or authenticated league routes.
 
 ## Verify
 
@@ -33,10 +31,10 @@ The global command refreshes ESPN player facts and the additional ranking, proje
 
 Treat coverage failure or a nonzero exit as incomplete. Report partial provider failures separately; unmatched aliases do not invalidate successfully persisted players. Preserve the last valid snapshots and never delete rows to force freshness.
 
-Report command status, coverage, freshness, source failures, league results, and whether another run or code fix is required.
+Report command status, coverage, freshness, source failures, and whether another run or code fix is required.
 
 ## GitHub Actions fallback
 
-If local production credentials are unavailable, dispatch `Sync global player data` with `season=2026` and `include_sources=true`. Then reproduce both league operations (`--all-linked` and `--pending`); a manual workflow dispatch with no league ID only performs pending requests.
+If local production credentials are unavailable, dispatch `Sync global player data` with `season=2026` and `include_sources=true`. League state is intentionally outside this workflow.
 
 Do not claim freshness until the jobs finish and coverage verification passes.

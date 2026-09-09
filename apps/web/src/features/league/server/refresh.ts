@@ -3,9 +3,9 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
-type Provider = 'espn' | 'sleeper'
+export type Provider = 'espn' | 'sleeper'
 
-type LeagueRecord = {
+export type LeagueRecord = {
   id: string
   provider: Provider
   external_id: string
@@ -138,6 +138,8 @@ async function fetchSleeper(league: LeagueRecord): Promise<NormalizedLeague> {
     providerJson<any[]>(`${base}/league/${league.external_id}/rosters`),
     providerJson<any[]>(`${base}/league/${league.external_id}/users`),
   ])
+  if (!info || info.sport !== 'nfl') throw new Error('Sleeper league was not found or is not an NFL league')
+  if (Number(info.season) !== league.season) throw new Error(`Sleeper league belongs to ${info.season}, not ${league.season}`)
   const usersById = new Map(users.map((user) => [String(user.user_id), user]))
   const ordered = [...rosters].sort((a, b) => Number(b.settings?.wins ?? 0) - Number(a.settings?.wins ?? 0) || Number(b.settings?.fpts ?? 0) - Number(a.settings?.fpts ?? 0))
   const standings = new Map(ordered.map((roster, index) => [String(roster.roster_id), index + 1]))
@@ -166,6 +168,31 @@ async function fetchSleeper(league: LeagueRecord): Promise<NormalizedLeague> {
       }
     }),
   }
+}
+
+export async function connectLeagueFromProvider(userId: string, input: { provider: Provider; externalId: string; season: number }) {
+  const admin = adminClient()
+  const provisional: LeagueRecord = { id: '', provider: input.provider, external_id: input.externalId, season: input.season }
+  // Validate the provider response before creating any local records.
+  const preview = input.provider === 'espn' ? await fetchEspn(provisional) : await fetchSleeper(provisional)
+  if (!preview.teams.length) throw new Error('Provider returned no fantasy teams')
+
+  const { data: league, error } = await admin.from('leagues').upsert({
+    provider: input.provider,
+    external_id: input.externalId,
+    league_series_id: input.externalId,
+    season: input.season,
+    name: preview.name,
+    status: 'pending',
+  }, { onConflict: 'provider,external_id,season' }).select('id,provider,external_id,season').single()
+  if (error) throw error
+
+  await refreshLeagueFromProvider(league as LeagueRecord)
+  const { error: linkError } = await admin.from('user_leagues').upsert({ user_id: userId, league_id: league.id }, { onConflict: 'user_id,league_id' })
+  if (linkError) throw linkError
+  const { data: connected, error: readError } = await admin.from('leagues').select('*').eq('id', league.id).single()
+  if (readError) throw readError
+  return connected
 }
 
 async function playerMap(provider: Provider, teams: NormalizedTeam[]) {

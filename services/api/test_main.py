@@ -329,25 +329,18 @@ class LeagueStateDB:
                     "league": {"id": "league-1", "provider": "espn", "external_id": "111", "season": 2026},
                 },
             ], {})
-        if table == "sync_requests":
-            return ([
-                {"id": "duplicate", "provider": "espn", "external_id": "111", "season": 2026, "requested_at": "2026-08-02T00:00:00Z", "status": "pending"},
-                {"id": "new", "provider": "espn", "external_id": "222", "season": 2026, "requested_at": "2026-08-03T00:00:00Z", "status": "running"},
-            ], {})
         raise AssertionError(table)
 
 
-def test_my_leagues_presents_product_states_and_hides_duplicate_preparations():
+def test_my_leagues_presents_linked_leagues_without_ingestion_queue_state():
     app.dependency_overrides[current_user] = lambda: AuthenticatedUser(id="user-1", token="token")
     app.dependency_overrides[db_for] = lambda: LeagueStateDB()
     try:
         response = client.get("/v1/me/leagues")
         assert response.status_code == 200
         by_external_id = {item["league"]["external_id"]: item for item in response.json()}
-        assert set(by_external_id) == {"111", "222"}
+        assert set(by_external_id) == {"111"}
         assert by_external_id["111"]["state"] == "available"
         assert by_external_id["111"]["league"]["id"] == "league-1"
-        assert by_external_id["222"]["state"] == "being_prepared"
-        assert "sync_request" not in by_external_id["222"]
     finally:
         app.dependency_overrides.clear()

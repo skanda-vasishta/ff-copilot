@@ -45,17 +45,17 @@ Browser message
 
 Each thread is permanently scoped to one team and league. Its context snapshot contains league settings, standings, every team name, and every compact roster. The snapshot is byte-stable during a UTC day, rebuilt lazily on the next UTC day, and manually refreshable. Detailed player rankings/news remain progressively disclosed through tools.
 
-## Daily refresh
+## Data ownership and refresh
 
-- `sync-global.yml` runs at 08:17 UTC and ingests the 2026 player pool plus ESPN, FantasyPros, and Reddit raw documents.
-- `sync-leagues.yml` runs at 10:47 UTC and refreshes every stored 2026 ESPN and Sleeper league, then processes newly linked leagues.
-- Context snapshots rebuild from Supabase on the first thread request of a new UTC day. Manual context refresh rereads Supabase; it does not call upstream providers.
+- `sync-global.yml` is the only scheduled ingestion job. It owns the global player directory, projections, rankings, injuries, and source documents.
+- The web app owns user-scoped league data. Connecting or refreshing a league calls ESPN or Sleeper immediately, normalizes teams, standings, and rosters, persists the snapshot, and invalidates app and agent caches.
+- Context snapshots rebuild when the persisted league freshness marker advances, so Team, Moves, Copilot, Activity, and matchups share the same league snapshot.
 
 ## Adding a feature
 
 1. Put reusable orchestration primitives in `packages`.
 2. Put web-specific feature code under `apps/web/src/features/<feature>`.
 3. Keep route files thin; move business logic into the feature's `server` or `client` directory.
-4. Add factual API endpoints to `services/api`, never directly to components.
-5. Add provider acquisition to `pipelines/ingestion`, never to request handlers.
+4. Put authenticated league-provider acquisition behind web server routes; never expose service credentials to components.
+5. Add global player acquisition to `pipelines/ingestion`; scheduled jobs must not own user league state.
 6. Add database changes as a new numbered migration under `infra/supabase/migrations`.

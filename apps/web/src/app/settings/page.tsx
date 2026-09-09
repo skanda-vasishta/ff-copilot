@@ -7,10 +7,10 @@ import { useActiveScope } from '@/lib/scope'
 import { createClient } from '@/lib/supabase/client'
 
 type League = { id: string; name: string | null; provider: 'espn' | 'sleeper'; external_id: string; season: number; last_synced_at: string | null }
-type LinkedLeague = { state: 'available' | 'being_prepared'; league: League }
+type LinkedLeague = { state: 'available'; league: League }
 type LeagueTeam = { id: string; name: string; league_id: string }
 type WorkspaceTeam = { created_at: string; team: LeagueTeam & { league: League } }
-type ConnectResult = { state: 'available' | 'being_prepared'; league?: League }
+type ConnectResult = { state: 'available'; league?: League }
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -21,42 +21,35 @@ export default function SettingsPage() {
   const [season, setSeason] = useState(2026)
   const [connectMessage, setConnectMessage] = useState<string | null>(null)
   const [slowConnect, setSlowConnect] = useState(false)
-  const [pendingLeague, setPendingLeague] = useState<{ provider: 'espn' | 'sleeper'; externalId: string; season: number } | null>(null)
 
   const leagues = useQuery({
     queryKey: ['my-leagues'],
     queryFn: () => api<LinkedLeague[]>('/v1/me/leagues'),
-    refetchInterval: (query) => query.state.data?.some(({ state }) => state === 'being_prepared') ? 5000 : false,
   })
   const workspaceTeams = useQuery({ queryKey: ['my-teams'], queryFn: () => api<WorkspaceTeam[]>('/v1/me/teams') })
   const availableLeagues = useMemo(() => leagues.data?.filter(({ state }) => state === 'available') || [], [leagues.data])
   useEffect(() => {
     if (!leagueId && availableLeagues.length) setLeagueId(scope?.team.league_id || availableLeagues[0].league.id)
   }, [availableLeagues, leagueId, scope])
-  useEffect(() => {
-    if (!pendingLeague) return
-    const connected = availableLeagues.find(({ league }) => league.provider === pendingLeague.provider
-      && league.external_id === pendingLeague.externalId && league.season === pendingLeague.season)
-    if (!connected) return
-    setLeagueId(connected.league.id)
-    setConnectMessage(`${connected.league.name || connected.league.provider.toUpperCase() + ' league'} connected. Choose your team below.`)
-    setPendingLeague(null)
-  }, [availableLeagues, pendingLeague])
   const leagueTeams = useQuery({ queryKey: ['league-teams', leagueId], queryFn: () => api<LeagueTeam[]>(`/v1/leagues/${leagueId}/teams`), enabled: Boolean(leagueId) })
   const addedIds = new Set(workspaceTeams.data?.map(({ team }) => team.id))
 
   const connect = useMutation({
-    mutationFn: () => api<ConnectResult>('/v1/me/leagues', { method: 'POST', body: JSON.stringify({ provider, external_id: externalId.trim(), season }) }),
+    mutationFn: async () => {
+      const response = await fetch('/api/league/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, externalId: externalId.trim(), season }) })
+      const result = await response.json() as ConnectResult & { error?: string }
+      if (!response.ok) throw new Error(result.error || 'Could not connect league')
+      return result
+    },
     onMutate: () => { setConnectMessage(null); setSlowConnect(false) },
     onSuccess: async (result) => {
-      const submittedLeague = { provider, externalId: externalId.trim(), season }
       setExternalId('')
       if (result.league) setLeagueId(result.league.id)
-      else setPendingLeague(submittedLeague)
-      setConnectMessage(result.state === 'available'
-        ? `${result.league?.name || provider.toUpperCase() + ' league'} connected. Choose your team below.`
-        : 'League accepted and is being imported. Teams will appear here automatically.')
-      await queryClient.invalidateQueries({ queryKey: ['my-leagues'] })
+      setConnectMessage(`${result.league?.name || provider.toUpperCase() + ' league'} connected. Choose your team below.`)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['my-leagues'] }),
+        queryClient.invalidateQueries({ queryKey: ['league-teams'] }),
+      ])
     },
     onSettled: () => setSlowConnect(false),
   })
@@ -138,7 +131,6 @@ export default function SettingsPage() {
         {leagueTeams.isLoading && <p className="bg-[#10120f] px-5 py-6 text-xs text-[#747c70]">Loading league teams…</p>}
         {!leagueId && <p className="bg-[#10120f] px-5 py-6 text-xs text-[#747c70]">Connect a league to see its teams.</p>}
       </div>
-      {leagues.data?.some(({ state }) => state === 'being_prepared') && <p className="border-t border-white/[.06] px-5 py-3 text-[10px] text-[#8b927f]">A connected league is still being imported. Its teams will appear here when the import completes.</p>}
     </section>
 
     <div className="mt-8 flex justify-end border-t border-white/[.065] pt-5"><button type="button" onClick={async () => { await createClient().auth.signOut(); location.assign('/login') }} className="focus-ring rounded-[6px] px-2.5 py-2 text-[11px] text-[#777f73] hover:bg-white/[.04] hover:text-red-200">Sign out</button></div>
