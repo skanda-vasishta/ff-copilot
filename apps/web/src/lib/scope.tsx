@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api";
@@ -26,13 +26,16 @@ export type ActiveScope = {
 type ScopeContextValue = {
   scope: ActiveScope | null;
   isLoading: boolean;
+  isRefreshing: boolean;
   setTeam: (teamId: string) => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const scopeQuery = useQuery({
     queryKey: ["active-scope"],
     queryFn: async () => {
@@ -60,7 +63,17 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["active-scope"] }),
   });
-  return <ScopeContext.Provider value={{ scope: scopeQuery.data || null, isLoading: scopeQuery.isLoading, setTeam: mutation.mutateAsync }}>{children}</ScopeContext.Provider>;
+  async function refresh() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ refetchType: "active" });
+      await scopeQuery.refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+  return <ScopeContext.Provider value={{ scope: scopeQuery.data || null, isLoading: scopeQuery.isLoading, isRefreshing, setTeam: mutation.mutateAsync, refresh }}>{children}</ScopeContext.Provider>;
 }
 
 export function useActiveScope() {
