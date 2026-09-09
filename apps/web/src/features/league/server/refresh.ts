@@ -34,10 +34,24 @@ type NormalizedTeam = {
   players: NormalizedPlayer[]
 }
 
+type NormalizedMatchup = {
+  externalId: string
+  week: number
+  homeTeamExternalId: string
+  awayTeamExternalId: string
+  homeScore: number | null
+  awayScore: number | null
+  homeProjected: number | null
+  awayProjected: number | null
+  status: 'scheduled' | 'final'
+  raw: unknown
+}
+
 type NormalizedLeague = {
   name?: string | null
   week?: number | null
   teams: NormalizedTeam[]
+  matchups: NormalizedMatchup[]
 }
 
 const ESPN_SLOT_NAMES: Record<number, string> = {
@@ -70,11 +84,27 @@ function numberOrNull(value: unknown): number | null {
 }
 
 async function fetchEspn(league: LeagueRecord): Promise<NormalizedLeague> {
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${league.season}/segments/0/leagues/${league.external_id}?view=mSettings&view=mTeam&view=mRoster&view=mStandings`
+  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${league.season}/segments/0/leagues/${league.external_id}?view=mSettings&view=mTeam&view=mRoster&view=mStandings&view=mMatchup`
   const data = await providerJson<any>(url)
   return {
     name: data.settings?.name,
     week: numberOrNull(data.scoringPeriodId),
+    matchups: (data.schedule ?? []).flatMap((event: any) => {
+      const week = numberOrNull(event.matchupPeriodId)
+      if (!week || !event.home?.teamId || !event.away?.teamId) return []
+      return [{
+        externalId: String(event.id ?? `${week}-${event.home.teamId}-${event.away.teamId}`),
+        week,
+        homeTeamExternalId: String(event.home.teamId),
+        awayTeamExternalId: String(event.away.teamId),
+        homeScore: numberOrNull(event.home.totalPoints),
+        awayScore: numberOrNull(event.away.totalPoints),
+        homeProjected: numberOrNull(event.home.totalProjectedPointsLive ?? event.home.totalProjectedPoints),
+        awayProjected: numberOrNull(event.away.totalProjectedPointsLive ?? event.away.totalProjectedPoints),
+        status: event.winner && event.winner !== 'UNDECIDED' ? 'final' as const : 'scheduled' as const,
+        raw: { winner: event.winner, playoffTierType: event.playoffTierType },
+      }]
+    }),
     teams: (data.teams ?? []).map((team: any) => ({
       externalId: String(team.id),
       name: team.name || (team.location && team.nickname ? `${team.location} ${team.nickname}` : `Team ${team.id}`),
@@ -114,6 +144,7 @@ async function fetchSleeper(league: LeagueRecord): Promise<NormalizedLeague> {
   return {
     name: info.name,
     week: numberOrNull(info.leg),
+    matchups: [],
     teams: rosters.map((roster) => {
       const owner = usersById.get(String(roster.owner_id)) ?? {}
       const metadata = owner.metadata ?? {}
@@ -160,6 +191,7 @@ export async function refreshLeagueFromProvider(league: LeagueRecord) {
   const fetchedAt = new Date().toISOString()
 
   let playerCount = 0
+  const teamIds = new Map<string, string>()
   for (const team of normalized.teams) {
     const { data: dbTeam, error: teamError } = await admin.from('fantasy_teams').upsert({
       league_id: league.id,
@@ -174,6 +206,7 @@ export async function refreshLeagueFromProvider(league: LeagueRecord) {
       standing: team.standing,
     }, { onConflict: 'league_id,external_id' }).select('id').single()
     if (teamError) throw teamError
+    teamIds.set(team.externalId, dbTeam.id)
 
     const rosterKey = team.players.map((player) => ({ id: player.externalId, slot: player.lineupSlot })).sort((a, b) => a.id.localeCompare(b.id))
     const snapshotPayload = {
@@ -202,6 +235,33 @@ export async function refreshLeagueFromProvider(league: LeagueRecord) {
     playerCount += rosterRows.length
   }
 
+  const matchupRows = normalized.matchups.flatMap((matchup) => {
+    const homeTeamId = teamIds.get(matchup.homeTeamExternalId)
+    const awayTeamId = teamIds.get(matchup.awayTeamExternalId)
+    if (!homeTeamId || !awayTeamId) return []
+    return [{
+      league_id: league.id,
+      season: league.season,
+      week: matchup.week,
+      matchup_external_id: matchup.externalId,
+      home_team_id: homeTeamId,
+      away_team_id: awayTeamId,
+      home_score: matchup.homeScore,
+      away_score: matchup.awayScore,
+      home_projected: matchup.homeProjected,
+      away_projected: matchup.awayProjected,
+      status: matchup.status,
+      fetched_at: fetchedAt,
+      raw_payload: matchup.raw,
+    }]
+  })
+  if (matchupRows.length) {
+    const { error } = await admin.from('league_matchups').upsert(matchupRows, {
+      onConflict: 'league_id,season,week,matchup_external_id',
+    })
+    if (error) throw error
+  }
+
   // Advance the shared freshness marker only after every roster was saved.
   // Agent context and persisted recommendations use this timestamp to decide
   // whether their league data is still valid.
@@ -210,8 +270,9 @@ export async function refreshLeagueFromProvider(league: LeagueRecord) {
     status: 'succeeded',
     last_synced_at: fetchedAt,
     team_count: normalized.teams.length,
+    current_week: normalized.week,
   }).eq('id', league.id)
   if (leagueError) throw leagueError
 
-  return { refreshedAt: fetchedAt, teamCount: normalized.teams.length, playerCount }
+  return { refreshedAt: fetchedAt, teamCount: normalized.teams.length, playerCount, matchupCount: matchupRows.length }
 }
