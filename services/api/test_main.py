@@ -162,6 +162,44 @@ def test_league_transactions_separate_trade_offers_and_completed_feed():
         app.dependency_overrides.clear()
 
 
+class MatchupDB:
+    async def request(self, method, table, **kwargs):
+        assert method == "GET"
+        rows = {
+            "fantasy_teams": [{"id": "team-1", "name": "Alpha", "league": {
+                "id": "league-1", "name": "Test League", "season": 2026,
+                "current_week": 2, "last_synced_at": "2026-09-08T00:00:00Z",
+            }}],
+            "league_matchups": [{
+                "id": "matchup-2", "week": 2, "home_team_id": "team-1", "away_team_id": "team-2",
+                "home_team": {"id": "team-1", "name": "Alpha"},
+                "away_team": {"id": "team-2", "name": "Beta"},
+            }],
+            "roster_snapshots": [
+                {"id": "snapshot-1", "team_id": "team-1", "week": 2, "fetched_at": "now"},
+                {"id": "snapshot-2", "team_id": "team-2", "week": 2, "fetched_at": "now"},
+            ],
+            "roster_players": [{"roster_snapshot_id": "snapshot-1", "lineup_slot": "QB",
+                                "player": {"id": "player-1", "name": "QB One", "position": "QB"}}],
+            "player_directory_cache": [{"id": "player-1", "projected_average_points": 21.5,
+                                        "average_points": 20, "injury_status": None}],
+        }
+        return rows[table], {}
+
+
+def test_team_matchup_defaults_to_current_week_and_builds_lineups():
+    app.dependency_overrides[db_for] = lambda: MatchupDB()
+    try:
+        response = client.get("/v1/teams/team-1/matchup")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["week"] == 2
+        assert body["matchup"]["away_team"]["name"] == "Beta"
+        assert body["lineups"]["team-1"][0]["projected_average_points"] == 21.5
+    finally:
+        app.dependency_overrides.clear()
+
+
 class DraftHistoryDB:
     async def request(self, method, table, **kwargs):
         if table == "rpc/link_league_history":

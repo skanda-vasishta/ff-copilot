@@ -20,6 +20,7 @@ type WorkspaceTeam = {
 
 const links = [
   { href: '/team', label: 'Team', icon: '◉' },
+  { href: '/matchups', label: 'Matchups', icon: 'VS' },
   { href: '/copilot', label: 'Copilot', icon: '✦' },
   { href: '/free-agents', label: 'Moves', icon: '↗' },
   { href: '/transactions', label: 'Activity', icon: '⇄' },
@@ -60,7 +61,7 @@ export function Header() {
         <span className="grid size-7 place-items-center rounded-[7px] border border-[#c9f958]/35 bg-[#c9f958]/10 text-[10px] font-black tracking-[-.05em] text-[#c9f958]">FF</span>
         <span className="text-[13px] font-semibold tracking-[-.02em] text-[#eef1e9]">Copilot</span>
       </Link>
-      <nav className="ml-5 flex items-center gap-0.5 rounded-[9px] border border-white/[.05] bg-white/[.04] p-[3px] sm:ml-9" aria-label="Primary navigation">
+      <nav className="ml-3 flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-[9px] border border-white/[.05] bg-white/[.04] p-[3px] sm:ml-9" aria-label="Primary navigation">
         {links.map(({ href, label, icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`focus-ring flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition ${active ? 'bg-gradient-to-br from-[#d9ff6e] to-[#a8e63c] font-semibold text-[#0f1a08]' : 'text-[#9ba394] hover:text-[#eef1e9]'}`}>

@@ -8,6 +8,7 @@ from pipelines.ingestion.sync import (
     canonical_sleeper_candidates,
     clean_number,
     digest,
+    espn_matchup_rows,
     parse_espn_html,
     parse_espn_draft_rank,
     parse_fantasypros_html,
@@ -175,6 +176,15 @@ def test_completed_waiver_preserves_faab_and_player_movement():
         "to_team_id": "team-7", "to_team_external_id": "7",
         "raw_payload": {"type": "ADD", "playerId": 303, "toTeamId": 7},
     }]
+def test_espn_schedule_normalizes_head_to_head_matchups():
+    rows = espn_matchup_rows([{
+        "id": 101, "matchupPeriodId": 1, "winner": "HOME",
+        "home": {"teamId": 1, "totalPoints": 124.5, "totalProjectedPointsLive": 119.2},
+        "away": {"teamId": 2, "totalPoints": 110.1, "totalProjectedPointsLive": 115.8},
+    }], "league-1", 2026, {"1": {"id": "home"}, "2": {"id": "away"}}, "now")
+    assert rows[0]["home_team_id"] == "home"
+    assert rows[0]["away_projected"] == 115.8
+    assert rows[0]["status"] == "final"
 
 
 def test_provider_contract_fixtures_extract_content():

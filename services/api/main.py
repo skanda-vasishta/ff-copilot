@@ -579,6 +579,65 @@ async def league_transactions(
         "items": completed, "page": page, "page_size": page_size, "total": total,
         "total_pages": (total + page_size - 1) // page_size,
     }}
+@app.get("/v1/teams/{team_id}/matchup")
+async def team_matchup(
+    team_id: str,
+    week: int | None = Query(None, ge=1, le=25),
+    db: SupabaseREST = Depends(db_for),
+):
+    teams, _ = await db.request("GET", "fantasy_teams", params={
+        "id": f"eq.{team_id}", "select": "*,league:leagues(id,name,season,current_week,last_synced_at)", "limit": 1,
+    })
+    if not teams:
+        raise HTTPException(status_code=404, detail="Team not found or unavailable")
+    team = teams[0]
+    league = team["league"]
+    matchups, _ = await db.request("GET", "league_matchups", params={
+        "league_id": f"eq.{league['id']}", "season": f"eq.{league['season']}",
+        "select": "*,home_team:fantasy_teams!league_matchups_home_team_id_fkey(*),away_team:fantasy_teams!league_matchups_away_team_id_fkey(*)",
+        "order": "week.asc", "limit": 500,
+    })
+    available_weeks = sorted({int(item["week"]) for item in matchups})
+    selected_week = week or league.get("current_week") or (available_weeks[0] if available_weeks else 1)
+    matchup = next((item for item in matchups if int(item["week"]) == selected_week and
+                    team_id in (item.get("home_team_id"), item.get("away_team_id"))), None)
+    if not matchup:
+        return {"matchup": None, "week": selected_week, "available_weeks": available_weeks,
+                "league": league, "lineups": {}}
+
+    matchup_team_ids = [matchup["home_team_id"], matchup["away_team_id"]]
+    snapshots, _ = await db.request("GET", "roster_snapshots", params={
+        "team_id": f"in.({','.join(matchup_team_ids)})", "season": f"eq.{league['season']}",
+        "select": "id,team_id,week,fetched_at", "order": "fetched_at.desc", "limit": 1000,
+    })
+    latest_by_team: dict[str, dict[str, Any]] = {}
+    for snapshot in snapshots:
+        latest_by_team.setdefault(snapshot["team_id"], snapshot)
+    snapshot_ids = [snapshot["id"] for snapshot in latest_by_team.values()]
+    roster_rows = []
+    if snapshot_ids:
+        roster_rows, _ = await db.request("GET", "roster_players", params={
+            "roster_snapshot_id": f"in.({','.join(snapshot_ids)})",
+            "select": "roster_snapshot_id,lineup_slot,player:players(id,name,position,nfl_team)", "limit": 500,
+        })
+    player_ids = [row["player"]["id"] for row in roster_rows if row.get("player")]
+    metrics_by_player: dict[str, dict[str, Any]] = {}
+    if player_ids:
+        metrics, _ = await db.request("GET", "player_directory_cache", params={
+            "id": f"in.({','.join(player_ids)})", "season": f"eq.{league['season']}",
+            "select": "id,projected_average_points,average_points,injury_status", "limit": 500,
+        })
+        metrics_by_player = {item["id"]: item for item in metrics}
+    team_by_snapshot = {snapshot["id"]: team_id for team_id, snapshot in latest_by_team.items()}
+    lineups: dict[str, list[dict[str, Any]]] = {value: [] for value in matchup_team_ids}
+    for row in roster_rows:
+        player = row.get("player")
+        owner_id = team_by_snapshot.get(row["roster_snapshot_id"])
+        if player and owner_id:
+            lineups[owner_id].append({**player, **metrics_by_player.get(player["id"], {}),
+                                      "lineup_slot": row.get("lineup_slot")})
+    return {"matchup": matchup, "week": selected_week, "available_weeks": available_weeks,
+            "league": league, "lineups": lineups}
 
 
 @app.get("/v1/leagues/{league_id}/seasons")
