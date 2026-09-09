@@ -189,7 +189,11 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   // so fetch it in bounded batches instead of issuing one oversized request.
   const playerIdBatches = Array.from({ length: Math.ceil(rankedPlayerIds.length / 75) }, (_, index) =>
     rankedPlayerIds.slice(index * 75, (index + 1) * 75));
-  const projectedPlayerQueries = await Promise.all(playerIdBatches.map((playerIds) => supabase.from("player_directory")
+  // Use the materialized directory used by the factual API. The underlying
+  // aggregation view is substantially more expensive and can time out while a
+  // recommender is building a fresh thread context. Rankings enrich context,
+  // but must never prevent roster-aware agent workflows from starting.
+  const projectedPlayerQueries = await Promise.all(playerIdBatches.map((playerIds) => supabase.from("player_directory_cache")
     .select("id,name,position,nfl_team,injury_status,projected_total_points,projected_average_points,projection_source_count,projection_sources,median_rank,fetched_at")
     .eq("season", thread.team.league.season)
     .in("id", playerIds)
@@ -197,9 +201,8 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
   const projectedPlayersError = projectedPlayerQueries.find((query) => query.error)?.error;
   if (projectedPlayersError) {
     console.error("Could not load projected player context", projectedPlayersError);
-    throw new Error("Could not load the projected player pool for context");
   }
-  const projectedPlayers = projectedPlayerQueries.flatMap((query) => query.data || []);
+  const projectedPlayers = projectedPlayerQueries.flatMap((query) => query.error ? [] : query.data || []);
   const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
   const rankedPlayers = (projectedPlayers || []).filter((player) => rankingsByPlayer.has(player.id)).map((player) => {
     const sourceRanks = rankingsByPlayer.get(player.id) || [];
