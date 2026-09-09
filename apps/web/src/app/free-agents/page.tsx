@@ -1,2 +1,5 @@
-import { redirect } from 'next/navigation'
-export default function FreeAgentsPage() { redirect('/player-lookup') }
+import { RecommendationWorkspace } from "@/features/recommendations/RecommendationWorkspace";
+
+export default function FreeAgentsPage() {
+  return <RecommendationWorkspace workflow="free-agents" />;
+}

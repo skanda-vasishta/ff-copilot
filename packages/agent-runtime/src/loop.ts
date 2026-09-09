@@ -24,7 +24,7 @@ export async function runAgentLoop(options: {
     options.onMessage(response.message);
     if (response.type === "final") {
       options.onStatus("idle");
-      return;
+      return response;
     }
 
     options.onStatus("running-tool");

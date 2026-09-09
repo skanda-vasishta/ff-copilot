@@ -1,10 +1,10 @@
 import type { AgentEvent, ModelStep } from "@ff-copilot/agent-runtime";
 
-export async function requestModelStep(threadId: string, events: AgentEvent[], runId?: string, signal?: AbortSignal): Promise<ModelStep> {
+export async function requestModelStep(threadId: string, events: AgentEvent[], runId?: string, signal?: AbortSignal, workflow?: "free-agents" | "trades"): Promise<ModelStep> {
   const response = await fetch("/api/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ threadId, runId, events }),
+    body: JSON.stringify({ threadId, runId, events, workflow }),
     signal,
   });
   const body = await response.json().catch(() => ({}));

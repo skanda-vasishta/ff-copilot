@@ -11,6 +11,7 @@ export type AgentModelRequest = {
   messages: AgentMessage[];
   tools: ChatCompletionTool[];
   previousResponseId?: string;
+  responseFormat?: { name: string; schema: Record<string, unknown>; description: string };
 };
 
 export type AgentModelResult = {
@@ -115,6 +116,9 @@ async function completeWithResponses(client: OpenAI, request: AgentModelRequest)
     tool_choice: "auto",
     reasoning: { effort: request.reasoningEffort },
     previous_response_id: request.previousResponseId,
+    text: request.responseFormat ? {
+      format: { type: "json_schema", strict: true, ...request.responseFormat },
+    } : undefined,
     store: true,
   });
   const calls = response.output.filter((item) => item.type === "function_call").map((item) => ({
