@@ -1,6 +1,7 @@
 import asyncio
 import os
 import statistics
+from datetime import datetime
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -566,6 +567,80 @@ async def league_free_agents(
         "roster_snapshots_found": len(latest_snapshots),
         "league_team_count": len(teams),
         "availability_as_of": refreshed_at,
+    }
+
+
+@app.get("/v1/leagues/{league_id}/activity")
+async def league_activity(
+    league_id: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    team_ids: str | None = Query(None, max_length=1200),
+    limit: int = Query(25, ge=1, le=100),
+    db: SupabaseREST = Depends(db_for),
+):
+    if (since and since.tzinfo is None) or (until and until.tzinfo is None):
+        raise HTTPException(status_code=400, detail="since and until must include a timezone")
+    if since and until and since > until:
+        raise HTTPException(status_code=400, detail="since must not be later than until")
+    requested_team_ids = {value.strip() for value in (team_ids or "").split(",") if value.strip()}
+    teams, _ = await db.request("GET", "fantasy_teams", params={
+        "league_id": f"eq.{league_id}", "select": "id,name,external_id", "limit": 100,
+    })
+    if not teams:
+        raise HTTPException(status_code=404, detail="League not found or unavailable")
+    valid_team_ids = {team["id"] for team in teams}
+    if not requested_team_ids.issubset(valid_team_ids):
+        raise HTTPException(status_code=400, detail="Every team_id must belong to this league")
+
+    transaction_params: dict[str, Any] = {
+        "league_id": f"eq.{league_id}", "select": "*",
+        "order": "activity_at.desc", "limit": 1000,
+    }
+    if since:
+        transaction_params["activity_at"] = f"gte.{since.isoformat()}"
+    if until:
+        upper_bound = f"lte.{until.isoformat()}"
+        if "activity_at" in transaction_params:
+            transaction_params["and"] = f"(activity_at.{upper_bound})"
+        else:
+            transaction_params["activity_at"] = upper_bound
+    transactions, _ = await db.request("GET", "league_transactions", params=transaction_params)
+    transaction_ids = [transaction["id"] for transaction in transactions]
+    items = []
+    if transaction_ids:
+        items, _ = await db.request("GET", "league_transaction_items", params={
+            "transaction_id": f"in.({','.join(transaction_ids)})",
+            "select": "*", "order": "item_index.asc", "limit": 5000,
+        })
+    items_by_transaction: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        items_by_transaction.setdefault(item["transaction_id"], []).append(item)
+
+    team_by_id = {team["id"]: team for team in teams}
+    results = []
+    for transaction in transactions:
+        activity_at = transaction["activity_at"]
+        activity_datetime = datetime.fromisoformat(activity_at.replace("Z", "+00:00"))
+        if (since and activity_datetime < since) or (until and activity_datetime > until):
+            continue
+        transaction_items = items_by_transaction.get(transaction["id"], [])
+        involved_team_ids = {transaction.get("initiated_by_team_id")}
+        involved_team_ids.update(item.get("from_team_id") for item in transaction_items)
+        involved_team_ids.update(item.get("to_team_id") for item in transaction_items)
+        involved_team_ids.discard(None)
+        if requested_team_ids and requested_team_ids.isdisjoint(involved_team_ids):
+            continue
+        results.append({
+            **transaction,
+            "activity_at": activity_at,
+            "involved_teams": [team_by_id[team_id] for team_id in involved_team_ids if team_id in team_by_id],
+            "items": transaction_items,
+        })
+    return {
+        "items": results[:limit], "league_id": league_id,
+        "filters": {"since": since.isoformat() if since else None, "until": until.isoformat() if until else None,
+                    "team_ids": sorted(requested_team_ids) if requested_team_ids else None},
     }
 
 

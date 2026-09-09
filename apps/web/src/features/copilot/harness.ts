@@ -63,6 +63,18 @@ export const TOOL_REGISTRY = {
       sort: z.enum(["median_rank", "average_rank", "projected_total_points", "name"]).optional().describe("How to order available players; defaults to highest projected points. Median/average currently reflect the explicitly labeled previous-season ESPN positional finish, not current consensus ranks"),
     }).strict(),
   },
+  get_league_activity: {
+    description: "Query recent adds, drops, waivers, and trades in this conversation's league. Filter by an inclusive ISO-8601 time window and optionally by one or more teams; a team matches when it initiated the transaction or appears on either side of an item. Omit team_ids to include every team.",
+    schema: z.object({
+      since: z.iso.datetime({ offset: true }).optional().describe("Inclusive activity timestamp lower bound, such as 2026-09-01T00:00:00Z"),
+      until: z.iso.datetime({ offset: true }).optional().describe("Inclusive activity timestamp upper bound; omit for no upper bound"),
+      team_ids: z.array(z.uuid()).min(1).max(32).optional().describe("Team UUIDs returned by get_league_standings; omit for all teams"),
+      limit: z.number().int().min(1).max(100).optional().describe("Maximum transactions, newest first; defaults to 25"),
+    }).strict().refine((value) => !value.since || !value.until || Date.parse(value.since) <= Date.parse(value.until), {
+      message: "since must not be later than until",
+      path: ["since"],
+    }),
+  },
   get_league_draft_history: {
     description: "Query completed ESPN draft picks from this conversation's league across stored historical seasons. Use it to inspect a complete round, one team's draft, one position, or the picks immediately before and after a specific overall pick. Results are immutable completed-draft facts, not live draft state.",
     schema: z.object({

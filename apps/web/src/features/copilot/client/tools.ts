@@ -145,6 +145,15 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       })),
     };
   }
+  if (call.name === "get_league_activity") {
+    if (!thread.league_id) return { error: "No league is attached to this conversation." };
+    return api(`/v1/leagues/${thread.league_id}/activity?${queryString({
+      since: typeof input.since === "string" ? input.since : undefined,
+      until: typeof input.until === "string" ? input.until : undefined,
+      team_ids: Array.isArray(input.team_ids) ? input.team_ids.join(",") : undefined,
+      limit: typeof input.limit === "number" ? input.limit : 25,
+    })}`);
+  }
   if (call.name === "get_league_draft_history") {
     if (!thread.league_id) return { error: "No league is attached to this conversation." };
     return api(`/v1/leagues/${thread.league_id}/draft-picks?${queryString({

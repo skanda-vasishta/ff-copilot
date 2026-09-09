@@ -104,6 +104,64 @@ def test_league_free_agents_exclude_players_on_latest_rosters():
         app.dependency_overrides.clear()
 
 
+class LeagueActivityDB:
+    async def request(self, method, table, **kwargs):
+        assert method == "GET"
+        if table == "fantasy_teams":
+            return ([
+                {"id": "11111111-1111-4111-8111-111111111111", "name": "Alpha", "external_id": "1"},
+                {"id": "22222222-2222-4222-8222-222222222222", "name": "Beta", "external_id": "2"},
+            ], {})
+        if table == "league_transactions":
+            return ([
+                {"id": "tx-new", "transaction_type": "trade", "status": "complete",
+                 "initiated_by_team_id": "11111111-1111-4111-8111-111111111111",
+                 "processed_at": "2026-09-08T12:00:00Z", "proposed_at": None,
+                 "activity_at": "2026-09-08T12:00:00Z",
+                 "fetched_at": "2026-09-08T12:01:00Z"},
+                {"id": "tx-old", "transaction_type": "add", "status": "complete",
+                 "initiated_by_team_id": None, "processed_at": "2026-08-01T12:00:00Z",
+                 "activity_at": "2026-08-01T12:00:00Z",
+                 "proposed_at": None, "fetched_at": "2026-08-01T12:01:00Z"},
+            ], {})
+        if table == "league_transaction_items":
+            return ([
+                {"transaction_id": "tx-new", "item_index": 0, "item_type": "player",
+                 "player_name": "Test Player", "from_team_id": "11111111-1111-4111-8111-111111111111",
+                 "to_team_id": "22222222-2222-4222-8222-222222222222"},
+            ], {})
+        raise AssertionError(table)
+
+
+def test_league_activity_filters_by_window_and_any_involved_team():
+    app.dependency_overrides[db_for] = lambda: LeagueActivityDB()
+    try:
+        response = client.get(
+            "/v1/leagues/league-1/activity"
+            "?since=2026-09-01T00:00:00Z"
+            "&team_ids=22222222-2222-4222-8222-222222222222"
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert [transaction["id"] for transaction in body["items"]] == ["tx-new"]
+        assert {team["name"] for team in body["items"][0]["involved_teams"]} == {"Alpha", "Beta"}
+        assert body["items"][0]["items"][0]["player_name"] == "Test Player"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_league_activity_rejects_team_from_another_league():
+    app.dependency_overrides[db_for] = lambda: LeagueActivityDB()
+    try:
+        response = client.get(
+            "/v1/leagues/league-1/activity"
+            "?team_ids=33333333-3333-4333-8333-333333333333"
+        )
+        assert response.status_code == 400
+    finally:
+        app.dependency_overrides.clear()
+
+
 class DraftHistoryDB:
     async def request(self, method, table, **kwargs):
         if table == "rpc/link_league_history":
