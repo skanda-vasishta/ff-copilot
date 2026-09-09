@@ -4,6 +4,7 @@ import type { AgentMessage, AgentThread } from "@ff-copilot/agent-runtime";
 const RECOMMENDATION_THREAD_TITLES = new Set([
   "Free agent recommendations",
   "Trade recommendations",
+  "Best lineup recommendations",
 ]);
 
 export async function listThreads(teamId: string) {

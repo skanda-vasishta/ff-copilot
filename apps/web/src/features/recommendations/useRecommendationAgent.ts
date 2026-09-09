@@ -42,7 +42,7 @@ export function useRecommendationAgent(input: { workflow: RecommendationWorkflow
     controller.current = abort;
     try {
       if (!thread.current) {
-        const title = input.workflow === "free-agents" ? "Free agent recommendations" : "Trade recommendations";
+        const title = input.workflow === "free-agents" ? "Free agent recommendations" : input.workflow === "trades" ? "Trade recommendations" : "Best lineup recommendations";
         const created = await createThread({ teamId: input.teamId, leagueId: input.leagueId, title });
         thread.current = { ...created, season: input.season };
       }
@@ -62,7 +62,7 @@ export function useRecommendationAgent(input: { workflow: RecommendationWorkflow
       await saveRecommendation({
         teamId: input.teamId,
         workflow: input.workflow,
-        position: positionFromPrompt(prompt),
+        position: input.workflow === "lineup" ? "ALL" : positionFromPrompt(prompt),
         prompt,
         result: parsed as RecommendationResult,
         leagueSyncedAt: input.leagueSyncedAt,
