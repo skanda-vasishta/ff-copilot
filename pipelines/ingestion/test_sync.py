@@ -14,6 +14,7 @@ from pipelines.ingestion.sync import (
     parse_fantasypros_rankings,
     parse_fftoday_projections,
     parse_json,
+    normalize_espn_transaction,
     parser,
     normalize_player_name,
     player_identity_matches,
@@ -141,6 +142,39 @@ def test_sleeper_roster_player_reuses_locked_canonical_identity():
     assert db.inserted == [("player_external_ids", {
         "player_id": "canonical-player", "provider": "sleeper", "external_id": "11586",
     })]
+
+
+def test_pending_espn_trade_is_normalized_with_direction_and_dates():
+    transaction, items = normalize_espn_transaction({
+        "id": "trade-1", "isPending": True, "proposedByTeamId": 2,
+        "proposedDate": 1788796800000, "expirationDate": 1788883200000,
+        "items": [
+            {"type": "TRADE", "playerId": 101, "fromTeamId": 2, "toTeamId": 7},
+            {"type": "TRADE", "playerId": 202, "fromTeamId": 7, "toTeamId": 2},
+        ],
+    }, "league-1", {"2": {"id": "team-2"}, "7": {"id": "team-7"}}, "2026-09-07T00:00:00Z")
+    assert transaction["transaction_type"] == "TRADE_PROPOSAL"
+    assert transaction["status"] == "PENDING"
+    assert transaction["initiated_by_team_id"] == "team-2"
+    assert transaction["proposed_at"] == "2026-09-07T16:00:00+00:00"
+    assert items[0]["from_team_id"] == "team-2"
+    assert items[0]["to_team_id"] == "team-7"
+
+
+def test_completed_waiver_preserves_faab_and_player_movement():
+    transaction, items = normalize_espn_transaction({
+        "id": "waiver-1", "type": "WAIVER", "status": "EXECUTED", "teamId": 7,
+        "processDate": 1788796800000, "bidAmount": 14,
+        "items": [{"type": "ADD", "playerId": 303, "toTeamId": 7}],
+    }, "league-1", {"7": {"id": "team-7"}}, "2026-09-07T00:00:00Z")
+    assert transaction["transaction_type"] == "WAIVER"
+    assert transaction["bid_amount"] == 14
+    assert items == [{
+        "item_index": 0, "item_type": "ADD", "player_external_id": "303",
+        "from_team_id": None, "from_team_external_id": None,
+        "to_team_id": "team-7", "to_team_external_id": "7",
+        "raw_payload": {"type": "ADD", "playerId": 303, "toTeamId": 7},
+    }]
 
 
 def test_provider_contract_fixtures_extract_content():
