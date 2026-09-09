@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
+import { syncLeagueTransactions } from './transactions'
 
 export type Provider = 'espn' | 'sleeper'
 
@@ -288,6 +289,8 @@ export async function refreshLeagueFromProvider(league: LeagueRecord) {
     })
     if (error) throw error
   }
+
+  await syncLeagueTransactions(admin, league, teamIds, normalized.week, fetchedAt)
 
   // Advance the shared freshness marker only after every roster was saved.
   // Agent context and persisted recommendations use this timestamp to decide
