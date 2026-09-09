@@ -248,7 +248,14 @@ def resolve_sleeper_player(db: SupabaseAdmin, external_id: str, player: dict[str
     if espn_rows:
         player_id = espn_rows[0]["player_id"]
     else:
-        player_id = db.insert("players", sleeper_player_payload(player))[0]["id"]
+        payload = sleeper_player_payload(player)
+        identity_key = f"{normalize_player_name(payload['name'])}:{(payload.get('position') or '').upper()}"
+        # League rosters include kickers, defenses, and inactive players that
+        # the global fantasy-position import may not have mapped to Sleeper yet.
+        # Reuse the canonical row created by another provider instead of trying
+        # to insert a duplicate that the database correctly rejects.
+        canonical_rows = db.select("players", identity_key=identity_key, identity_locked="true")
+        player_id = canonical_rows[0]["id"] if canonical_rows else db.insert("players", payload)[0]["id"]
     # A player may already have a stale Sleeper alias. Only insert when this
     # provider is not mapped; the unique player/provider constraint protects identity.
     existing_for_player = db.select("player_external_ids", player_id=player_id, provider="sleeper")

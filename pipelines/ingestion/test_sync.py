@@ -14,6 +14,7 @@ from pipelines.ingestion.sync import (
     parse_fftoday_projections,
     parse_json,
     parser,
+    resolve_sleeper_player,
     snapshot_payload,
 )
 
@@ -88,6 +89,41 @@ def test_cli_supports_sleeper_league_and_global_data():
 
 def test_batches_are_stable():
     assert list(chunks(list(range(5)), 2)) == [[0, 1], [2, 3], [4]]
+
+
+def test_sleeper_roster_player_reuses_locked_canonical_identity():
+    class DB:
+        def __init__(self):
+            self.inserted = []
+
+        def select(self, table, **filters):
+            if table == "player_external_ids" and filters.get("provider") == "sleeper":
+                return []
+            if table == "player_external_ids" and filters.get("provider") == "espn":
+                return []
+            if table == "players":
+                assert filters == {"identity_key": "tylerloop:K", "identity_locked": "true"}
+                return [{"id": "canonical-player"}]
+            if table == "player_external_ids" and filters.get("player_id") == "canonical-player":
+                return []
+            raise AssertionError((table, filters))
+
+        def insert(self, table, payload):
+            self.inserted.append((table, payload))
+            return [payload]
+
+        def patch(self, *_args, **_kwargs):
+            raise AssertionError("existing external ID path should not be used")
+
+    db = DB()
+    player_id = resolve_sleeper_player(db, "11586", {
+        "player_id": "11586", "full_name": "Tyler Loop", "position": "K", "team": "BAL", "active": True,
+    })
+
+    assert player_id == "canonical-player"
+    assert db.inserted == [("player_external_ids", {
+        "player_id": "canonical-player", "provider": "sleeper", "external_id": "11586",
+    })]
 
 
 def test_provider_contract_fixtures_extract_content():
