@@ -5,6 +5,7 @@ import pytest
 from pipelines.ingestion.sync import (
     ProviderContractError,
     chunks,
+    canonical_sleeper_candidates,
     clean_number,
     digest,
     parse_espn_html,
@@ -14,6 +15,8 @@ from pipelines.ingestion.sync import (
     parse_fftoday_projections,
     parse_json,
     parser,
+    normalize_player_name,
+    player_identity_matches,
     resolve_sleeper_player,
     snapshot_payload,
 )
@@ -28,6 +31,9 @@ def test_legacy_helpers_tolerate_missing_values():
     assert clean_number("4") == 4
     assert parse_json("not json", {}) == {}
     assert digest({"b": 2, "a": 1}) == digest({"a": 1, "b": 2})
+    assert normalize_player_name("James Cook III") == normalize_player_name("James Cook")
+    assert player_identity_matches({"name": "James Cook III", "position": "RB"}, "James Cook", "RB")
+    assert not player_identity_matches({"name": "Ryan Izzo", "position": "TE"}, "Tyler Conklin", "TE")
 
 
 def test_snapshot_normalizes_espn_array_placeholders():
@@ -89,6 +95,17 @@ def test_cli_supports_sleeper_league_and_global_data():
 
 def test_batches_are_stable():
     assert list(chunks(list(range(5)), 2)) == [[0, 1], [2, 3], [4]]
+
+
+def test_duplicate_sleeper_ids_prefer_espn_linked_candidate():
+    candidates = {
+        "new": {"full_name": "Chase Cota", "position": "WR", "college": "Oregon"},
+        "canonical": {"full_name": "Chase Cota", "position": "WR", "college": "Oregon"},
+        "other-person": {"full_name": "Chase Cota", "position": "WR", "college": "USC"},
+    }
+    selected = canonical_sleeper_candidates(
+        candidates, {"canonical": "player-with-espn"}, {"player-with-espn"}, {}, {})
+    assert set(selected) == {"canonical", "other-person"}
 
 
 def test_sleeper_roster_player_reuses_locked_canonical_identity():

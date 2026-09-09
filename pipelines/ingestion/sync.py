@@ -46,7 +46,21 @@ def normalize_text(value: str) -> str:
 def normalize_player_name(value: str) -> str:
     """Normalize provider spelling without making unsafe fuzzy matches."""
     value = value.casefold().replace("’", "'")
+    normalized = re.sub(r"[^a-z0-9]", "", value)
+    # Providers disagree about generational suffixes (Sleeper's "James Cook"
+    # vs ESPN's "James Cook III"). Position/team checks at call sites keep
+    # this exact normalization from becoming a fuzzy identity match.
+    return re.sub(r"(?:jr|sr|iii|ii|iv|v)$", "", normalized)
+
+
+def normalize_player_name_with_suffix(value: str) -> str:
+    value = value.casefold().replace("’", "'")
     return re.sub(r"[^a-z0-9]", "", value)
+
+
+def player_identity_matches(player: dict[str, Any] | None, name: str, position: str | None) -> bool:
+    return bool(player and normalize_player_name(player["name"]) == normalize_player_name(name)
+                and player.get("position") == position)
 
 
 def clean_number(value: Any) -> float | int | None:
@@ -236,9 +250,34 @@ def sleeper_player_payload(player: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def canonical_sleeper_candidates(candidates: dict[str, dict[str, Any]], sleeper_ids: dict[str, str],
+                                 espn_player_ids: set[str], projections: dict[str, Any],
+                                 stats: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Collapse duplicate Sleeper IDs only when biography fields prove identity."""
+    groups: dict[tuple[str, str | None, str], list[tuple[str, dict[str, Any]]]] = {}
+    for external_id, player in candidates.items():
+        biography = player.get("college") or player.get("birth_date") or external_id
+        key = (normalize_player_name_with_suffix(player.get("full_name") or ""), player.get("position"), biography)
+        groups.setdefault(key, []).append((external_id, player))
+    selected: dict[str, dict[str, Any]] = {}
+    for group in groups.values():
+        external_id, player = max(group, key=lambda item: (
+            bool(item[1].get("espn_id")), sleeper_ids.get(item[0]) in espn_player_ids,
+            bool(item[1].get("team")), bool(item[1].get("birth_date")),
+            bool(projections.get(item[0]) or stats.get(item[0])),
+            -int(item[0]) if item[0].isdigit() else 0,
+        ))
+        selected[external_id] = player
+    return selected
+
+
 def resolve_sleeper_player(db: SupabaseAdmin, external_id: str, player: dict[str, Any]) -> str:
     rows = db.select("player_external_ids", provider="sleeper", external_id=external_id)
-    if rows:
+    mapped_players = db.select("players", id=rows[0]["player_id"]) if rows else []
+    mapped_player = mapped_players[0] if mapped_players else None
+    mapped_identity_matches = player_identity_matches(
+        mapped_player, sleeper_player_payload(player)["name"], player.get("position"))
+    if mapped_identity_matches:
         db.patch("players", {"id": rows[0]["player_id"]}, {
             key: value for key, value in sleeper_player_payload(player).items() if value is not None
         })
@@ -255,6 +294,9 @@ def resolve_sleeper_player(db: SupabaseAdmin, external_id: str, player: dict[str
         # Reuse the canonical row created by another provider instead of trying
         # to insert a duplicate that the database correctly rejects.
         canonical_rows = db.select("players", identity_key=identity_key, identity_locked="true")
+        if not canonical_rows:
+            candidates = db.select("players", position=payload.get("position"), nfl_team=payload.get("nfl_team"))
+            canonical_rows = [row for row in candidates if normalize_player_name(row["name"]) == normalize_player_name(payload["name"])]
         player_id = canonical_rows[0]["id"] if canonical_rows else db.insert("players", payload)[0]["id"]
     # A player may already have a stale Sleeper alias. Only insert when this
     # provider is not mapped; the unique player/provider constraint protects identity.
@@ -274,24 +316,34 @@ def sync_sleeper_global(db: SupabaseAdmin, season: int, week: int | None, run: R
     }
     sleeper_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
         "player_external_ids", {"provider": "eq.sleeper", "select": "external_id,player_id"})}
+    existing_players = {row["id"]: row for row in db.select_all(
+        "players", {"select": "id,name,position"})}
+    sleeper_ids = {external_id: player_id for external_id, player_id in sleeper_ids.items()
+                   if player_id in existing_players
+                   and normalize_player_name(existing_players[player_id]["name"])
+                   == normalize_player_name(candidates.get(external_id, {}).get("full_name") or
+                                            candidates.get(external_id, {}).get("search_full_name") or "")
+                   and existing_players[player_id].get("position") == candidates.get(external_id, {}).get("position")}
     sleeper_id_by_player = {player_id: external_id for external_id, player_id in sleeper_ids.items()}
     espn_ids = {row["external_id"]: row["player_id"] for row in db.select_all(
         "player_external_ids", {"provider": "eq.espn", "select": "external_id,player_id"})}
-    # Sleeper frequently omits espn_id even for established players. Prefer the
-    # existing ESPN-backed player with the same normalized name and position so
-    # projections and ADP land on the profile users already see.
-    espn_player_ids = set(espn_ids.values())
+    candidates = canonical_sleeper_candidates(
+        candidates, sleeper_ids, set(espn_ids.values()), projections, stats)
+    # Sleeper frequently omits espn_id. Reuse any unambiguous canonical player,
+    # including one introduced by FantasyPros before ESPN exposes the player.
+    identity_groups: dict[tuple[str, str | None], list[str]] = {}
+    for row in existing_players.values():
+        identity_groups.setdefault(
+            (normalize_player_name(row["name"]), row.get("position")), []).append(row["id"])
     canonical_by_name_position = {
-        (normalize_player_name(row["name"]), row.get("position")): row["id"]
-        for row in db.select_all("players", {"select": "id,name,position"})
-        if row["id"] in espn_player_ids
+        identity: ids[0] for identity, ids in identity_groups.items() if len(ids) == 1
     }
     resolved: dict[str, str] = {}
     player_rows, id_rows = [], []
     for external_id, player in candidates.items():
-        canonical_id = espn_ids.get(str(player.get("espn_id"))) or canonical_by_name_position.get(
-            (normalize_player_name(player.get("full_name") or player.get("search_full_name") or ""), player.get("position"))
-        )
+        identity = (normalize_player_name(
+            player.get("full_name") or player.get("search_full_name") or ""), player.get("position"))
+        canonical_id = canonical_by_name_position.get(identity) or espn_ids.get(str(player.get("espn_id")))
         player_id = canonical_id or sleeper_ids.get(external_id) or str(uuid.uuid4())
         resolved[external_id] = player_id
         player_rows.append({"id": player_id, **sleeper_player_payload({**player, "player_id": external_id})})
@@ -601,19 +653,32 @@ def sync_global(args):
             )
             draft_position_ranks.update({external_id: index for index, external_id in enumerate(ordered, 1)})
         run.read = len(unique)
-        external_rows = db.request("GET", "player_external_ids", params={
-            "provider": "eq.espn", "select": "external_id,player_id", "limit": 1000
-        })
-        existing = {row["external_id"]: row["player_id"] for row in external_rows}
         identity_rows = db.select_all("players", {"select": "id,name,position"})
+        existing_player_ids = {row["id"] for row in identity_rows}
+        players_by_id = {row["id"]: row for row in identity_rows}
+        external_rows = db.select_all("player_external_ids", {
+            "provider": "eq.espn", "select": "external_id,player_id"
+        })
+        existing = {row["external_id"]: row["player_id"] for row in external_rows
+                    if row["player_id"] in existing_player_ids}
         identity_groups: dict[tuple[str, str | None], list[str]] = {}
+        exact_identity: dict[tuple[str, str | None], str] = {}
         for row in identity_rows:
             identity_groups.setdefault((normalize_player_name(row["name"]), row.get("position")), []).append(row["id"])
+            exact_identity[(normalize_player_name_with_suffix(row["name"]), row.get("position"))] = row["id"]
         unique_identity = {key: ids[0] for key, ids in identity_groups.items() if len(ids) == 1}
         player_rows, id_rows, snapshots, rankings = [], [], [], []
         resolved: dict[str, str] = {}
         for external_id, player in unique.items():
-            player_id = existing.get(external_id) or unique_identity.get(
+            exact_id = exact_identity.get(
+                (normalize_player_name_with_suffix(player.name), getattr(player, "position", None))
+            )
+            mapped_id = existing.get(external_id)
+            mapped_player = players_by_id.get(mapped_id) if mapped_id else None
+            if mapped_player and not player_identity_matches(
+                    mapped_player, player.name, getattr(player, "position", None)):
+                mapped_id = None
+            player_id = exact_id or mapped_id or unique_identity.get(
                 (normalize_player_name(player.name), getattr(player, "position", None))
             ) or str(uuid.uuid4())
             resolved[external_id] = player_id
