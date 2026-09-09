@@ -182,6 +182,7 @@ export async function POST(request: Request) {
       const workflow = requestedWorkflow.success ? requestedWorkflow.data : undefined;
       if (workflow === "free-agents") instructions += `\n\n# FREE-AGENT RECOMMENDER\nThis is a dedicated agentic recommendation run. You must inspect get_my_team and get_league_free_agents for every requested position, then use rankings and player/source tools wherever useful. Return five genuinely available players for each requested position, ordered by fit for this specific roster—not merely raw projection. Never return a rostered player. Fill every structured field. Use an ISO timestamp or the factual availability timestamp for availability_as_of.`;
       if (workflow === "trades") instructions += `\n\n# TRADE RECOMMENDER\nThis is a dedicated agentic recommendation run. You must inspect get_my_team, get_league_standings, and relevant opponent rosters with get_league_team_roster before answering. Return exactly five concrete, roster-valid trade concepts ordered by fit for this team. Each target must be on the named opponent and every offered player must be on the user's team. Consider both teams' roster needs and make no claim that an offer will be accepted. Fill every structured field and use an ISO timestamp for rosters_as_of.`;
+      if (workflow === "lineup") instructions += `\n\n# BEST-LINEUP RECOMMENDER\nThis is a dedicated lineup run whose JSON is rendered in the team view, never as chat. Inspect get_my_team, the ESPN starting lineup slot counts in league context, consensus rankings, projections, injuries, and useful player sources. Return exactly one eligible, unique rostered player for every ESPN starting slot; exclude bench and injured-reserve slots. Use slot_index to distinguish duplicate slots. Put every unassigned rostered player ID in bench_player_ids. Prefer current projected scoring and availability, explain close calls briefly, and do not invent players or slots. Use the roster snapshot timestamp for lineup_as_of.`;
       const modelSettings = await resolveAgentModelSettings(supabase);
       run = {
         type: "agent-run",
@@ -206,7 +207,7 @@ export async function POST(request: Request) {
       tools: [...((thread as unknown as { draft_session_id?: string | null }).draft_session_id ? DRAFT_AGENT_TOOLS : AGENT_TOOLS)] as ChatCompletionTool[],
       previousResponseId,
       responseFormat: run.workflow ? {
-        name: run.workflow === "free-agents" ? "free_agent_recommendations" : "trade_recommendations",
+        name: run.workflow === "free-agents" ? "free_agent_recommendations" : run.workflow === "trades" ? "trade_recommendations" : "best_lineup_recommendations",
         schema: z.toJSONSchema(schemaForWorkflow(run.workflow), { target: "draft-7" }) as Record<string, unknown>,
         description: "Validated fantasy-football recommendations for the dedicated recommender UI.",
       } : undefined,
