@@ -34,6 +34,10 @@ function validEvent(event: AgentEvent) {
   return typeof serialized === "string" && serialized.length <= 200_000;
 }
 
+function requiresLiveMatchupTool(text: string) {
+  return /\b(matchup|opponent|live score|fantasy score|weekly score|score of my|this week(?:'s)? (?:game|lineup|projection)|week \d+ matchup)\b/i.test(text);
+}
+
 type AgentRunCheckpoint = {
   type: "agent-run";
   id: string;
@@ -206,6 +210,9 @@ export async function POST(request: Request) {
       messages: inferenceMessages,
       tools: [...((thread as unknown as { draft_session_id?: string | null }).draft_session_id ? DRAFT_AGENT_TOOLS : AGENT_TOOLS)] as ChatCompletionTool[],
       previousResponseId,
+      toolChoice: !continuing && !run.workflow && !(thread as unknown as { draft_session_id?: string | null }).draft_session_id
+        && events[0]?.role === "user" && events[0].parts[0]?.type === "text"
+        && requiresLiveMatchupTool(events[0].parts[0].text) ? "get_live_matchup" : undefined,
       responseFormat: run.workflow ? {
         name: run.workflow === "free-agents" ? "free_agent_recommendations" : run.workflow === "trades" ? "trade_recommendations" : "best_lineup_recommendations",
         schema: z.toJSONSchema(schemaForWorkflow(run.workflow), { target: "draft-7" }) as Record<string, unknown>,

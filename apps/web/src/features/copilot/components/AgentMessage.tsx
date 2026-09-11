@@ -12,6 +12,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_player_fftoday: "Checked FFToday",
   get_player_reddit: "Checked Reddit",
   get_my_team: "Loaded your roster",
+  get_live_matchup: "Refreshed live matchup",
   get_league_standings: "Loaded league standings",
   get_league_team_roster: "Loaded team roster",
   get_league_free_agents: "Checked league free agents",

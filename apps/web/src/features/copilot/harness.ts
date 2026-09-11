@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const IN_SEASON_SYSTEM_PROMPT = `You are FF Copilot, an in-season fantasy football assistant.
 
-Help the user make waiver, lineup, roster, and trade decisions using the factual tools provided. Retrieve facts before making player-specific claims. For ranking questions, prefer get_consensus_rankings and report the contributing sources instead of treating ESPN alone as authoritative. Treat ESPN platform ranks, FantasyPros expert consensus ranks, and FFToday projection-derived ranks as distinct inputs; do not mislabel one as another. Treat the supplied roster ownership as authoritative. Before proposing any trade, verify that each outgoing player belongs to the sender and each incoming player belongs to a different team; never suggest acquiring a player the user already owns. Do not claim another manager would accept an offer without evidence; frame trade acceptance as uncertain. Clearly distinguish source facts from your analysis, mention important uncertainty and data freshness, and never invent injuries, rankings, projections, roster status, or news. Ask one concise question when league or roster context is required but unavailable. Keep answers focused and practical.`;
+Help the user make waiver, lineup, roster, and trade decisions using the factual tools provided. Retrieve facts before making player-specific claims. Live fantasy matchup facts are deliberately excluded from your system context because they change during games. For every question or follow-up about a current matchup, opponent, live score, weekly projection, or weekly starting lineup, you MUST call get_live_matchup in that turn and use only its returned matchup facts; never reuse matchup numbers from conversation history. For ranking questions, prefer get_consensus_rankings and report the contributing sources instead of treating ESPN alone as authoritative. Treat ESPN platform ranks, FantasyPros expert consensus ranks, and FFToday projection-derived ranks as distinct inputs; do not mislabel one as another. Treat the supplied roster ownership as authoritative. Before proposing any trade, verify that each outgoing player belongs to the sender and each incoming player belongs to a different team; never suggest acquiring a player the user already owns. Do not claim another manager would accept an offer without evidence; frame trade acceptance as uncertain. Clearly distinguish source facts from your analysis, mention important uncertainty and data freshness, and never invent injuries, rankings, projections, roster status, or news. Ask one concise question when league or roster context is required but unavailable. Keep answers focused and practical.`;
 
 const playerId = z.uuid().describe("Internal player UUID returned by search_players or another player tool");
 const noInput = z.object({}).strict();
@@ -57,6 +57,12 @@ export const TOOL_REGISTRY = {
   get_my_team: {
     description: "Retrieve the latest stored roster snapshot for the team permanently attached to this conversation. Use for lineup, roster construction, waiver, and trade analysis.",
     schema: noInput,
+  },
+  get_live_matchup: {
+    description: "Refresh the conversation's fantasy league directly from its provider, then return the selected team's current or requested weekly matchup with both full starting lineups and benches, live actual fantasy points, weekly projections, team totals, records, and a refresh timestamp. REQUIRED on every turn that asks about a current matchup, opponent, live score, weekly projection, or weekly lineup; never reuse an earlier result.",
+    schema: z.object({
+      week: z.number().int().min(1).max(25).optional().describe("Fantasy week; omit for the provider's current week"),
+    }).strict(),
   },
   get_league_standings: {
     description: "Retrieve every team in this conversation's league with records, points, and standing. Returns team_id values that can be passed to get_league_team_roster.",

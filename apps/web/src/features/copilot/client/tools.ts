@@ -117,6 +117,18 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       players: roster.players,
     };
   }
+  if (call.name === "get_live_matchup") {
+    if (!thread.team_id || !thread.league_id) return { error: "No team and league are attached to this conversation." };
+    const refreshed = await fetch("/api/league/refresh-matchup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leagueId: thread.league_id }),
+    });
+    const refreshResult = await refreshed.json().catch(() => ({}));
+    if (!refreshed.ok) throw new Error(refreshResult.error || "Could not refresh the live matchup");
+    const matchup = await api<Record<string, unknown>>(`/v1/teams/${thread.team_id}/matchup${input.week ? `?week=${Number(input.week)}` : ""}`);
+    return { ...matchup, live_refreshed_at: refreshResult.refreshedAt || new Date().toISOString(), source: refreshResult.provider };
+  }
   if (call.name === "get_league_standings") {
     if (!thread.league_id) return { error: "No league is attached to this conversation." };
     const teams = await api<Array<Record<string, unknown>>>(`/v1/leagues/${thread.league_id}/teams`);

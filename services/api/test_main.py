@@ -200,8 +200,12 @@ class MatchupDB:
                 "away_team": {"id": "team-2", "name": "Beta"},
             }],
             "roster_snapshots": [
-                {"id": "snapshot-1", "team_id": "team-1", "week": 2, "fetched_at": "now"},
-                {"id": "snapshot-2", "team_id": "team-2", "week": 2, "fetched_at": "now"},
+                {"id": "snapshot-1", "team_id": "team-1", "week": 2, "fetched_at": "now", "raw_payload": {
+                    "entries": [{"playerPoolEntry": {"player": {"id": 101, "fullName": "QB One", "stats": [
+                        {"scoringPeriodId": 2, "statSourceId": 0, "appliedTotal": 25.3},
+                        {"scoringPeriodId": 2, "statSourceId": 1, "appliedTotal": 22.7},
+                    ]}}}] }},
+                {"id": "snapshot-2", "team_id": "team-2", "week": 2, "fetched_at": "now", "raw_payload": {}},
             ],
             "roster_players": [{"roster_snapshot_id": "snapshot-1", "lineup_slot": "QB",
                                 "player": {"id": "player-1", "name": "QB One", "position": "QB"}}],
@@ -222,7 +226,9 @@ def test_team_matchup_defaults_to_current_week_and_builds_lineups():
         assert body["week"] == 2
         assert body["matchup"]["away_team"]["name"] == "Beta"
         assert body["lineups"]["team-1"][0]["projected_average_points"] == 21.5
-        assert body["lineups"]["team-1"][0]["weekly_actual_points"] == 24.1
+        assert body["lineups"]["team-1"][0]["weekly_actual_points"] == 25.3
+        assert body["lineups"]["team-1"][0]["weekly_projected_points"] == 22.7
+        assert body["lineups"]["team-1"][0]["provider_player_id"] == "101"
     finally:
         app.dependency_overrides.clear()
 

@@ -635,7 +635,7 @@ async def team_matchup(
     matchup_team_ids = [matchup["home_team_id"], matchup["away_team_id"]]
     snapshots, _ = await db.request("GET", "roster_snapshots", params={
         "team_id": f"in.({','.join(matchup_team_ids)})", "season": f"eq.{league['season']}",
-        "select": "id,team_id,week,fetched_at", "order": "fetched_at.desc", "limit": 1000,
+        "select": "id,team_id,week,fetched_at,raw_payload", "order": "fetched_at.desc", "limit": 1000,
     })
     latest_by_team: dict[str, dict[str, Any]] = {}
     for snapshot in snapshots:
@@ -686,6 +686,15 @@ async def team_matchup(
             if isinstance(value, (int, float)):
                 return float(value)
         return None
+
+    def roster_entry(snapshot: dict[str, Any], player_name: str) -> dict[str, Any]:
+        entries = (snapshot.get("raw_payload") or {}).get("entries") or []
+        target = " ".join(player_name.lower().split())
+        for entry in entries if isinstance(entries, list) else []:
+            provider_player = ((entry or {}).get("playerPoolEntry") or {}).get("player") or {}
+            if " ".join(str(provider_player.get("fullName") or "").lower().split()) == target:
+                return entry
+        return {}
     team_by_snapshot = {snapshot["id"]: team_id for team_id, snapshot in latest_by_team.items()}
     lineups: dict[str, list[dict[str, Any]]] = {value: [] for value in matchup_team_ids}
     for row in roster_rows:
@@ -693,10 +702,17 @@ async def team_matchup(
         owner_id = team_by_snapshot.get(row["roster_snapshot_id"])
         if player and owner_id:
             weekly = weekly_by_player.get(player["id"], {})
+            source_snapshot = latest_by_team.get(owner_id, {})
+            entry = roster_entry(source_snapshot, player["name"])
+            provider_player = ((entry.get("playerPoolEntry") or {}).get("player") or {})
+            provider_weekly = {"raw_payload": {"stats": provider_player.get("stats") or []}}
+            provider_actual = week_value(provider_weekly, 0) if entry else None
+            provider_projected = week_value(provider_weekly, 1) if entry else None
             lineups[owner_id].append({**player, **metrics_by_player.get(player["id"], {}),
                                       "lineup_slot": row.get("lineup_slot"),
-                                      "weekly_actual_points": week_value(weekly, 0),
-                                      "weekly_projected_points": week_value(weekly, 1)})
+                                      "weekly_actual_points": provider_actual if provider_actual is not None else week_value(weekly, 0),
+                                      "weekly_projected_points": provider_projected if provider_projected is not None else week_value(weekly, 1),
+                                      "provider_player_id": str(provider_player.get("id")) if provider_player.get("id") else None})
     return {"matchup": matchup, "week": selected_week, "available_weeks": available_weeks,
             "league": league, "lineups": lineups}
 

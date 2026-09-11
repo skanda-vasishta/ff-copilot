@@ -10,6 +10,7 @@ export type AgentModelRequest = {
   instructions: string;
   messages: AgentMessage[];
   tools: ChatCompletionTool[];
+  toolChoice?: string;
   previousResponseId?: string;
   responseFormat?: { name: string; schema: Record<string, unknown>; description: string };
 };
@@ -113,7 +114,7 @@ async function completeWithResponses(client: OpenAI, request: AgentModelRequest)
     instructions: request.instructions,
     input: toResponsesInput(request.messages),
     tools: responsesTools(request.tools),
-    tool_choice: "auto",
+    tool_choice: request.toolChoice ? { type: "function", name: request.toolChoice } : "auto",
     reasoning: { effort: request.reasoningEffort },
     previous_response_id: request.previousResponseId,
     text: request.responseFormat ? {
