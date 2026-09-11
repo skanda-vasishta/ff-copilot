@@ -35,7 +35,7 @@ const CONTEXT_PLAYERS_PER_POSITION = 30;
 
 const present = (value: unknown) => value !== null && value !== undefined && value !== "";
 
-export function formatThreadContext(snapshot: Record<string, unknown>) {
+export function formatThreadContext(snapshot: Record<string, unknown>, options: { compact?: boolean } = {}) {
   const league = snapshot.league as Record<string, unknown>;
   const selectedTeam = snapshot.selected_team as Record<string, unknown>;
   const teams = (snapshot.teams || []) as Array<Record<string, unknown>>;
@@ -92,7 +92,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     lines.push("", "## Current matchup", "No head-to-head matchup is stored for the league's current week.");
   }
 
-  if (pickOrder.length) {
+  if (!options.compact && pickOrder.length) {
     const draftType = String(draftSettings.type || "unknown").toLowerCase();
     const orderType = String(draftSettings.order_type || "unknown").toLowerCase();
     const clock = present(draftSettings.time_per_selection) ? `${String(draftSettings.time_per_selection)} seconds per pick` : "pick clock unavailable";
@@ -113,7 +113,7 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     } else {
       lines.push(`No pick assignments were present in ${providerLabel}'s latest draft grid.`);
     }
-  } else {
+  } else if (!options.compact) {
     lines.push("", `## ${String(league.season)} ${providerLabel} draft order`, `Not available in the latest stored ${providerLabel} league settings. Do not infer it from a previous season.`);
   }
 
@@ -131,26 +131,28 @@ export function formatThreadContext(snapshot: Record<string, unknown>) {
     else for (const player of roster) lines.push(`- ${String(player.name)} | ${String(player.position || "?")} ${String(player.nfl_team || "FA")} | slot ${String(player.lineup_slot || "unknown")} | player_id ${String(player.player_id)}`);
   }
 
-  lines.push("", `## ${String(league.season)} full-PPR consensus rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by a simple average of every compatible current positional rank. ESPN is a platform draft rank, Sleeper is platform PPR ADP, FantasyPros is expert consensus rank, and FFToday is projection-derived positional rank. Projected points separately average every compatible full-season PPR projection source.`);
-  for (const position of CONTEXT_POSITIONS) {
-    lines.push("", `### ${position}`);
-    const players = rankings?.[position] || [];
-    for (const [index, player] of players.entries()) {
-      const facts = [
-        `position list #${index + 1}`,
-        present(player.consensus_position_rank) ? `consensus ${position}${Number(player.consensus_position_rank).toFixed(1)}` : null,
-        present(player.consensus_overall_rank) ? `overall consensus #${Number(player.consensus_overall_rank).toFixed(1)}` : null,
-        Array.isArray(player.ranking_sources) ? `source ranks: ${(player.ranking_sources as Array<Record<string, unknown>>).map((source) => `${String(source.source)} ${position}${String(source.position_rank ?? "?")}${present(source.overall_rank) ? ` / overall ${String(source.overall_rank)}` : ""}`).join(", ")}` : null,
-        present(player.projected_total_points) ? `${String(player.projected_total_points)} consensus projected points (${String(player.projection_source_count || 0)} sources)` : null,
-        present(player.injury_status) && player.injury_status !== "ACTIVE" ? `injury: ${String(player.injury_status)}` : null,
-      ].filter(Boolean).join("; ");
-      lines.push(`- ${String(player.name)} (${String(player.nfl_team || "FA")}) | ${facts} | player_id ${String(player.id)}`);
+  if (!options.compact) {
+    lines.push("", `## ${String(league.season)} full-PPR consensus rankings`, `Top ${CONTEXT_PLAYERS_PER_POSITION} within each position, ordered by a simple average of every compatible current positional rank. ESPN is a platform draft rank, Sleeper is platform PPR ADP, FantasyPros is expert consensus rank, and FFToday is projection-derived positional rank. Projected points separately average every compatible full-season PPR projection source.`);
+    for (const position of CONTEXT_POSITIONS) {
+      lines.push("", `### ${position}`);
+      const players = rankings?.[position] || [];
+      for (const [index, player] of players.entries()) {
+        const facts = [
+          `position list #${index + 1}`,
+          present(player.consensus_position_rank) ? `consensus ${position}${Number(player.consensus_position_rank).toFixed(1)}` : null,
+          present(player.consensus_overall_rank) ? `overall consensus #${Number(player.consensus_overall_rank).toFixed(1)}` : null,
+          Array.isArray(player.ranking_sources) ? `source ranks: ${(player.ranking_sources as Array<Record<string, unknown>>).map((source) => `${String(source.source)} ${position}${String(source.position_rank ?? "?")}${present(source.overall_rank) ? ` / overall ${String(source.overall_rank)}` : ""}`).join(", ")}` : null,
+          present(player.projected_total_points) ? `${String(player.projected_total_points)} consensus projected points (${String(player.projection_source_count || 0)} sources)` : null,
+          present(player.injury_status) && player.injury_status !== "ACTIVE" ? `injury: ${String(player.injury_status)}` : null,
+        ].filter(Boolean).join("; ");
+        lines.push(`- ${String(player.name)} (${String(player.nfl_team || "FA")}) | ${facts} | player_id ${String(player.id)}`);
+      }
     }
   }
   return lines.join("\n");
 }
 
-export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false) {
+export async function ensureThreadContext(supabase: SupabaseClient, thread: ContextThread, force = false, options: { compact?: boolean } = {}) {
   const leagueSyncedAt = thread.team.league.last_synced_at ? Date.parse(thread.team.league.last_synced_at) : 0;
   const contextRefreshedAt = thread.context_refreshed_at ? Date.parse(thread.context_refreshed_at) : 0;
   const contextIncludesLatestLeagueSync = !leagueSyncedAt || contextRefreshedAt >= leagueSyncedAt;
@@ -199,7 +201,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     rosters.set(teamId, entries);
   }
 
-  const rankingQueries = await Promise.all([
+  const rankingQueries = options.compact ? [] : await Promise.all([
     ["espn", "current_draft_rank"], ["sleeper", "platform_adp"], ["fantasypros", "expert_consensus_rank"], ["fftoday", "projected_position_rank"],
   ].map(([source, rankingType]) => supabase.from("player_rankings")
     .select("player_id,source,ranking_type,overall_rank,position_rank,fetched_at")
@@ -221,7 +223,7 @@ export async function ensureThreadContext(supabase: SupabaseClient, thread: Cont
     rankingsByPlayer.set(ranking.player_id, rows);
   }
   const rankedPlayerIds = [...rankingsByPlayer.keys()];
-  if (!rankedPlayerIds.length) throw new Error("Current consensus rankings are not available for context");
+  if (!options.compact && !rankedPlayerIds.length) throw new Error("Current consensus rankings are not available for context");
 
   // PostgREST encodes `.in()` filters into the request URL. A full player pool can
   // exceed the proxy URL limit once UUIDs from several ranking sources are merged,

@@ -5,7 +5,7 @@ import { runAgentLoop } from "@ff-copilot/agent-runtime";
 import type { AgentStatus, AgentThread } from "@ff-copilot/agent-runtime";
 import { requestModelStep } from "@/features/copilot/client/api";
 import { executeTool } from "@/features/copilot/client/tools";
-import { createThread } from "@/features/copilot/client/threads";
+import { createThread, deleteThread } from "@/features/copilot/client/threads";
 import { schemaForWorkflow, type RecommendationResult, type RecommendationWorkflow } from "./schema";
 import { loadRecommendation, saveRecommendation } from "./client";
 
@@ -99,13 +99,11 @@ async function startRecommendation(key: string, input: RecommendationInput, prom
   run.controller = controller;
   updateRun(key, { error: null, status: "responding" });
   try {
-    if (!run.thread) {
-      const title = input.workflow === "free-agents"
-        ? "Free agent recommendations"
-        : input.workflow === "trades" ? "Trade recommendations" : "Best lineup recommendations";
-      const created = await createThread({ teamId: input.teamId, leagueId: input.leagueId, title });
-      run.thread = { ...created, season: input.season };
-    }
+    const title = input.workflow === "free-agents"
+      ? "Free agent recommendations"
+      : input.workflow === "trades" ? "Trade recommendations" : "Best lineup recommendations";
+    const created = await createThread({ teamId: input.teamId, leagueId: input.leagueId, title });
+    run.thread = { ...created, season: input.season };
     const activeThread = { ...run.thread, season: input.season };
     const final = await runAgentLoop({
       thread: activeThread,
@@ -133,6 +131,9 @@ async function startRecommendation(key: string, input: RecommendationInput, prom
       error: cause instanceof Error ? cause.message : "The recommender failed",
     });
   } finally {
+    const completedThread = run.thread;
+    run.thread = null;
+    if (completedThread) void deleteThread(completedThread.id).catch(() => undefined);
     if (run.controller === controller) run.controller = null;
     if (!controller.signal.aborted && getRun(key).snapshot.status !== "error") {
       updateRun(key, { status: "idle" });
