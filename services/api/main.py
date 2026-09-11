@@ -639,7 +639,12 @@ async def team_matchup(
     })
     latest_by_team: dict[str, dict[str, Any]] = {}
     for snapshot in snapshots:
-        latest_by_team.setdefault(snapshot["team_id"], snapshot)
+        owner_id = snapshot["team_id"]
+        current = latest_by_team.get(owner_id)
+        # A historical box score should use that week's saved lineup. Fall back
+        # to the newest roster only when the provider did not persist one.
+        if current is None or (current.get("week") != selected_week and snapshot.get("week") == selected_week):
+            latest_by_team[owner_id] = snapshot
     snapshot_ids = [snapshot["id"] for snapshot in latest_by_team.values()]
     roster_rows = []
     if snapshot_ids:
@@ -655,14 +660,43 @@ async def team_matchup(
             "select": "id,projected_average_points,average_points,injury_status", "limit": 500,
         })
         metrics_by_player = {item["id"]: item for item in metrics}
+    weekly_by_player: dict[str, dict[str, Any]] = {}
+    if player_ids:
+        weekly_snapshots, _ = await db.request("GET", "player_snapshots", params={
+            "player_id": f"in.({','.join(player_ids)})", "season": f"eq.{league['season']}",
+            "select": "player_id,week,total_points,projected_total_points,raw_payload,fetched_at",
+            "order": "fetched_at.desc", "limit": 1000,
+        })
+        for item in weekly_snapshots:
+            weekly_by_player.setdefault(item["player_id"], item)
+
+    def week_value(snapshot: dict[str, Any], source_id: int) -> float | None:
+        stats = (snapshot.get("raw_payload") or {}).get("stats") or []
+        if isinstance(stats, list):
+            for stat in stats:
+                if (isinstance(stat, dict) and stat.get("scoringPeriodId") == selected_week
+                        and stat.get("statSourceId") == source_id):
+                    value = stat.get("appliedTotal")
+                    if isinstance(value, (int, float)):
+                        return float(value)
+        # Week-scoped imports may already have flattened the weekly value.
+        if snapshot.get("week") == selected_week:
+            key = "total_points" if source_id == 0 else "projected_total_points"
+            value = snapshot.get(key)
+            if isinstance(value, (int, float)):
+                return float(value)
+        return None
     team_by_snapshot = {snapshot["id"]: team_id for team_id, snapshot in latest_by_team.items()}
     lineups: dict[str, list[dict[str, Any]]] = {value: [] for value in matchup_team_ids}
     for row in roster_rows:
         player = row.get("player")
         owner_id = team_by_snapshot.get(row["roster_snapshot_id"])
         if player and owner_id:
+            weekly = weekly_by_player.get(player["id"], {})
             lineups[owner_id].append({**player, **metrics_by_player.get(player["id"], {}),
-                                      "lineup_slot": row.get("lineup_slot")})
+                                      "lineup_slot": row.get("lineup_slot"),
+                                      "weekly_actual_points": week_value(weekly, 0),
+                                      "weekly_projected_points": week_value(weekly, 1)})
     return {"matchup": matchup, "week": selected_week, "available_weeks": available_weeks,
             "league": league, "lineups": lineups}
 

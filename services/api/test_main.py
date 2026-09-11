@@ -207,6 +207,8 @@ class MatchupDB:
                                 "player": {"id": "player-1", "name": "QB One", "position": "QB"}}],
             "player_directory_cache": [{"id": "player-1", "projected_average_points": 21.5,
                                         "average_points": 20, "injury_status": None}],
+            "player_snapshots": [{"player_id": "player-1", "week": 2, "total_points": 24.1,
+                                  "projected_total_points": 21.2, "raw_payload": {}, "fetched_at": "now"}],
         }
         return rows[table], {}
 
@@ -220,6 +222,7 @@ def test_team_matchup_defaults_to_current_week_and_builds_lineups():
         assert body["week"] == 2
         assert body["matchup"]["away_team"]["name"] == "Beta"
         assert body["lineups"]["team-1"][0]["projected_average_points"] == 21.5
+        assert body["lineups"]["team-1"][0]["weekly_actual_points"] == 24.1
     finally:
         app.dependency_overrides.clear()
 
