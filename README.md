@@ -18,6 +18,12 @@ An authenticated fantasy-football workspace and in-season assistant grounded in 
 
 Production storage is Supabase Postgres. **S3 is not used.**
 
+Detailed NFL game and player-game statistics come from the CC BY 4.0
+[nflverse data releases](https://github.com/nflverse/nflverse-data). They are
+cached in Supabase only when an authenticated user refreshes a league; agent
+lookups read the factual API and never fetch nflverse client-side. This dataset
+has no cron or GitHub Actions refresh.
+
 ## Local development
 
 ```bash

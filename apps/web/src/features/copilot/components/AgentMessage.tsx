@@ -11,6 +11,8 @@ const TOOL_LABELS: Record<string, string> = {
   get_player_fantasypros: "Checked FantasyPros",
   get_player_fftoday: "Checked FFToday",
   get_player_reddit: "Checked Reddit",
+  get_game_box_score: "Opened NFL box score",
+  get_player_game_stats: "Checked player game stats",
   get_my_team: "Loaded your roster",
   get_live_matchup: "Refreshed live matchup",
   get_league_standings: "Loaded league standings",

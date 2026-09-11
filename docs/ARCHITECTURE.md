@@ -47,8 +47,9 @@ Each thread is permanently scoped to one team and league. Its context snapshot c
 
 ## Data ownership and refresh
 
-- `sync-global.yml` is the only scheduled ingestion job. It owns the global player directory, projections, rankings, injuries, and source documents.
+- `sync-global.yml` owns the scheduled global player directory, projections, rankings, injuries, and source documents. NFL game and player-game facts are deliberately excluded from that workflow.
 - The web app owns user-scoped league data. Connecting or refreshing a league calls ESPN or Sleeper immediately, normalizes teams, standings, and rosters, persists the snapshot, and invalidates app and agent caches.
+- The same authenticated league refresh performs a freshness check against nflverse and, only when its season asset changed, deduplicates and refreshes the global NFL game cache through the factual API. Agent tools never contact nflverse directly.
 - Context snapshots rebuild when the persisted league freshness marker advances, so Team, Moves, Copilot, Activity, and matchups share the same league snapshot.
 
 ## Adding a feature

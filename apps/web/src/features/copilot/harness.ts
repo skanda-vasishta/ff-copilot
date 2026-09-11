@@ -54,12 +54,32 @@ export const TOOL_REGISTRY = {
     description: "Retrieve recent stored r/fantasyfootball posts and selected comments associated with one player. Treat community opinions as anecdotal and mention their source and freshness.",
     schema: z.object({ player_id: playerId }).strict(),
   },
+  get_game_box_score: {
+    description: "Retrieve a stored nflverse NFL game box score with detailed offensive, defensive, kicking, usage, and efficiency statistics for every involved player. Identify the game by its nflverse game ID or by season/week/team. This reads the database and never refreshes the upstream source.",
+    schema: z.object({
+      game_id: z.string().trim().min(5).optional().describe("nflverse game ID, such as 2026_01_NE_SEA"),
+      season: z.number().int().min(1999).max(2100).optional().describe("Season when resolving without game_id"),
+      week: z.number().int().min(1).max(25).optional().describe("NFL week when resolving without game_id"),
+      team: z.string().trim().min(2).max(3).optional().describe("NFL team abbreviation when resolving without game_id"),
+    }).strict().refine((value) => Boolean(value.game_id || (value.season && value.week && value.team)), {
+      message: "Provide game_id or season, week, and team",
+    }),
+  },
+  get_player_game_stats: {
+    description: "Retrieve stored nflverse game logs for one player, including detailed usage and advanced efficiency stats such as targets, shares, air yards, YAC, first downs, and EPA. This reads the database and never refreshes the upstream source.",
+    schema: z.object({
+      player_id: playerId,
+      season: z.number().int().min(1999).max(2100).optional(),
+      week: z.number().int().min(1).max(25).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    }).strict(),
+  },
   get_my_team: {
     description: "Retrieve the latest stored roster snapshot for the team permanently attached to this conversation. Use for lineup, roster construction, waiver, and trade analysis.",
     schema: noInput,
   },
   get_live_matchup: {
-    description: "Refresh the conversation's fantasy league directly from its provider, then return the selected team's current or requested weekly matchup with both full starting lineups and benches, live actual fantasy points, weekly projections, team totals, records, and a refresh timestamp. REQUIRED on every turn that asks about a current matchup, opponent, live score, weekly projection, or weekly lineup; never reuse an earlier result.",
+    description: "Refresh the conversation's fantasy league directly from its provider, then return the selected team's current or requested weekly matchup with both full starting lineups and benches, live actual fantasy points, weekly projections, team totals, records, and a refresh timestamp. The returned scoreboard and matchup home_score/away_score are reconciled authoritative totals; use them even when provider_home_score/provider_away_score are stale. REQUIRED on every turn that asks about a current matchup, opponent, live score, weekly projection, or weekly lineup; never reuse an earlier result.",
     schema: z.object({
       week: z.number().int().min(1).max(25).optional().describe("Fantasy week; omit for the provider's current week"),
     }).strict(),

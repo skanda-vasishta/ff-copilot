@@ -13,9 +13,15 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, s
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+try:
+    from services.api.nflverse import PLAYER_STATS_URL, PLAYERS_URL, download_csv, load_nflverse_season, merge_canonical_player_stats
+except ModuleNotFoundError:  # Vercel builds services/api as the function root.
+    from nflverse import PLAYER_STATS_URL, PLAYERS_URL, download_csv, load_nflverse_season, merge_canonical_player_stats
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
 PLAYER_DIRECTORY_CACHE_TTL = 300
 PLAYER_DIRECTORY_CACHE_LIMIT = 256
@@ -59,12 +65,13 @@ class TeamSelection(BaseModel):
 
 
 class SupabaseREST:
-    def __init__(self, token: str):
-        if not SUPABASE_URL or not SUPABASE_KEY:
+    def __init__(self, token: str, api_key: str | None = None):
+        key = api_key or SUPABASE_KEY
+        if not SUPABASE_URL or not key:
             raise HTTPException(status_code=503, detail="Supabase is not configured")
         self.base_url = f"{SUPABASE_URL}/rest/v1"
         self.headers = {
-            "apikey": SUPABASE_KEY,
+            "apikey": key,
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
@@ -91,6 +98,30 @@ class SupabaseREST:
         if not response.content:
             return None, response.headers
         return response.json(), response.headers
+
+
+def service_db() -> SupabaseREST:
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=503, detail="NFL data refresh is not configured")
+    return SupabaseREST(SUPABASE_SERVICE_KEY, SUPABASE_SERVICE_KEY)
+
+
+async def all_rows(db: SupabaseREST, table: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    while True:
+        page, _ = await db.request("GET", table, params={**params, "limit": 1000, "offset": len(rows)})
+        rows.extend(page)
+        if len(page) < 1000:
+            return rows
+
+
+async def upsert_batches(db: SupabaseREST, table: str, rows: list[dict[str, Any]], conflict: str,
+                         size: int = 100) -> None:
+    for index in range(0, len(rows), size):
+        await db.request(
+            "POST", table, params={"on_conflict": conflict}, json=rows[index:index + size],
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
 
 
 @lru_cache
@@ -675,6 +706,7 @@ async def team_matchup(
         if isinstance(stats, list):
             for stat in stats:
                 if (isinstance(stat, dict) and stat.get("scoringPeriodId") == selected_week
+                        and stat.get("seasonId", league["season"]) == league["season"]
                         and stat.get("statSourceId") == source_id):
                     value = stat.get("appliedTotal")
                     if isinstance(value, (int, float)):
@@ -713,8 +745,35 @@ async def team_matchup(
                                       "weekly_actual_points": provider_actual if provider_actual is not None else week_value(weekly, 0),
                                       "weekly_projected_points": provider_projected if provider_projected is not None else week_value(weekly, 1),
                                       "provider_player_id": str(provider_player.get("id")) if provider_player.get("id") else None})
+
+    bench_slots = {"BE", "BN", "BENCH", "IR", "INJURED RESERVE", "RESERVE", "TAXI"}
+
+    def starter_total(owner_id: str, key: str) -> float | None:
+        values = [
+            player.get(key) for player in lineups.get(owner_id, [])
+            if str(player.get("lineup_slot") or "").upper() not in bench_slots
+            and isinstance(player.get(key), (int, float))
+        ]
+        return round(sum(values), 2) if values else None
+
+    # ESPN can expose live player scoring before schedule-level totalPoints is
+    # updated. Return reconciled totals so callers never have to choose between
+    # a stale 0-0 schedule row and the live box score themselves.
+    provider_home_score = matchup.get("home_score")
+    provider_away_score = matchup.get("away_score")
+    lineup_home_score = starter_total(matchup["home_team_id"], "weekly_actual_points")
+    lineup_away_score = starter_total(matchup["away_team_id"], "weekly_actual_points")
+    effective_home_score = lineup_home_score if lineup_home_score is not None else provider_home_score
+    effective_away_score = lineup_away_score if lineup_away_score is not None else provider_away_score
+    matchup = {**matchup, "home_score": effective_home_score, "away_score": effective_away_score}
+    score_source = "starter_box_score" if lineup_home_score is not None or lineup_away_score is not None else "provider_matchup"
+
     return {"matchup": matchup, "week": selected_week, "available_weeks": available_weeks,
-            "league": league, "lineups": lineups}
+            "league": league, "lineups": lineups, "scoreboard": {
+                "home_score": effective_home_score, "away_score": effective_away_score,
+                "source": score_source, "provider_home_score": provider_home_score,
+                "provider_away_score": provider_away_score,
+            }}
 
 
 @app.get("/v1/leagues/{league_id}/seasons")
@@ -841,6 +900,192 @@ async def team_roster(team_id: str, db: SupabaseREST = Depends(db_for)):
         "roster_snapshot_id": f"eq.{snapshots[0]['id']}", "select": "lineup_slot,acquisition_type,player:players(*)"
     })
     return {"snapshot": snapshots[0], "players": roster}
+
+
+@app.post("/v1/nflverse/refresh")
+async def refresh_nflverse(
+    season: int = Query(2026, ge=1999, le=2100),
+    force: bool = Query(False),
+    user: AuthenticatedUser = Depends(current_user),
+):
+    """Refresh the global nflverse cache only when an authenticated user asks."""
+    db = service_db()
+    active, _ = await db.request("GET", "sync_requests", params={
+        "provider": "eq.nflverse", "season": f"eq.{season}",
+        "status": "in.(pending,running)", "select": "*", "order": "requested_at.asc", "limit": 1,
+    })
+    if active:
+        return {"status": active[0]["status"], "request_id": active[0]["id"], "deduplicated": True}
+
+    latest_games, _ = await db.request("GET", "nfl_games", params={
+        "season": f"eq.{season}", "select": "source_updated_at,fetched_at",
+        "order": "source_updated_at.desc.nullslast", "limit": 1,
+    })
+    # A HEAD request makes repeat presses cheap while still respecting an explicit force.
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        upstream_responses = await asyncio.gather(
+            client.head(f"https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_{season}.csv.gz"),
+            client.head(PLAYER_STATS_URL),
+            client.head(PLAYERS_URL),
+        )
+    for upstream in upstream_responses:
+        upstream.raise_for_status()
+    modified_times = [
+        datetime.strptime(value, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+        for value in (response.headers.get("last-modified") for response in upstream_responses) if value
+    ]
+    source_modified = max(modified_times).isoformat() if modified_times else None
+    if not force and latest_games and source_modified and latest_games[0].get("source_updated_at"):
+        source_time = datetime.fromisoformat(source_modified)
+        stored_time = datetime.fromisoformat(latest_games[0]["source_updated_at"].replace("Z", "+00:00"))
+        if stored_time >= source_time:
+            return {
+                "status": "fresh", "deduplicated": False,
+                "source_updated_at": latest_games[0]["source_updated_at"],
+                "fetched_at": latest_games[0]["fetched_at"],
+            }
+
+    try:
+        request_rows, _ = await db.request("POST", "sync_requests", json={
+            "requested_by": user.id, "kind": "global", "provider": "nflverse",
+            "season": season, "status": "pending",
+        }, prefer="return=representation")
+    except HTTPException as exc:
+        if exc.status_code != 409:
+            raise
+        active, _ = await db.request("GET", "sync_requests", params={
+            "provider": "eq.nflverse", "season": f"eq.{season}",
+            "status": "in.(pending,running)", "select": "*", "order": "requested_at.asc", "limit": 1,
+        })
+        if not active:
+            raise
+        return {"status": active[0]["status"], "request_id": active[0]["id"], "deduplicated": True}
+    request_id = request_rows[0]["id"]
+    run_rows, _ = await db.request("POST", "sync_runs", json={
+        "request_id": request_id, "kind": "global", "provider": "nflverse",
+        "season": season, "status": "running",
+    }, prefer="return=representation")
+    run_id = run_rows[0]["id"]
+    await db.request("PATCH", "sync_requests", params={"id": f"eq.{request_id}"}, json={"status": "running"})
+
+    try:
+        games, player_games, modified = await load_nflverse_season(season)
+        if not games or not player_games:
+            raise RuntimeError("nflverse validation failed: games or player game lines were empty")
+
+        (player_rows, _), (player_stat_rows, _) = await asyncio.gather(
+            download_csv(PLAYERS_URL), download_csv(PLAYER_STATS_URL)
+        )
+        canonical_lines = merge_canonical_player_stats(player_games, player_stat_rows, season)
+        player_meta = {row.get("gsis_id"): row for row in player_rows if row.get("gsis_id")}
+        external_ids = await all_rows(db, "player_external_ids", {
+            "provider": "in.(espn,gsis)", "select": "provider,external_id,player_id",
+        })
+        gsis_to_internal = {row["external_id"]: row["player_id"] for row in external_ids if row["provider"] == "gsis"}
+        espn_to_internal = {row["external_id"]: row["player_id"] for row in external_ids if row["provider"] == "espn"}
+        player_with_gsis = set(gsis_to_internal.values())
+        new_mappings = []
+        for gsis_id, meta in player_meta.items():
+            if gsis_id in gsis_to_internal:
+                continue
+            player_id = espn_to_internal.get(str(meta.get("espn_id") or ""))
+            if player_id and player_id not in player_with_gsis:
+                gsis_to_internal[gsis_id] = player_id
+                player_with_gsis.add(player_id)
+                new_mappings.append({"provider": "gsis", "external_id": gsis_id, "player_id": player_id})
+        if new_mappings:
+            await upsert_batches(db, "player_external_ids", new_mappings, "provider,external_id")
+
+        fetched_at = datetime.now(timezone.utc).isoformat()
+        for game in games:
+            game.update({"source_updated_at": source_modified or modified, "fetched_at": fetched_at})
+        normalized_players = []
+        for item in player_games:
+            meta = player_meta.get(item["gsis_id"], {})
+            normalized_players.append({
+                **item, "player_id": gsis_to_internal.get(item["gsis_id"]),
+                "position": meta.get("position"), "source_updated_at": source_modified or modified,
+                "fetched_at": fetched_at,
+            })
+        await upsert_batches(db, "nfl_games", games, "game_id")
+        await upsert_batches(db, "nfl_player_game_stats", normalized_players, "game_id,gsis_id", 75)
+        linked = sum(1 for row in normalized_players if row["player_id"])
+        validation = {
+            "games": len(games), "final_games": sum(game["status"] == "final" for game in games),
+            "player_game_lines": len(normalized_players), "linked_player_lines": linked,
+            "unlinked_player_lines": len(normalized_players) - linked, "canonical_player_lines": canonical_lines,
+        }
+        await db.request("PATCH", "sync_runs", params={"id": f"eq.{run_id}"}, json={
+            "status": "succeeded", "records_read": sum(game["raw_payload"]["play_count"] for game in games),
+            "records_written": len(games) + len(normalized_players), "finished_at": fetched_at,
+        })
+        await db.request("PATCH", "sync_requests", params={"id": f"eq.{request_id}"}, json={
+            "status": "succeeded", "completed_at": fetched_at, "error": None,
+        })
+        return {"status": "updated", "request_id": request_id, "source_updated_at": source_modified or modified, "validation": validation}
+    except Exception as exc:
+        finished_at = datetime.now(timezone.utc).isoformat()
+        await db.request("PATCH", "sync_runs", params={"id": f"eq.{run_id}"}, json={
+            "status": "failed", "source_errors": [{"source": "nflverse", "error": str(exc)}],
+            "finished_at": finished_at,
+        })
+        await db.request("PATCH", "sync_requests", params={"id": f"eq.{request_id}"}, json={
+            "status": "failed", "completed_at": finished_at, "error": str(exc),
+        })
+        raise HTTPException(status_code=502, detail=f"nflverse refresh failed: {exc}") from exc
+
+
+@app.get("/v1/nfl/games/{game_id}/box-score")
+async def nfl_game_box_score(game_id: str, db: SupabaseREST = Depends(db_for)):
+    games, _ = await db.request("GET", "nfl_games", params={"game_id": f"eq.{game_id}", "select": "*", "limit": 1})
+    if not games:
+        raise HTTPException(status_code=404, detail="NFL game is not in the stored nflverse cache")
+    players, _ = await db.request("GET", "nfl_player_game_stats", params={
+        "game_id": f"eq.{game_id}", "select": "*", "order": "team.asc,player_name.asc", "limit": 1000,
+    })
+    return {"game": games[0], "players": players, "freshness": {
+        "source": games[0]["source"], "source_updated_at": games[0]["source_updated_at"],
+        "fetched_at": games[0]["fetched_at"],
+    }}
+
+
+@app.get("/v1/nfl/games")
+async def nfl_games(
+    season: int = Query(2026, ge=1999, le=2100),
+    week: int | None = Query(None, ge=1, le=25),
+    team: str | None = Query(None, min_length=2, max_length=3),
+    db: SupabaseREST = Depends(db_for),
+):
+    params: dict[str, Any] = {
+        "season": f"eq.{season}", "select": "*", "order": "game_date.desc,game_id.asc", "limit": 100,
+    }
+    if week is not None:
+        params["week"] = f"eq.{week}"
+    if team:
+        normalized_team = team.upper()
+        params["or"] = f"(home_team.eq.{normalized_team},away_team.eq.{normalized_team})"
+    rows, _ = await db.request("GET", "nfl_games", params=params)
+    return {"season": season, "week": week, "team": team.upper() if team else None, "items": rows}
+
+
+@app.get("/v1/players/{player_id}/games")
+async def nfl_player_games(
+    player_id: str,
+    season: int = Query(2026, ge=1999, le=2100),
+    week: int | None = Query(None, ge=1, le=25),
+    limit: int = Query(25, ge=1, le=100),
+    db: SupabaseREST = Depends(db_for),
+):
+    await require_player(player_id, db)
+    params: dict[str, Any] = {
+        "player_id": f"eq.{player_id}",
+        "select": "*,game:nfl_games!inner(*)", "game.season": f"eq.{season}",
+        "order": "game_id.desc", "limit": limit,
+    }
+    if week is not None:
+        params["game.week"] = f"eq.{week}"
+    rows, _ = await db.request("GET", "nfl_player_game_stats", params=params)
+    return {"player_id": player_id, "season": season, "week": week, "items": rows}
 
 
 def source_freshness(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

@@ -87,6 +87,29 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       limit: Math.min(Number(input.limit) || 30, 100),
     })}`);
   }
+  if (call.name === "get_game_box_score") {
+    let gameId = typeof input.game_id === "string" ? input.game_id : "";
+    if (!gameId) {
+      const games = await api<{ items: Array<{ game_id: string }> }>(`/v1/nfl/games?${queryString({
+        season: Number(input.season) || season,
+        week: Number(input.week),
+        team: String(input.team || ""),
+      })}`);
+      if (games.items.length !== 1) return {
+        error: games.items.length ? "The filters matched multiple games; provide game_id." : "No stored NFL game matched those filters.",
+        games: games.items,
+      };
+      gameId = games.items[0].game_id;
+    }
+    return api(`/v1/nfl/games/${encodeURIComponent(gameId)}/box-score`);
+  }
+  if (call.name === "get_player_game_stats") {
+    return api(`/v1/players/${String(input.player_id)}/games?${queryString({
+      season: Number(input.season) || season,
+      week: input.week == null ? undefined : Number(input.week),
+      limit: Math.min(Number(input.limit) || 25, 100),
+    })}`);
+  }
   const sourceMatch = call.name.match(/^get_player_(espn|sleeper|fantasypros|fftoday|reddit)$/);
   if (sourceMatch) {
     const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
@@ -127,7 +150,12 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
     const refreshResult = await refreshed.json().catch(() => ({}));
     if (!refreshed.ok) throw new Error(refreshResult.error || "Could not refresh the live matchup");
     const matchup = await api<Record<string, unknown>>(`/v1/teams/${thread.team_id}/matchup${input.week ? `?week=${Number(input.week)}` : ""}`);
-    return { ...matchup, live_refreshed_at: refreshResult.refreshedAt || new Date().toISOString(), source: refreshResult.provider };
+    return {
+      ...matchup,
+      scoring_note: "Use scoreboard.home_score and scoreboard.away_score as the authoritative live totals. Provider totals are diagnostic only.",
+      live_refreshed_at: refreshResult.refreshedAt || new Date().toISOString(),
+      source: refreshResult.provider,
+    };
   }
   if (call.name === "get_league_standings") {
     if (!thread.league_id) return { error: "No league is attached to this conversation." };
