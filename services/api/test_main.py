@@ -162,6 +162,10 @@ class TransactionsDB:
                 return ([row for row in rows if row["status"] == "PENDING"], {})
             assert kwargs["params"]["limit"] == 20
             assert kwargs["params"]["offset"] == 0
+            assert kwargs["params"]["order"].startswith("proposed_at.desc")
+            if "or" in kwargs["params"]:
+                assert kwargs["params"]["or"].startswith("(proposed_at.gte.")
+                assert ",processed_at.gte." in kwargs["params"]["or"]
             assert kwargs["prefer"] == "count=exact"
             return ([row for row in rows if row["status"] == "EXECUTED"], {"content-range": "0-0/1"})
         raise AssertionError(table)
@@ -177,6 +181,7 @@ def test_league_transactions_separate_trade_offers_and_completed_feed():
         assert [row["id"] for row in body["outgoing"]] == ["outgoing"]
         assert [row["id"] for row in body["league"]["items"]] == ["waiver"]
         assert body["league"] == {"items": body["league"]["items"], "page": 1, "page_size": 20, "total": 1, "total_pages": 1}
+        assert client.get("/v1/leagues/league-1/transactions?team_id=my-team&time_range=7d").status_code == 200
     finally:
         app.dependency_overrides.clear()
 

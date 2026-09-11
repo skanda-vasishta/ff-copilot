@@ -548,13 +548,16 @@ async def league_transactions(
     }
     completed_params: dict[str, Any] = {
         "league_id": f"eq.{league_id}", "status": "in.(EXECUTED,PROCESSED,ACCEPTED,COMPLETED)",
-        "select": select, "order": "processed_at.desc.nullslast,proposed_at.desc.nullslast",
+        # ESPN free-agent moves have proposedDate but no processDate. proposed_at
+        # is therefore the only consistent activity timestamp across move types.
+        "select": select, "order": "proposed_at.desc.nullslast,processed_at.desc.nullslast",
         "transaction_type": f"in.({completed_types[transaction_type]})",
         "limit": page_size, "offset": (page - 1) * page_size,
     }
     if time_range != "all":
         days = 7 if time_range == "7d" else 30
-        completed_params["processed_at"] = f"gte.{(datetime.now(timezone.utc) - timedelta(days=days)).isoformat()}"
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        completed_params["or"] = f"(proposed_at.gte.{since},processed_at.gte.{since})"
     no_matching_transactions = False
     if filter_team_id:
         filter_teams, _ = await db.request("GET", "fantasy_teams", params={
