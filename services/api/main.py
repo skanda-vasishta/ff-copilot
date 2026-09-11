@@ -892,12 +892,13 @@ async def league_free_agents(
 @app.get("/v1/teams/{team_id}/roster")
 async def team_roster(team_id: str, db: SupabaseREST = Depends(db_for)):
     snapshots, _ = await db.request("GET", "roster_snapshots", params={
-        "team_id": f"eq.{team_id}", "select": "*", "order": "fetched_at.desc", "limit": 1
+        "team_id": f"eq.{team_id}", "select": "id,team_id,season,week,fetched_at", "order": "fetched_at.desc", "limit": 1
     })
     if not snapshots:
         return {"snapshot": None, "players": []}
     roster, _ = await db.request("GET", "roster_players", params={
-        "roster_snapshot_id": f"eq.{snapshots[0]['id']}", "select": "lineup_slot,acquisition_type,player:players(*)"
+        "roster_snapshot_id": f"eq.{snapshots[0]['id']}",
+        "select": "lineup_slot,acquisition_type,player:players(id,name,position,nfl_team,active)",
     })
     return {"snapshot": snapshots[0], "players": roster}
 

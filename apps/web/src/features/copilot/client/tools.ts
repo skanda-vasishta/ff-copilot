@@ -10,6 +10,32 @@ type PlayerDetail = {
   sources: Array<Record<string, unknown> & { source: string }>;
 };
 
+function compactRoster(roster: { snapshot: Record<string, unknown> | null; players: unknown[] }) {
+  const snapshot = roster.snapshot;
+  return {
+    snapshot: snapshot ? {
+      season: snapshot.season,
+      week: snapshot.week,
+      fetched_at: snapshot.fetched_at,
+    } : null,
+    players: roster.players.map((entry) => {
+      const row = entry as Record<string, unknown>;
+      const player = row.player as Record<string, unknown> | null | undefined;
+      return {
+        lineup_slot: row.lineup_slot,
+        acquisition_type: row.acquisition_type,
+        player: player ? {
+          id: player.id,
+          name: player.name,
+          position: player.position,
+          nfl_team: player.nfl_team,
+          active: player.active,
+        } : null,
+      };
+    }),
+  };
+}
+
 export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   const input = validateToolInput(call.name, call.input) as Record<string, unknown>;
   const season = thread.season || 2026;
@@ -131,14 +157,7 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   if (call.name === "get_my_team") {
     if (!thread.team_id) return { error: "No team is attached to this conversation." };
     const roster = await api<{ snapshot: Record<string, unknown> | null; players: unknown[] }>(`/v1/teams/${thread.team_id}/roster`);
-    return {
-      snapshot: roster.snapshot ? {
-        season: roster.snapshot.season,
-        week: roster.snapshot.week,
-        fetched_at: roster.snapshot.fetched_at,
-      } : null,
-      players: roster.players,
-    };
+    return compactRoster(roster);
   }
   if (call.name === "get_live_matchup") {
     if (!thread.team_id || !thread.league_id) return { error: "No team and league are attached to this conversation." };
@@ -169,7 +188,20 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
     const team = teams.find((candidate) => candidate.id === teamId);
     if (!team) return { error: "That team is not in this conversation's league." };
     const roster = await api<{ snapshot: Record<string, unknown> | null; players: unknown[] }>(`/v1/teams/${teamId}/roster`);
-    return { team, snapshot: roster.snapshot, players: roster.players };
+    const compact = compactRoster(roster);
+    return {
+      team: {
+        id: team.id,
+        name: team.name,
+        standing: team.standing,
+        wins: team.wins,
+        losses: team.losses,
+        ties: team.ties,
+        points_for: team.points_for,
+        points_against: team.points_against,
+      },
+      ...compact,
+    };
   }
   if (call.name === "get_league_free_agents") {
     if (!thread.league_id) return { error: "No league is attached to this conversation." };

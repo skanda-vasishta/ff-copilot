@@ -78,7 +78,10 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 250_000) return NextResponse.json({ error: "Request is too large" }, { status: 413 });
+  // A model may request several tools in one round. Each result is already
+  // bounded by validEvent(), so allow a realistic aggregate continuation while
+  // retaining a hard cap against unexpectedly large request bodies.
+  if (contentLength > 2_000_000) return NextResponse.json({ error: "Request is too large" }, { status: 413 });
   const body = await request.json().catch(() => null) as { threadId?: unknown; runId?: unknown; events?: unknown; workflow?: unknown } | null;
   if (!body || typeof body.threadId !== "string") {
     return NextResponse.json({ error: "threadId is required" }, { status: 400 });
