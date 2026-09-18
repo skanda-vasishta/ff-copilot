@@ -18,6 +18,7 @@ export function AgentPanel() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadQuery, setThreadQuery] = useState("");
   const [input, setInput] = useState("");
+  const [mobileScreen, setMobileScreen] = useState<"list" | "chat">("list");
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [refreshingContext, setRefreshingContext] = useState(false);
   const [contextNotice, setContextNotice] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function AgentPanel() {
     if (prompt && !appliedPrompt.current) {
       appliedPrompt.current = true;
       setInput(prompt.slice(0, 1000));
+      setMobileScreen("chat");
     }
   }, [searchParams]);
 
@@ -70,6 +72,7 @@ export function AgentPanel() {
     const created = await createThread({ teamId: scope.team.id, leagueId: scope.team.league_id });
     setThreads((current) => [created, ...current]);
     setThreadId(created.id);
+    setMobileScreen("chat");
   }
 
   async function removeThread(id: string) {
@@ -145,7 +148,50 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
+  function openThread(id: string) {
+    setThreadId(id);
+    setMobileScreen("chat");
+  }
+
   return <div className="copilot-shell flex h-full min-h-0 flex-col overflow-hidden bg-black sm:bg-[#080907] lg:grid lg:grid-cols-[238px_minmax(0,1fr)]">
+    <section className={`${mobileScreen === "list" ? "flex" : "hidden"} min-h-0 flex-1 flex-col bg-black px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:hidden`}>
+      <header className="flex shrink-0 items-center justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-[17px] font-semibold text-white">Copilot</h1>
+          <p className="mt-0.5 truncate text-xs text-[#8d8d92]">{scope ? `${scope.team.name} · ${scope.team.league.name || "League"}` : "ff-copilot"}</p>
+        </div>
+        <button aria-label="New chat" disabled={!scope || loadingScope} onClick={newThread} className="focus-ring grid size-11 place-items-center rounded-full text-3xl font-light text-white disabled:text-white/25">+</button>
+      </header>
+
+      <label className="mt-5 flex h-12 shrink-0 items-center gap-2 rounded-[14px] bg-[#1c1c1f] px-4">
+        <span className="text-lg text-[#8d8d92]">⌕</span>
+        <input aria-label="Search chats" value={threadQuery} onChange={(event) => setThreadQuery(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-[17px] text-white outline-none placeholder:text-[#8d8d92]" />
+      </label>
+
+      <div className="mt-8 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <h2 className="text-[22px] font-semibold tracking-[-.02em] text-white">Chats</h2>
+        {scope ? <div className="mt-4 space-y-1">
+          {loadingThreads && <p className="py-6 text-sm text-[#8d8d92]">Loading chats...</p>}
+          {!loadingThreads && groupedThreads.map(([label, items]) => <div key={label} className="py-2">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[.12em] text-[#666]">{label}</p>
+            {items.map((item) => <button key={item.id} onClick={() => openThread(item.id)} className="focus-ring flex min-h-16 w-full items-center gap-4 rounded-[14px] px-1 py-3 text-left">
+              <span className="grid size-8 shrink-0 place-items-center rounded-[8px] border border-white/15 text-lg text-white/90">⌁</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[18px] font-medium tracking-[-.02em] text-white">{item.title}</span>
+                <span className="mt-1 block truncate text-xs text-[#777]">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+              </span>
+            </button>)}
+          </div>)}
+          {!loadingThreads && !groupedThreads.length && <p className="py-8 text-[16px] leading-7 text-[#8d8d92]">{threadQuery ? "No matching chats." : "No chats yet. Start one when your team is connected."}</p>}
+        </div> : <div className="mt-8 text-center">
+          <p className="text-[16px] leading-7 text-[#9b9ba0]">Connect a league first, then your past chats and new conversations will show here.</p>
+          <Link href="/settings" className="focus-ring mt-6 inline-flex rounded-full bg-white px-7 py-3 text-sm font-semibold text-black">Open settings</Link>
+        </div>}
+      </div>
+
+      <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring mt-5 flex h-[58px] shrink-0 items-center justify-center gap-3 rounded-full bg-white text-[18px] font-semibold text-black shadow-[0_18px_60px_rgba(255,255,255,.16)] disabled:opacity-35"><span className="text-3xl font-light">+</span> New chat</button>
+    </section>
+
     <aside className="copilot-sidebar hidden min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:flex lg:border-b-0 lg:border-r">
       <div className="p-2 lg:p-3.5 lg:pb-2.5">
         <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring flex h-8 w-full items-center justify-center gap-2 rounded-[8px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[11px] font-semibold text-[#d6fb7a] hover:border-[#c9f958]/40 hover:bg-[#c9f958]/15 disabled:cursor-not-allowed disabled:opacity-35 lg:h-9 lg:justify-start"><span className="text-base font-light">+</span> New conversation</button>
@@ -160,10 +206,11 @@ export function AgentPanel() {
       </div>
     </aside>
 
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <section className={`${mobileScreen === "chat" ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 flex-col sm:flex`}>
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[.055] bg-black px-4 pb-3 pt-[max(.75rem,env(safe-area-inset-top))] sm:hidden">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
+            <button aria-label="Back to chats" onClick={() => setMobileScreen("list")} className="focus-ring -ml-2 grid size-9 shrink-0 place-items-center rounded-full text-3xl font-light text-white">‹</button>
             <span className="size-2 rounded-full bg-[#25d678]" />
             <h1 className="truncate text-[17px] font-semibold leading-6 text-white">{thread?.title || "Copilot"}</h1>
           </div>
