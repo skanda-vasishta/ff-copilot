@@ -54,6 +54,7 @@ export function Header() {
   }, [open])
 
   if (pathname === '/login') return null
+  const compactMobile = pathname === '/copilot'
 
   return <header className="app-header sticky top-0 z-30 border-b border-white/[.055] bg-[#0a0b09]/90 backdrop-blur-xl">
     <div className="flex min-h-14 w-full flex-wrap items-center gap-y-2 px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-5 sm:py-0">
@@ -90,7 +91,7 @@ export function Header() {
           </div>
         </div>}
       </div>
-      <nav className="order-5 -mx-1 flex w-[calc(100%+.5rem)] min-w-0 items-center gap-1 overflow-x-auto rounded-[9px] border border-white/[.05] bg-white/[.04] p-[3px] sm:order-2 sm:ml-9 sm:w-auto sm:gap-0.5" aria-label="Primary navigation">
+      <nav className={`order-5 -mx-1 w-[calc(100%+.5rem)] min-w-0 items-center gap-1 overflow-x-auto rounded-[9px] border border-white/[.05] bg-white/[.04] p-[3px] sm:order-2 sm:ml-9 sm:flex sm:w-auto sm:gap-0.5 ${compactMobile ? 'hidden' : 'flex'}`} aria-label="Primary navigation">
         {links.map(({ href, label, icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`focus-ring flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition sm:h-7 ${active ? 'bg-gradient-to-br from-[#d9ff6e] to-[#a8e63c] font-semibold text-[#0f1a08]' : 'text-[#9ba394] hover:text-[#eef1e9]'}`}>
