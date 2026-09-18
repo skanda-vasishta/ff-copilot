@@ -184,7 +184,7 @@ export function AgentPanel() {
           </div>)}
           {!loadingThreads && !groupedThreads.length && <p className="py-8 text-[16px] leading-7 text-[#8d8d92]">{threadQuery ? "No matching chats." : "No chats yet. Start one when your team is connected."}</p>}
         </div> : <div className="mt-8 text-center">
-          <p className="text-[16px] leading-7 text-[#9b9ba0]">Connect a league first, then your past chats and new conversations will show here.</p>
+          <p className="text-[16px] leading-7 text-[#9b9b9b]">Connect a league first, then your past chats and new conversations will show here.</p>
           <Link href="/settings" className="focus-ring mt-6 inline-flex rounded-full bg-white px-7 py-3 text-sm font-semibold text-black">Open settings</Link>
         </div>}
       </div>
@@ -201,7 +201,7 @@ export function AgentPanel() {
       <div className="flex min-h-0 flex-1 flex-col pb-4">
         <div className="flex min-h-0 flex-1 gap-1.5 overflow-x-auto overflow-y-hidden lg:block lg:overflow-y-auto">
           {groupedThreads.map(([label, items]) => <div key={label} className="contents lg:mb-1.5 lg:block"><p className="copilot-subtle hidden px-[18px] pb-1.5 pt-3.5 text-[11px] font-semibold uppercase tracking-[.08em] lg:block">{label}</p>{items.map((item) => <div key={item.id} data-active={item.id === threadId} className="copilot-thread-row group flex min-h-9 w-36 shrink-0 items-center transition sm:w-44 lg:w-auto"><button onClick={() => setThreadId(item.id)} className="focus-ring flex min-w-0 flex-1 items-center gap-3 self-stretch px-[18px] text-left text-[13px]"><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="copilot-subtle hidden font-mono text-[10px] sm:inline">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></button><button aria-label={`Delete ${item.title}`} title="Delete conversation" onClick={() => removeThread(item.id)} className="focus-ring mr-2 hidden size-6 shrink-0 place-items-center rounded-[5px] text-[11px] text-transparent transition hover:bg-red-400/[.08] hover:text-red-300 group-hover:text-[var(--subtle)] focus-visible:text-[var(--subtle)] sm:grid">×</button></div>)}</div>)}
-          {!loadingThreads && !groupedThreads.length && <p className="px-2 py-3 text-xs leading-5 text-[#58635d]">{threadQuery ? "No matching conversations." : "Conversations for this team will appear here."}</p>}
+          {!loadingThreads && !groupedThreads.length && <p className="px-2 py-3 text-xs leading-5 text-[#636363]">{threadQuery ? "No matching conversations." : "Conversations for this team will appear here."}</p>}
         </div>
       </div>
     </aside>
@@ -238,13 +238,13 @@ export function AgentPanel() {
           {thread && <button aria-label="Refresh context" disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="copilot-control focus-ring h-8 rounded-[6px] border px-2 text-[11px] transition disabled:opacity-35">{refreshingContext ? "..." : "↻"}<span className="hidden sm:inline"> Refresh</span></button>}
         </div>
         <div className="flex w-full items-center gap-2 lg:hidden">
-          {threads.length ? <select aria-label="Conversation" value={threadId || ""} onChange={(event) => setThreadId(event.target.value || null)} className="focus-ring h-9 min-w-0 flex-1 rounded-[7px] border border-white/[.06] bg-white/[.035] px-2.5 text-xs text-[#cbd1c5] outline-none">
+          {threads.length ? <select aria-label="Conversation" value={threadId || ""} onChange={(event) => setThreadId(event.target.value || null)} className="focus-ring h-9 min-w-0 flex-1 rounded-[7px] border border-white/[.06] bg-white/[.035] px-2.5 text-xs text-[#d2d2d2] outline-none">
             {threads.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-          </select> : <span className="min-w-0 flex-1 truncate text-[11px] text-[#697166]">{scope ? "No conversations yet" : "Connect a team to start"}</span>}
-          <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring h-9 shrink-0 rounded-[7px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[11px] font-semibold text-[#d6fb7a] disabled:opacity-35">New</button>
+          </select> : <span className="min-w-0 flex-1 truncate text-[11px] text-[#767676]">{scope ? "No conversations yet" : "Connect a team to start"}</span>}
+          <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring h-9 shrink-0 rounded-[7px] border border-[#c94f49]/25 bg-[#c94f49]/10 px-3 text-[11px] font-semibold text-[#f0aaa5] disabled:opacity-35">New</button>
         </div>
       </header>
-      {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#8c9992]">{contextNotice}</div>}
+      {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#999999]">{contextNotice}</div>}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8 sm:py-[34px]">
         <div className="mx-auto flex min-h-full max-w-[760px] flex-col space-y-6 sm:space-y-[34px]">

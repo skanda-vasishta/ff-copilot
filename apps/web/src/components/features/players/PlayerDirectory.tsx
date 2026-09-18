@@ -8,7 +8,7 @@ import { useActiveScope } from '@/lib/scope'
 import { PlayerDetailModal } from './PlayerDetailModal'
 
 const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']
-const positionTone: Record<string, string> = { QB: 'bg-violet-400/10 text-violet-300', RB: 'bg-sky-400/10 text-sky-300', WR: 'bg-amber-300/10 text-amber-200', TE: 'bg-rose-400/10 text-rose-300', K: 'bg-white/[.06] text-[#bbc4bf]', 'D/ST': 'bg-emerald-400/10 text-emerald-300' }
+const positionTone: Record<string, string> = { QB: 'bg-violet-400/10 text-violet-300', RB: 'bg-sky-400/10 text-sky-300', WR: 'bg-amber-300/10 text-amber-200', TE: 'bg-rose-400/10 text-rose-300', K: 'bg-white/[.06] text-[#c4c4c4]', 'D/ST': 'bg-slate-400/10 text-slate-300' }
 
 export function PlayerDirectory() {
   const { scope, isLoading } = useActiveScope()
@@ -28,18 +28,18 @@ export function PlayerDirectory() {
     else { setSort(next); setDirection(next === 'projected_total_points' ? 'desc' : 'asc') }
     setPage(1)
   }
-  const sortLabel = (field: typeof sort, label: string) => <button onClick={() => chooseSort(field)} className="inline-flex items-center gap-1 hover:text-[#c8f775]">{label}<span className="text-[9px]">{sort === field ? direction === 'asc' ? '↑' : '↓' : '↕'}</span></button>
+  const sortLabel = (field: typeof sort, label: string) => <button onClick={() => chooseSort(field)} className="inline-flex items-center gap-1 hover:text-[#e98b85]">{label}<span className="text-[9px]">{sort === field ? direction === 'asc' ? '↑' : '↓' : '↕'}</span></button>
 
-  if (isLoading) return <p className="text-sm text-[#78847e]">Loading your workspace…</p>
-  if (!scope) return <div className="rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#78847e]">Your player season and scoring context follow the active team.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#11170a]">Open settings</Link></div>
+  if (isLoading) return <p className="text-sm text-[#858585]">Loading your workspace…</p>
+  if (!scope) return <div className="rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team to browse players</h2><p className="mt-2 text-sm text-[#858585]">Your player season and scoring context follow the active team.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c94f49] px-4 text-xs font-semibold text-[#ffffff]">Open settings</Link></div>
 
   return <div>
-    <div className="rounded-[16px] border border-white/[.08] bg-[#181a16]/60 p-3 backdrop-blur-xl">
+    <div className="rounded-[16px] border border-white/[.08] bg-[#292929]/60 p-3 backdrop-blur-xl">
       <div className="flex flex-col gap-3 lg:flex-row">
-        <label className="relative min-w-0 flex-1"><span className="sr-only">Search players</span><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#65716b]">⌕</span><input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by player name…" className="focus-ring w-full rounded-md border border-white/[.08] bg-[#090d10] py-3 pl-11 pr-4 text-sm text-white placeholder:text-[#58635d] focus:border-[#b7f34a]/40" /></label>
+        <label className="relative min-w-0 flex-1"><span className="sr-only">Search players</span><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#747474]">⌕</span><input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by player name…" className="focus-ring w-full rounded-md border border-white/[.08] bg-[#181818] py-3 pl-11 pr-4 text-sm text-white placeholder:text-[#636363] focus:border-[#c94f49]/40" /></label>
         <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label="Filter by position">
-          <button onClick={() => { setPosition(''); setPage(1) }} className={`focus-ring shrink-0 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${!position ? 'bg-[#b7f34a] text-[#10140a]' : 'bg-white/[.05] text-[#8c9992] hover:text-white'}`}>All</button>
-          {positions.map(p => <button key={p} onClick={() => { setPosition(p); setPage(1) }} className={`focus-ring shrink-0 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${position === p ? 'bg-[#b7f34a] text-[#10140a]' : 'bg-white/[.05] text-[#8c9992] hover:text-white'}`}>{p}</button>)}
+          <button onClick={() => { setPosition(''); setPage(1) }} className={`focus-ring shrink-0 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${!position ? 'bg-[#c94f49] text-[#ffffff]' : 'bg-white/[.05] text-[#999999] hover:text-white'}`}>All</button>
+          {positions.map(p => <button key={p} onClick={() => { setPosition(p); setPage(1) }} className={`focus-ring shrink-0 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${position === p ? 'bg-[#c94f49] text-[#ffffff]' : 'bg-white/[.05] text-[#999999] hover:text-white'}`}>{p}</button>)}
         </div>
       </div>
     </div>
@@ -50,16 +50,16 @@ export function PlayerDirectory() {
       <div className="divide-y divide-white/[.055] md:hidden">
         {players.data.items.map(player => <button key={player.id} onClick={()=>setSelectedPlayerId(player.id)} className="focus-ring block w-full px-4 py-4 text-left transition hover:bg-white/[.025]">
           <div className="flex items-start gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span>
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#c1c1c1]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium text-white">{player.name}</span>
-              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#7f8a84]">
-                <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#9da7a2]'}`}>{player.position || '—'}</span>
+              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#8a8a8a]">
+                <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#a7a7a7]'}`}>{player.position || '—'}</span>
                 <span className="font-mono">{player.nfl_team || 'FA'}</span>
                 <span className={player.injury_status ? 'text-amber-200' : ''}>{player.injury_status || 'No designation'}</span>
               </span>
             </span>
-            <span className="pt-1 text-[#7f8a84]">→</span>
+            <span className="pt-1 text-[#8a8a8a]">→</span>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
             <Metric label="Proj" value={player.projected_total_points?.toFixed(1) ?? '—'} />
@@ -69,21 +69,21 @@ export function PlayerDirectory() {
         </button>)}
       </div>
       <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[820px] text-left text-sm">
-        <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]"><th className="px-5 py-4 sm:px-6">{sortLabel('name','Player')}</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">{sortLabel('projected_total_points','Projection')}</th><th className="px-3 py-4 text-right">{sortLabel('median_rank','Consensus rank')}</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
+        <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#747474]"><th className="px-5 py-4 sm:px-6">{sortLabel('name','Player')}</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">{sortLabel('projected_total_points','Projection')}</th><th className="px-3 py-4 text-right">{sortLabel('median_rank','Consensus rank')}</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
         <tbody className="divide-y divide-white/[.055]">{players.data.items.map(player => <tr key={player.id} onClick={()=>setSelectedPlayerId(player.id)} className="group cursor-pointer transition hover:bg-white/[.025]">
-          <td className="px-5 py-4 sm:px-6"><div className="flex w-fit items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc] transition group-hover:bg-[#b7f34a]/10 group-hover:text-[#c8f775]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white transition group-hover:text-[#c8f775]">{player.name}</span><span className="text-[#4f5a54] transition group-hover:translate-x-0.5 group-hover:text-[#b7f34a]">→</span></div></td>
-          <td className="px-3 py-4"><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#9da7a2]'}`}>{player.position || '—'}</span></td><td className="px-3 py-4 font-mono text-xs text-[#9da7a2]">{player.nfl_team || 'FA'}</td>
+          <td className="px-5 py-4 sm:px-6"><div className="flex w-fit items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#c1c1c1] transition group-hover:bg-[#c94f49]/10 group-hover:text-[#e98b85]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white transition group-hover:text-[#e98b85]">{player.name}</span><span className="text-[#5a5a5a] transition group-hover:translate-x-0.5 group-hover:text-[#c94f49]">→</span></div></td>
+          <td className="px-3 py-4"><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#a7a7a7]'}`}>{player.position || '—'}</span></td><td className="px-3 py-4 font-mono text-xs text-[#a7a7a7]">{player.nfl_team || 'FA'}</td>
           <td className="px-3 py-4 text-right font-mono font-medium text-white">{player.projected_total_points?.toFixed(1) ?? '—'}</td><td className="px-3 py-4 text-right"><span className="font-mono font-medium text-white">{player.median_rank?.toFixed(1) ?? '—'}</span></td>
-          <td className="px-3 py-4"><span className={`inline-flex items-center gap-1.5 text-xs ${player.injury_status ? 'text-amber-200' : 'text-[#78847e]'}`}><span className={`size-1.5 rounded-full ${player.injury_status ? 'bg-amber-300' : 'bg-[#4f5a54]'}`} />{player.injury_status || 'No designation'}</span></td><td className="px-5 py-4 text-right text-xs text-[#65716b] sm:px-6">{player.fetched_at ? new Date(player.fetched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Not synced'}</td>
+          <td className="px-3 py-4"><span className={`inline-flex items-center gap-1.5 text-xs ${player.injury_status ? 'text-amber-200' : 'text-[#858585]'}`}><span className={`size-1.5 rounded-full ${player.injury_status ? 'bg-amber-300' : 'bg-[#5a5a5a]'}`} />{player.injury_status || 'No designation'}</span></td><td className="px-5 py-4 text-right text-xs text-[#747474] sm:px-6">{player.fetched_at ? new Date(player.fetched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Not synced'}</td>
         </tr>)}</tbody>
       </table></div>
-      {!players.data.items.length && <div className="px-6 py-16 text-center"><p className="text-sm font-medium text-white">No players found</p><p className="mt-1 text-sm text-[#78847e]">Try another name or position.</p></div>}
+      {!players.data.items.length && <div className="px-6 py-16 text-center"><p className="text-sm font-medium text-white">No players found</p><p className="mt-1 text-sm text-[#858585]">Try another name or position.</p></div>}
     </div>}
-    <div className="mt-5 flex flex-col items-center justify-between gap-3 text-xs text-[#78847e] sm:flex-row"><span>Showing {players.data?.items.length || 0} of {players.data?.total || 0} players</span><div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:w-auto"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">← Previous</button><span className="px-2 text-center font-mono text-[#aab4af]">{page} / {totalPages}</span><button aria-label="Next page" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">Next →</button></div></div>
+    <div className="mt-5 flex flex-col items-center justify-between gap-3 text-xs text-[#858585] sm:flex-row"><span>Showing {players.data?.items.length || 0} of {players.data?.total || 0} players</span><div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:w-auto"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">← Previous</button><span className="px-2 text-center font-mono text-[#b4b4b4]">{page} / {totalPages}</span><button aria-label="Next page" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">Next →</button></div></div>
     {selectedPlayerId&&<PlayerDetailModal playerId={selectedPlayerId} onClose={()=>setSelectedPlayerId(null)}/>}
   </div>
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <span className="min-w-0 rounded-[7px] bg-black/20 px-2.5 py-2"><span className="block text-[9px] font-semibold uppercase tracking-[.08em] text-[#626d66]">{label}</span><span className="mt-1 block truncate font-mono text-[#dce3de]">{value}</span></span>
+  return <span className="min-w-0 rounded-[7px] bg-black/20 px-2.5 py-2"><span className="block text-[9px] font-semibold uppercase tracking-[.08em] text-[#6d6d6d]">{label}</span><span className="mt-1 block truncate font-mono text-[#e3e3e3]">{value}</span></span>
 }

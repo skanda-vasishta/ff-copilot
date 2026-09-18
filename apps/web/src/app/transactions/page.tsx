@@ -56,12 +56,12 @@ export default function TransactionsPage() {
   })
 
   const changeFilter = (setter: (value: string) => void) => (value: string) => { setter(value); setPage(1) }
-  if (isLoading) return <main className="mx-auto max-w-[1120px] p-8 text-sm text-[#8a9280]">Loading your workspace…</main>
-  if (!scope) return <main className="mx-auto max-w-xl px-5 py-24 text-center"><h1 className="text-2xl font-semibold text-white">Add a team first</h1><p className="mt-3 text-sm text-[#78847e]">Connect an ESPN league to see trades and transactions.</p><Link href="/settings" className="mt-5 inline-flex h-9 items-center rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#11170a]">Open settings</Link></main>
+  if (isLoading) return <main className="mx-auto max-w-[1120px] p-8 text-sm text-[#929292]">Loading your workspace…</main>
+  if (!scope) return <main className="mx-auto max-w-xl px-5 py-24 text-center"><h1 className="text-2xl font-semibold text-white">Add a team first</h1><p className="mt-3 text-sm text-[#858585]">Connect an ESPN league to see trades and transactions.</p><Link href="/settings" className="mt-5 inline-flex h-9 items-center rounded-[6px] bg-[#c94f49] px-4 text-xs font-semibold text-[#ffffff]">Open settings</Link></main>
 
   const feed = transactions.data?.league
   return <main className="mx-auto max-w-[1120px] px-4 py-7 sm:px-6 lg:px-8">
-    <header><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#9dbe4e]">{scope.team.league.name || 'ESPN league'} · {scope.team.league.season}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.035em] text-[#eef1e9]">Trades & transactions</h1><p className="mt-2 text-sm text-[#78847e]">Offers involving {scope.team.name}, plus completed moves across the league.</p></header>
+    <header><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#cf716b]">{scope.team.league.name || 'ESPN league'} · {scope.team.league.season}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.035em] text-[#fafafa]">Trades & transactions</h1><p className="mt-2 text-sm text-[#858585]">Offers involving {scope.team.name}, plus completed moves across the league.</p></header>
     {transactions.isError && <div className="mt-6 rounded-[10px] border border-red-400/20 bg-red-400/[.06] px-4 py-3 text-sm text-red-200">{transactions.error.message}</div>}
     <div className="mt-7 grid gap-5 lg:grid-cols-2">
       <TransactionSection title="Proposed to you" eyebrow="Incoming trades" empty="No outstanding offers from other teams." transactions={transactions.data?.incoming || []} onSelectPlayer={setSelectedPlayerId} highlight />
@@ -70,7 +70,7 @@ export default function TransactionsPage() {
     <section className="mt-5 overflow-hidden rounded-[14px] border border-white/[.06] bg-white/[.022]">
       <div className="border-b border-white/[.06] px-5 py-4">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <div><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#6e7568]">Completed transactions</p><h2 className="mt-1 text-base font-semibold text-[#eef1e9]">League activity</h2></div>
+          <div><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#787878]">Completed transactions</p><h2 className="mt-1 text-base font-semibold text-[#fafafa]">League activity</h2></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <FilterSelect label="Time" value={timeRange} onChange={changeFilter(setTimeRange)} options={[['all', 'All time'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']]} />
             <FilterSelect label="Team" value={teamFilter} onChange={changeFilter(setTeamFilter)} options={[['', 'All teams'], ...(teams.data || []).map((team): [string, string] => [team.id, team.name])]} />
@@ -78,10 +78,10 @@ export default function TransactionsPage() {
           </div>
         </div>
       </div>
-      {transactions.isFetching && !feed ? <p className="px-5 py-10 text-center text-sm text-[#747c70]">Loading activity…</p> : feed?.items.length ? <div className="divide-y divide-white/[.055]">{feed.items.map((transaction) => <TransactionRow key={transaction.id} transaction={transaction} onSelectPlayer={setSelectedPlayerId} />)}</div> : <p className="px-5 py-10 text-center text-sm text-[#747c70]">No transactions match these filters.</p>}
+      {transactions.isFetching && !feed ? <p className="px-5 py-10 text-center text-sm text-[#7d7d7d]">Loading activity…</p> : feed?.items.length ? <div className="divide-y divide-white/[.055]">{feed.items.map((transaction) => <TransactionRow key={transaction.id} transaction={transaction} onSelectPlayer={setSelectedPlayerId} />)}</div> : <p className="px-5 py-10 text-center text-sm text-[#7d7d7d]">No transactions match these filters.</p>}
       {feed && feed.total > 0 && <div className="flex items-center justify-between border-t border-white/[.06] px-5 py-3">
-        <p className="text-[11px] text-[#737b70]">{(feed.page - 1) * feed.page_size + 1}–{Math.min(feed.page * feed.page_size, feed.total)} of {feed.total}</p>
-        <div className="flex items-center gap-2"><button disabled={page <= 1 || transactions.isFetching} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-[6px] border border-white/[.08] px-3 py-1.5 text-xs text-[#b8beb3] hover:bg-white/[.04] disabled:opacity-30">Previous</button><span className="min-w-20 text-center text-[11px] text-[#7f877b]">Page {feed.page} of {feed.total_pages}</span><button disabled={page >= feed.total_pages || transactions.isFetching} onClick={() => setPage((value) => value + 1)} className="rounded-[6px] border border-white/[.08] px-3 py-1.5 text-xs text-[#b8beb3] hover:bg-white/[.04] disabled:opacity-30">Next</button></div>
+        <p className="text-[11px] text-[#7b7b7b]">{(feed.page - 1) * feed.page_size + 1}–{Math.min(feed.page * feed.page_size, feed.total)} of {feed.total}</p>
+        <div className="flex items-center gap-2"><button disabled={page <= 1 || transactions.isFetching} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-[6px] border border-white/[.08] px-3 py-1.5 text-xs text-[#bebebe] hover:bg-white/[.04] disabled:opacity-30">Previous</button><span className="min-w-20 text-center text-[11px] text-[#878787]">Page {feed.page} of {feed.total_pages}</span><button disabled={page >= feed.total_pages || transactions.isFetching} onClick={() => setPage((value) => value + 1)} className="rounded-[6px] border border-white/[.08] px-3 py-1.5 text-xs text-[#bebebe] hover:bg-white/[.04] disabled:opacity-30">Next</button></div>
       </div>}
     </section>
     {selectedPlayerId && <PlayerDetailModal playerId={selectedPlayerId} onClose={() => setSelectedPlayerId(null)} />}
@@ -89,20 +89,20 @@ export default function TransactionsPage() {
 }
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: [string, string][] }) {
-  return <label className="flex min-w-36 flex-col gap-1"><span className="text-[9px] font-semibold uppercase tracking-[.08em] text-[#626a5f]">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-8 rounded-[6px] border border-white/[.08] bg-[#10130f] px-2 text-xs text-[#cbd0c7] outline-none focus:border-[#c9f958]/40">{options.map(([optionValue, name]) => <option key={optionValue} value={optionValue}>{name}</option>)}</select></label>
+  return <label className="flex min-w-36 flex-col gap-1"><span className="text-[9px] font-semibold uppercase tracking-[.08em] text-[#6a6a6a]">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-8 rounded-[6px] border border-white/[.08] bg-[#202020] px-2 text-xs text-[#d0d0d0] outline-none focus:border-[#c94f49]/40">{options.map(([optionValue, name]) => <option key={optionValue} value={optionValue}>{name}</option>)}</select></label>
 }
 
 function TransactionSection({ title, eyebrow, empty, transactions, onSelectPlayer, highlight = false }: { title: string; eyebrow: string; empty: string; transactions: Transaction[]; onSelectPlayer: (id: string) => void; highlight?: boolean }) {
-  return <section className={`overflow-hidden rounded-[14px] border ${highlight ? 'border-[#c9f958]/20 bg-[#c9f958]/[.025]' : 'border-white/[.06] bg-white/[.022]'}`}>
-    <div className="border-b border-white/[.06] px-5 py-4"><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#6e7568]">{eyebrow}</p><h2 className="mt-1 text-base font-semibold text-[#eef1e9]">{title}</h2></div>
-    {transactions.length ? <div className="divide-y divide-white/[.055]">{transactions.map((transaction) => <TransactionRow key={transaction.id} transaction={transaction} onSelectPlayer={onSelectPlayer} />)}</div> : <p className="px-5 py-10 text-center text-sm text-[#747c70]">{empty}</p>}
+  return <section className={`overflow-hidden rounded-[14px] border ${highlight ? 'border-[#c94f49]/20 bg-[#c94f49]/[.025]' : 'border-white/[.06] bg-white/[.022]'}`}>
+    <div className="border-b border-white/[.06] px-5 py-4"><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#787878]">{eyebrow}</p><h2 className="mt-1 text-base font-semibold text-[#fafafa]">{title}</h2></div>
+    {transactions.length ? <div className="divide-y divide-white/[.055]">{transactions.map((transaction) => <TransactionRow key={transaction.id} transaction={transaction} onSelectPlayer={onSelectPlayer} />)}</div> : <p className="px-5 py-10 text-center text-sm text-[#7d7d7d]">{empty}</p>}
   </section>
 }
 
 function PlayerButton({ item, onSelect }: { item: TransactionItem; onSelect: (id: string) => void }) {
   const name = item.player?.name || item.player_name || `ESPN player ${item.player_external_id || ''}`.trim()
   const meta = [item.player?.position, item.player?.nfl_team].filter(Boolean).join(' · ')
-  return item.player?.id ? <button onClick={() => onSelect(item.player!.id)} className="text-left text-[#e7eadf] underline decoration-white/20 underline-offset-4 hover:text-[#c9f958] hover:decoration-[#c9f958]/50">{name}{meta && <span className="ml-1.5 text-[10px] font-normal text-[#687064] no-underline">{meta}</span>}</button> : <span className="text-[#e0e4da]">{name}</span>
+  return item.player?.id ? <button onClick={() => onSelect(item.player!.id)} className="text-left text-[#eaeaea] underline decoration-white/20 underline-offset-4 hover:text-[#c94f49] hover:decoration-[#c94f49]/50">{name}{meta && <span className="ml-1.5 text-[10px] font-normal text-[#737373] no-underline">{meta}</span>}</button> : <span className="text-[#e4e4e4]">{name}</span>
 }
 
 function TransactionRow({ transaction, onSelectPlayer }: { transaction: Transaction; onSelectPlayer: (id: string) => void }) {
@@ -123,13 +123,13 @@ function TransactionRow({ transaction, onSelectPlayer }: { transaction: Transact
     else if (item.from_team) entryFor(item.from_team).dropped.push(item)
   }
   return <article className="px-5 py-4">
-    <div className="flex items-start justify-between gap-4"><div><span className="rounded-full border border-white/[.08] px-2 py-1 text-[9px] font-semibold uppercase tracking-[.08em] text-[#9ba394]">{label}</span>{transaction.bid_amount ? <span className="ml-2 text-[10px] text-[#83905f]">${transaction.bid_amount} FAAB</span> : null}</div>{when && <time className="whitespace-nowrap font-mono text-[9px] text-[#626a5f]">{new Date(when).toLocaleString()}</time>}</div>
-    <div className="mt-4 space-y-4">{Array.from(teamMoves.values()).map(({ team, added, dropped, received }) => <div key={team.id} className="grid gap-2 sm:grid-cols-[170px_1fr]"><p className="truncate text-[13px] font-medium text-[#a5ada0]">{team.name}</p><div className="space-y-1.5">{received.length > 0 && <Move label="Received" tone="green" items={received} onSelect={onSelectPlayer} />}{added.length > 0 && <Move label="Added" tone="green" items={added} onSelect={onSelectPlayer} />}{dropped.length > 0 && <Move label="Dropped" tone="red" items={dropped} onSelect={onSelectPlayer} />}</div></div>)}</div>
-    {!teamMoves.size && <p className="mt-3 text-xs text-[#737b70]">{transaction.initiated_by_team?.name || 'League transaction'} · {transaction.status.toLowerCase()}</p>}
-    {transaction.expires_at && transaction.status === 'PENDING' && <p className="mt-3 text-[10px] text-[#70796c]">Expires {new Date(transaction.expires_at).toLocaleString()}</p>}
+    <div className="flex items-start justify-between gap-4"><div><span className="rounded-full border border-white/[.08] px-2 py-1 text-[9px] font-semibold uppercase tracking-[.08em] text-[#a3a3a3]">{label}</span>{transaction.bid_amount ? <span className="ml-2 text-[10px] text-[#8a8a8a]">${transaction.bid_amount} FAAB</span> : null}</div>{when && <time className="whitespace-nowrap font-mono text-[9px] text-[#6a6a6a]">{new Date(when).toLocaleString()}</time>}</div>
+    <div className="mt-4 space-y-4">{Array.from(teamMoves.values()).map(({ team, added, dropped, received }) => <div key={team.id} className="grid gap-2 sm:grid-cols-[170px_1fr]"><p className="truncate text-[13px] font-medium text-[#adadad]">{team.name}</p><div className="space-y-1.5">{received.length > 0 && <Move label="Received" tone="green" items={received} onSelect={onSelectPlayer} />}{added.length > 0 && <Move label="Added" tone="green" items={added} onSelect={onSelectPlayer} />}{dropped.length > 0 && <Move label="Dropped" tone="red" items={dropped} onSelect={onSelectPlayer} />}</div></div>)}</div>
+    {!teamMoves.size && <p className="mt-3 text-xs text-[#7b7b7b]">{transaction.initiated_by_team?.name || 'League transaction'} · {transaction.status.toLowerCase()}</p>}
+    {transaction.expires_at && transaction.status === 'PENDING' && <p className="mt-3 text-[10px] text-[#797979]">Expires {new Date(transaction.expires_at).toLocaleString()}</p>}
   </article>
 }
 
 function Move({ label, tone, items, onSelect }: { label: string; tone: 'green' | 'red'; items: TransactionItem[]; onSelect: (id: string) => void }) {
-  return <div className="flex items-start gap-2 text-[13px]"><span className={`mt-0.5 w-16 shrink-0 text-[9px] font-semibold uppercase tracking-[.08em] ${tone === 'green' ? 'text-[#9dbe4e]' : 'text-[#a86f69]'}`}>{tone === 'green' ? '+' : '−'} {label}</span><div className="flex flex-wrap gap-x-3 gap-y-1">{items.map((item) => <PlayerButton key={item.id} item={item} onSelect={onSelect} />)}</div></div>
+  return <div className="flex items-start gap-2 text-[13px]"><span className={`mt-0.5 w-16 shrink-0 text-[9px] font-semibold uppercase tracking-[.08em] ${tone === 'green' ? 'text-[#cf716b]' : 'text-[#a86f69]'}`}>{tone === 'green' ? '+' : '−'} {label}</span><div className="flex flex-wrap gap-x-3 gap-y-1">{items.map((item) => <PlayerButton key={item.id} item={item} onSelect={onSelect} />)}</div></div>
 }

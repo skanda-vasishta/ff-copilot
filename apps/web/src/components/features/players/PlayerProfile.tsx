@@ -127,7 +127,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
         <div className="h-72 animate-pulse rounded-lg bg-white/[.03]" />
       </div>
     );
-  if (!scope) return <div className="mt-6 rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#78847e]">Add a team in settings, then choose it from the header.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c9f958] px-4 text-xs font-semibold text-[#11170a]">Open settings</Link></div>;
+  if (!scope) return <div className="mt-6 rounded-lg border border-white/[.08] p-12 text-center"><h2 className="text-xl font-semibold text-white">Select a team first</h2><p className="mt-2 text-sm text-[#858585]">Add a team in settings, then choose it from the header.</p><Link href="/settings" className="focus-ring mt-4 inline-flex h-9 items-center rounded-[6px] bg-[#c94f49] px-4 text-xs font-semibold text-[#ffffff]">Open settings</Link></div>;
   if (detail.error || !player)
     return (
       <div
@@ -162,21 +162,21 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
   return (
     <div className="mt-6 space-y-5">
       <header className="panel relative overflow-hidden rounded-lg p-6 sm:p-8">
-        <div className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-[#b7f34a]/[.06] blur-3xl" />
+        <div className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-[#c94f49]/[.06] blur-3xl" />
         <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.18em] text-[#b7f34a]">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.18em] text-[#c94f49]">
               <span>{player.position || "NFL"}</span>
-              <span className="text-[#4f5a54]">·</span>
+              <span className="text-[#5a5a5a]">·</span>
               <span>{player.nfl_team || "Free agent"}</span>
             </div>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-.045em] text-white sm:text-5xl">
               {player.name}
             </h1>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-white/[.08] bg-black/20 px-3 py-2 text-xs text-[#9da7a2]">
+          <div className="flex items-center gap-2 rounded-full border border-white/[.08] bg-black/20 px-3 py-2 text-xs text-[#a7a7a7]">
             <span
-              className={`size-2 rounded-full ${latest?.injury_status ? "bg-amber-300" : "bg-[#b7f34a]"}`}
+              className={`size-2 rounded-full ${latest?.injury_status ? "bg-amber-300" : "bg-[#c94f49]"}`}
             />
             {latest?.injury_status || "No injury designation"}
           </div>
@@ -185,15 +185,15 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
 
       <section className="grid gap-3 md:grid-cols-3">
         <div className="panel rounded-lg p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">{selectedSeason - 1} position finish</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#747474]">{selectedSeason - 1} position finish</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{latest?.position_rank == null ? "—" : `${player.position} #${latest.position_rank}`}</p>
         </div>
         <div className="panel rounded-lg p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">ESPN rostered</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#747474]">ESPN rostered</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{latest?.percent_owned == null ? "—" : `${number(latest.percent_owned)}%`}</p>
         </div>
         <div className="panel rounded-lg p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]">Overall PPR rank</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#747474]">Overall PPR rank</p>
           <p className="mt-2 font-mono text-3xl font-semibold text-white">{rankings?.summary.average == null ? "—" : `#${number(rankings.summary.average)}`}</p>
         </div>
       </section>
@@ -203,40 +203,40 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
           <div className="border-b border-white/[.07] p-5 sm:p-6">
             <h2 className="text-lg font-semibold text-white">{selectedSeason} PPR projections</h2>
             <div className="mt-4 flex items-end gap-5">
-              <div><p className="font-mono text-3xl font-semibold text-white">{number(projections?.projected_total_points)}</p><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#65716b]">Total</p></div>
-              <div className="border-l border-white/[.08] pl-5"><p className="font-mono text-xl font-semibold text-[#c7cfca]">{number(projections?.projected_average_points)}</p><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#65716b]">Per game</p></div>
-              <p className="ml-auto text-[10px] text-[#65716b]">{projections?.source_count || 0} sources</p>
+              <div><p className="font-mono text-3xl font-semibold text-white">{number(projections?.projected_total_points)}</p><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#747474]">Total</p></div>
+              <div className="border-l border-white/[.08] pl-5"><p className="font-mono text-xl font-semibold text-[#cecece]">{number(projections?.projected_average_points)}</p><p className="mt-1 text-[10px] uppercase tracking-[.1em] text-[#747474]">Per game</p></div>
+              <p className="ml-auto text-[10px] text-[#747474]">{projections?.source_count || 0} sources</p>
             </div>
           </div>
           <div className="divide-y divide-white/[.06]">
             {projections?.sources.map((projection) => (
               <div key={projection.source} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
-                <div><p className="text-sm font-medium text-white">{sourceNames[projection.source] || projection.source}</p><p className="mt-1 text-[10px] text-[#58635d]">{date(projection.source_updated_at || projection.fetched_at)}</p></div>
+                <div><p className="text-sm font-medium text-white">{sourceNames[projection.source] || projection.source}</p><p className="mt-1 text-[10px] text-[#636363]">{date(projection.source_updated_at || projection.fetched_at)}</p></div>
                 <p className="font-mono text-lg font-semibold text-white">{number(projection.projected_total_points)}</p>
               </div>
             ))}
-            {!projections?.sources.length && <p className="px-6 py-8 text-sm text-[#65716b]">No compatible current projections.</p>}
+            {!projections?.sources.length && <p className="px-6 py-8 text-sm text-[#747474]">No compatible current projections.</p>}
           </div>
         </div>
 
         <div className="panel overflow-hidden rounded-lg">
           <div className="border-b border-white/[.07] p-5 sm:p-6">
-            <div className="flex items-end justify-between gap-4"><h2 className="text-lg font-semibold text-white">PPR rankings</h2><p className="text-[10px] text-[#65716b]">{rankings?.summary.source_count || 0} overall sources</p></div>
+            <div className="flex items-end justify-between gap-4"><h2 className="text-lg font-semibold text-white">PPR rankings</h2><p className="text-[10px] text-[#747474]">{rankings?.summary.source_count || 0} overall sources</p></div>
           </div>
           <div className="divide-y divide-white/[.06]">
             {currentRanks.map((ranking) => (
               <div key={`${ranking.source}:${ranking.ranking_type}`} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
                 <div>
-                  <a href={sourceLinks[ranking.source]} target="_blank" rel="noreferrer" className="text-sm font-medium text-white hover:text-[#b7f34a]">{sourceNames[ranking.source] || ranking.source} ↗</a>
-                  <p className="mt-1 text-[10px] text-[#58635d]">{date(ranking.fetched_at)}</p>
+                  <a href={sourceLinks[ranking.source]} target="_blank" rel="noreferrer" className="text-sm font-medium text-white hover:text-[#c94f49]">{sourceNames[ranking.source] || ranking.source} ↗</a>
+                  <p className="mt-1 text-[10px] text-[#636363]">{date(ranking.fetched_at)}</p>
                 </div>
                 <div className="text-right font-mono text-sm text-white">
                   {ranking.overall_rank != null && <p>Overall #{number(ranking.overall_rank, 0)}</p>}
-                  {ranking.position_rank != null && <p className={ranking.overall_rank != null ? "mt-1 text-[#9da7a2]" : ""}>{player.position} #{number(ranking.position_rank, 0)}</p>}
+                  {ranking.position_rank != null && <p className={ranking.overall_rank != null ? "mt-1 text-[#a7a7a7]" : ""}>{player.position} #{number(ranking.position_rank, 0)}</p>}
                 </div>
               </div>
             ))}
-            {!currentRanks.length && <p className="px-6 py-8 text-sm text-[#65716b]">No current source rankings.</p>}
+            {!currentRanks.length && <p className="px-6 py-8 text-sm text-[#747474]">No current source rankings.</p>}
           </div>
         </div>
       </section>
@@ -253,7 +253,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
                   <h3 className="font-semibold text-white">
                     {sourceNames[source] || source}
                   </h3>
-                  <span className="rounded-full bg-white/[.05] px-2.5 py-1 text-[10px] text-[#78847e]">
+                  <span className="rounded-full bg-white/[.05] px-2.5 py-1 text-[10px] text-[#858585]">
                     {documents.length}{" "}
                     {documents.length === 1 ? "item" : "items"}
                   </span>
@@ -264,7 +264,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
                       key={document.id}
                       className="group rounded-md border border-white/[.07] bg-black/15 p-4"
                     >
-                      <summary className="cursor-pointer list-none text-sm font-medium text-[#c6ceca]">
+                      <summary className="cursor-pointer list-none text-sm font-medium text-[#cecece]">
                         <span className="flex items-start justify-between gap-4">
                           <span>
                             {document.title ||
@@ -272,16 +272,16 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
                                 .slice(0, 120)
                                 .replace(/\s+/g, " ")}
                           </span>
-                          <span className="text-[#65716b] transition group-open:rotate-90">
+                          <span className="text-[#747474] transition group-open:rotate-90">
                             →
                           </span>
                         </span>
-                        <span className="mt-2 block text-[10px] font-normal text-[#58635d]">
+                        <span className="mt-2 block text-[10px] font-normal text-[#636363]">
                           Published {date(document.published_at)} · fetched{" "}
                           {date(document.fetched_at)}
                         </span>
                       </summary>
-                      <p className="mt-4 whitespace-pre-wrap border-t border-white/[.06] pt-4 text-sm leading-6 text-[#9da7a2]">
+                      <p className="mt-4 whitespace-pre-wrap border-t border-white/[.06] pt-4 text-sm leading-6 text-[#a7a7a7]">
                         {document.content}
                       </p>
                       {document.source_url && (
@@ -289,7 +289,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
                           href={document.source_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="focus-ring mt-4 inline-flex rounded text-xs font-medium text-[#b7f34a] hover:underline"
+                          className="focus-ring mt-4 inline-flex rounded text-xs font-medium text-[#c94f49] hover:underline"
                         >
                           Open original ↗
                         </a>
@@ -300,7 +300,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
               </div>
             ))}
             {!factualSources.length && (
-              <div className="px-6 py-14 text-center text-sm text-[#78847e]">
+              <div className="px-6 py-14 text-center text-sm text-[#858585]">
                 No source documents have been collected for this player yet.
               </div>
             )}
@@ -309,7 +309,7 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
 
         <aside className="space-y-5">
           <section className="panel rounded-lg p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#65716b]">
+            <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#747474]">
               {selectedSeason} facts
             </p>
             <dl className="mt-4 space-y-3 text-sm">
@@ -328,8 +328,8 @@ export function PlayerProfile({ playerId }: { playerId: string }) {
                   key={label}
                   className="flex items-center justify-between gap-3"
                 >
-                  <dt className="text-[#78847e]">{label}</dt>
-                  <dd className="font-mono text-[#c6ceca]">{value}</dd>
+                  <dt className="text-[#858585]">{label}</dt>
+                  <dd className="font-mono text-[#cecece]">{value}</dd>
                 </div>
               ))}
             </dl>
