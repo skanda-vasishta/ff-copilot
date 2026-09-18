@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAgent } from "@/features/copilot/client/useAgent";
 import { createThread, deleteThread, listThreads, updateThread } from "@/features/copilot/client/threads";
@@ -144,8 +145,8 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
-  return <div className="copilot-shell grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#080907] lg:grid-cols-[238px_minmax(0,1fr)] lg:grid-rows-1">
-    <aside className="copilot-sidebar flex min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:border-b-0 lg:border-r">
+  return <div className="copilot-shell flex h-full min-h-0 flex-col overflow-hidden bg-[#080907] lg:grid lg:grid-cols-[238px_minmax(0,1fr)]">
+    <aside className="copilot-sidebar hidden min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:flex lg:border-b-0 lg:border-r">
       <div className="p-2 lg:p-3.5 lg:pb-2.5">
         <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring flex h-8 w-full items-center justify-center gap-2 rounded-[8px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[11px] font-semibold text-[#d6fb7a] hover:border-[#c9f958]/40 hover:bg-[#c9f958]/15 disabled:cursor-not-allowed disabled:opacity-35 lg:h-9 lg:justify-start"><span className="text-base font-light">+</span> New conversation</button>
         {!scope && <p className="mt-2 px-1 text-[10px] text-amber-200/70">Select a team from settings first.</p>}
@@ -159,7 +160,7 @@ export function AgentPanel() {
       </div>
     </aside>
 
-    <section className="flex min-h-0 min-w-0 flex-col">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="copilot-toolbar flex min-h-[52px] flex-wrap items-center justify-between gap-2 border-b border-white/[.055] bg-[#0a0b09]/60 px-3 py-2 backdrop-blur-xl sm:min-h-[58px] sm:px-6">
         <div className="min-w-0"><h1 className="truncate text-sm font-semibold text-[#eef1e9]">{thread?.title || "New conversation"}</h1><p className="mt-0.5 truncate font-mono text-[10px] text-[#6e7568]">{scope ? `${scope.team.name} · ${scope.team.league.name || "League"} ${scope.team.league.season}` : "Select a team"}</p></div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:flex-none">
@@ -169,12 +170,18 @@ export function AgentPanel() {
           </> : null}
           {thread && <button aria-label="Refresh context" disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="focus-ring h-7 rounded-[5px] px-2 text-[10px] text-[#70786c] transition hover:bg-white/[.035] hover:text-[#b7beb1] disabled:opacity-35">{refreshingContext ? "..." : "↻"}<span className="hidden sm:inline"> Refresh</span></button>}
         </div>
+        <div className="flex w-full items-center gap-2 lg:hidden">
+          {threads.length ? <select aria-label="Conversation" value={threadId || ""} onChange={(event) => setThreadId(event.target.value || null)} className="focus-ring h-9 min-w-0 flex-1 rounded-[7px] border border-white/[.06] bg-white/[.035] px-2.5 text-xs text-[#cbd1c5] outline-none">
+            {threads.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+          </select> : <span className="min-w-0 flex-1 truncate text-[11px] text-[#697166]">{scope ? "No conversations yet" : "Connect a team to start"}</span>}
+          <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring h-9 shrink-0 rounded-[7px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[11px] font-semibold text-[#d6fb7a] disabled:opacity-35">New</button>
+        </div>
       </header>
       {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#8c9992]">{contextNotice}</div>}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-8 sm:py-8">
         <div className="mx-auto flex min-h-full max-w-[820px] flex-col space-y-4 sm:space-y-7">
-          {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope && <button onClick={newThread} className="focus-ring mt-6 rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">New conversation</button>}</div>}
+          {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope ? <button onClick={newThread} className="focus-ring mt-6 rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">New conversation</button> : <Link href="/settings" className="focus-ring mt-6 inline-flex rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">Open settings</Link>}</div>}
           {thread && !agent.messages.length && <div className="m-auto max-w-xl py-16 text-center"><h2 className="text-2xl font-semibold tracking-[-.03em] text-white">What are you deciding?</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Ask about a player, compare your roster, or work through a waiver or trade decision.</p></div>}
           {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
           {agent.status !== "idle" && agent.status !== "error" && <div className="flex items-center gap-2 text-xs text-[#78847e]"><span className="size-2 animate-pulse rounded-full bg-[#b7f34a]" />{agent.status === "running-tool" ? "Checking the data…" : "Thinking…"}</div>}
