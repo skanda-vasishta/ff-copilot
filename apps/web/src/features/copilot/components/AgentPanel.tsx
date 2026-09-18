@@ -17,6 +17,7 @@ export function AgentPanel() {
   const [threads, setThreads] = useState<AgentThread[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadQuery, setThreadQuery] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set(["Earlier"]));
   const [input, setInput] = useState("");
   const [mobileScreen, setMobileScreen] = useState<"list" | "chat">("list");
   const [loadingThreads, setLoadingThreads] = useState(true);
@@ -153,6 +154,19 @@ export function AgentPanel() {
     setMobileScreen("chat");
   }
 
+  function toggleGroup(label: string) {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  function groupIsCollapsed(label: string) {
+    return !threadQuery.trim() && collapsedGroups.has(label);
+  }
+
   return <div className="copilot-shell flex h-full min-h-0 flex-col overflow-hidden lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
     <section className={`${mobileScreen === "list" ? "flex" : "hidden"} min-h-0 flex-1 flex-col bg-black px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:hidden`}>
       <header className="flex shrink-0 items-center justify-between">
@@ -172,16 +186,16 @@ export function AgentPanel() {
         <h2 className="text-[22px] font-semibold tracking-[-.02em] text-white">Chats</h2>
         {scope ? <div className="mt-4 space-y-1">
           {loadingThreads && <p className="py-6 text-sm text-[#8d8d92]">Loading chats...</p>}
-          {!loadingThreads && groupedThreads.map(([label, items]) => <div key={label} className="py-2">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[.12em] text-[#666]">{label}</p>
-            {items.map((item) => <button key={item.id} onClick={() => openThread(item.id)} className="focus-ring flex min-h-16 w-full items-center gap-4 rounded-[14px] px-1 py-3 text-left">
+          {!loadingThreads && groupedThreads.map(([label, items]) => { const collapsed = groupIsCollapsed(label); return <div key={label} className="py-2">
+            <button type="button" onClick={() => toggleGroup(label)} aria-expanded={!collapsed} className="focus-ring mb-1 flex w-full items-center rounded-md py-1 text-left text-xs font-semibold uppercase tracking-[.12em] text-[#666]"><span>{label}</span><span className="ml-2 font-mono text-[10px] font-normal tracking-normal text-[#858585]">{items.length}</span><span className={`ml-auto text-[10px] transition-transform ${collapsed ? "-rotate-90" : ""}`} aria-hidden>⌄</span></button>
+            {!collapsed && items.map((item) => <button key={item.id} onClick={() => openThread(item.id)} className="focus-ring flex min-h-16 w-full items-center gap-4 rounded-[14px] px-1 py-3 text-left">
               <span className="grid size-8 shrink-0 place-items-center rounded-[8px] border border-white/15 text-lg text-white/90">⌁</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[18px] font-medium tracking-[-.02em] text-white">{item.title}</span>
                 <span className="mt-1 block truncate text-xs text-[#777]">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
               </span>
             </button>)}
-          </div>)}
+          </div>})}
           {!loadingThreads && !groupedThreads.length && <p className="py-8 text-[16px] leading-7 text-[#8d8d92]">{threadQuery ? "No matching chats." : "No chats yet. Start one when your team is connected."}</p>}
         </div> : <div className="mt-8 text-center">
           <p className="text-[16px] leading-7 text-[#9b9b9b]">Connect a league first, then your past chats and new conversations will show here.</p>
@@ -200,7 +214,7 @@ export function AgentPanel() {
       <label className="copilot-control mx-4 mb-2 hidden h-9 items-center gap-2 rounded-[6px] border px-3 lg:flex"><span className="copilot-subtle text-[13px]">⌕</span><input aria-label="Search conversations" value={threadQuery} onChange={(event) => setThreadQuery(event.target.value)} placeholder="Search" className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-[var(--subtle)]" /></label>
       <div className="flex min-h-0 flex-1 flex-col pb-4">
         <div className="flex min-h-0 flex-1 gap-1.5 overflow-x-auto overflow-y-hidden lg:block lg:overflow-y-auto">
-          {groupedThreads.map(([label, items]) => <div key={label} className="contents lg:mb-1.5 lg:block"><p className="copilot-subtle hidden px-[18px] pb-1.5 pt-3.5 text-[11px] font-semibold uppercase tracking-[.08em] lg:block">{label}</p>{items.map((item) => <div key={item.id} data-active={item.id === threadId} className="copilot-thread-row group flex min-h-9 w-36 shrink-0 items-center transition sm:w-44 lg:w-auto"><button onClick={() => setThreadId(item.id)} className="focus-ring flex min-w-0 flex-1 items-center gap-3 self-stretch px-[18px] text-left text-[13px]"><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="copilot-subtle hidden font-mono text-[10px] sm:inline">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></button><button aria-label={`Delete ${item.title}`} title="Delete conversation" onClick={() => removeThread(item.id)} className="focus-ring mr-2 hidden size-6 shrink-0 place-items-center rounded-[5px] text-[11px] text-transparent transition hover:bg-red-400/[.08] hover:text-red-300 group-hover:text-[var(--subtle)] focus-visible:text-[var(--subtle)] sm:grid">×</button></div>)}</div>)}
+          {groupedThreads.map(([label, items]) => { const collapsed = groupIsCollapsed(label); return <div key={label} className="contents lg:mb-1.5 lg:block"><button type="button" onClick={() => toggleGroup(label)} aria-expanded={!collapsed} className="copilot-subtle focus-ring hidden w-full items-center px-[18px] pb-1.5 pt-3.5 text-left text-[11px] font-semibold uppercase tracking-[.08em] lg:flex"><span>{label}</span><span className="ml-2 font-mono text-[9px] font-normal tracking-normal">{items.length}</span><span className={`ml-auto text-[9px] transition-transform ${collapsed ? "-rotate-90" : ""}`} aria-hidden>⌄</span></button>{!collapsed && items.map((item) => <div key={item.id} data-active={item.id === threadId} className="copilot-thread-row group flex min-h-9 w-36 shrink-0 items-center transition sm:w-44 lg:w-auto"><button onClick={() => setThreadId(item.id)} className="focus-ring flex min-w-0 flex-1 items-center gap-3 self-stretch px-[18px] text-left text-[13px]"><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="copilot-subtle hidden font-mono text-[10px] sm:inline">{new Date(item.updated_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></button><button aria-label={`Delete ${item.title}`} title="Delete conversation" onClick={() => removeThread(item.id)} className="focus-ring mr-2 hidden size-6 shrink-0 place-items-center rounded-[5px] text-[11px] text-transparent transition hover:bg-red-400/[.08] hover:text-red-300 group-hover:text-[var(--subtle)] focus-visible:text-[var(--subtle)] sm:grid">×</button></div>)}</div>})}
           {!loadingThreads && !groupedThreads.length && <p className="px-2 py-3 text-xs leading-5 text-[#636363]">{threadQuery ? "No matching conversations." : "Conversations for this team will appear here."}</p>}
         </div>
       </div>
