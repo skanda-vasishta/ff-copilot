@@ -47,7 +47,28 @@ export function PlayerDirectory() {
     {players.isLoading && <div className="mt-5 grid gap-2" aria-label="Loading players">{Array.from({length: 7}).map((_, i) => <div key={i} className="h-[68px] animate-pulse rounded-md border border-white/[.04] bg-white/[.025]" />)}</div>}
     {players.error && <p role="alert" className="mt-5 rounded-md border border-red-400/20 bg-red-400/[.06] p-4 text-sm text-red-200">We couldn&apos;t load players. {players.error.message}</p>}
     {players.data && <div className="mt-[18px] overflow-hidden rounded-[16px] border border-white/[.06] bg-white/[.02]">
-      <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
+      <div className="divide-y divide-white/[.055] md:hidden">
+        {players.data.items.map(player => <button key={player.id} onClick={()=>setSelectedPlayerId(player.id)} className="focus-ring block w-full px-4 py-4 text-left transition hover:bg-white/[.025]">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium text-white">{player.name}</span>
+              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#7f8a84]">
+                <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${positionTone[player.position || ''] || 'bg-white/[.05] text-[#9da7a2]'}`}>{player.position || '—'}</span>
+                <span className="font-mono">{player.nfl_team || 'FA'}</span>
+                <span className={player.injury_status ? 'text-amber-200' : ''}>{player.injury_status || 'No designation'}</span>
+              </span>
+            </span>
+            <span className="pt-1 text-[#7f8a84]">→</span>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+            <Metric label="Proj" value={player.projected_total_points?.toFixed(1) ?? '—'} />
+            <Metric label="Rank" value={player.median_rank?.toFixed(1) ?? '—'} />
+            <Metric label="Updated" value={player.fetched_at ? new Date(player.fetched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Not synced'} />
+          </div>
+        </button>)}
+      </div>
+      <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[820px] text-left text-sm">
         <thead><tr className="border-b border-white/[.07] bg-black/10 text-[10px] font-semibold uppercase tracking-[.14em] text-[#65716b]"><th className="px-5 py-4 sm:px-6">{sortLabel('name','Player')}</th><th className="px-3 py-4">Pos</th><th className="px-3 py-4">Team</th><th className="px-3 py-4 text-right">{sortLabel('projected_total_points','Projection')}</th><th className="px-3 py-4 text-right">{sortLabel('median_rank','Consensus rank')}</th><th className="px-3 py-4">Availability</th><th className="px-5 py-4 text-right sm:px-6">Updated</th></tr></thead>
         <tbody className="divide-y divide-white/[.055]">{players.data.items.map(player => <tr key={player.id} onClick={()=>setSelectedPlayerId(player.id)} className="group cursor-pointer transition hover:bg-white/[.025]">
           <td className="px-5 py-4 sm:px-6"><div className="flex w-fit items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-white/[.055] text-xs font-semibold text-[#b8c1bc] transition group-hover:bg-[#b7f34a]/10 group-hover:text-[#c8f775]">{player.name.split(' ').map(part => part[0]).slice(0,2).join('')}</span><span className="font-medium text-white transition group-hover:text-[#c8f775]">{player.name}</span><span className="text-[#4f5a54] transition group-hover:translate-x-0.5 group-hover:text-[#b7f34a]">→</span></div></td>
@@ -58,7 +79,11 @@ export function PlayerDirectory() {
       </table></div>
       {!players.data.items.length && <div className="px-6 py-16 text-center"><p className="text-sm font-medium text-white">No players found</p><p className="mt-1 text-sm text-[#78847e]">Try another name or position.</p></div>}
     </div>}
-    <div className="mt-5 flex flex-col items-center justify-between gap-3 text-xs text-[#78847e] sm:flex-row"><span>Showing {players.data?.items.length || 0} of {players.data?.total || 0} players</span><div className="flex items-center gap-2"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">← Previous</button><span className="px-2 font-mono text-[#aab4af]">{page} / {totalPages}</span><button aria-label="Next page" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">Next →</button></div></div>
+    <div className="mt-5 flex flex-col items-center justify-between gap-3 text-xs text-[#78847e] sm:flex-row"><span>Showing {players.data?.items.length || 0} of {players.data?.total || 0} players</span><div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:w-auto"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">← Previous</button><span className="px-2 text-center font-mono text-[#aab4af]">{page} / {totalPages}</span><button aria-label="Next page" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="focus-ring rounded-lg border border-white/[.09] px-3 py-2 font-medium transition hover:bg-white/[.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">Next →</button></div></div>
     {selectedPlayerId&&<PlayerDetailModal playerId={selectedPlayerId} onClose={()=>setSelectedPlayerId(null)}/>}
   </div>
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return <span className="min-w-0 rounded-[7px] bg-black/20 px-2.5 py-2"><span className="block text-[9px] font-semibold uppercase tracking-[.08em] text-[#626d66]">{label}</span><span className="mt-1 block truncate font-mono text-[#dce3de]">{value}</span></span>
 }
