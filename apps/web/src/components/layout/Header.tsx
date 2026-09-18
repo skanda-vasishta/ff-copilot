@@ -56,7 +56,7 @@ export function Header() {
   if (pathname === '/login') return null
   const compactMobile = pathname === '/copilot'
 
-  return <header className="app-header sticky top-0 z-30 border-b border-white/[.055] bg-[#0a0b09]/90 backdrop-blur-xl">
+  return <header className={`app-header sticky top-0 z-30 border-b border-white/[.055] bg-[#0a0b09]/90 backdrop-blur-xl ${compactMobile ? 'hidden sm:block' : ''}`}>
     <div className="flex min-h-14 w-full flex-wrap items-center gap-y-2 px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-5 sm:py-0">
       <Link href="/team" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="FF Copilot home">
         <span className="grid size-7 place-items-center rounded-[7px] border border-[#c9f958]/35 bg-[#c9f958]/10 text-[10px] font-black tracking-[-.05em] text-[#c9f958]">FF</span>

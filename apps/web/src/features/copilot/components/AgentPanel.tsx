@@ -145,7 +145,7 @@ export function AgentPanel() {
     await agent.send(value);
   }
 
-  return <div className="copilot-shell flex h-full min-h-0 flex-col overflow-hidden bg-[#080907] lg:grid lg:grid-cols-[238px_minmax(0,1fr)]">
+  return <div className="copilot-shell flex h-full min-h-0 flex-col overflow-hidden bg-black sm:bg-[#080907] lg:grid lg:grid-cols-[238px_minmax(0,1fr)]">
     <aside className="copilot-sidebar hidden min-h-0 flex-col border-b border-white/[.06] bg-white/[.018] backdrop-blur-lg lg:flex lg:border-b-0 lg:border-r">
       <div className="p-2 lg:p-3.5 lg:pb-2.5">
         <button disabled={!scope || loadingScope} onClick={newThread} className="focus-ring flex h-8 w-full items-center justify-center gap-2 rounded-[8px] border border-[#c9f958]/25 bg-[#c9f958]/10 px-3 text-[11px] font-semibold text-[#d6fb7a] hover:border-[#c9f958]/40 hover:bg-[#c9f958]/15 disabled:cursor-not-allowed disabled:opacity-35 lg:h-9 lg:justify-start"><span className="text-base font-light">+</span> New conversation</button>
@@ -161,7 +161,27 @@ export function AgentPanel() {
     </aside>
 
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="copilot-toolbar flex min-h-[52px] flex-wrap items-center justify-between gap-2 border-b border-white/[.055] bg-[#0a0b09]/60 px-3 py-2 backdrop-blur-xl sm:min-h-[58px] sm:px-6">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[.055] bg-black px-4 pb-3 pt-[max(.75rem,env(safe-area-inset-top))] sm:hidden">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-[#25d678]" />
+            <h1 className="truncate text-[17px] font-semibold leading-6 text-white">{thread?.title || "Copilot"}</h1>
+          </div>
+          <p className="truncate text-xs text-[#8d8d92]">{scope ? `${scope.team.name} · ${scope.team.league.name || "League"}` : "ff-copilot"}</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button aria-label="New conversation" disabled={!scope || loadingScope} onClick={newThread} className="focus-ring grid size-10 place-items-center rounded-full text-2xl font-light text-white disabled:text-white/25">+</button>
+          {thread && <button aria-label="Refresh context" disabled={refreshingContext || agent.status !== "idle"} onClick={refreshContext} className="focus-ring grid size-10 place-items-center rounded-full text-xl text-white disabled:text-white/25">{refreshingContext ? "..." : "↻"}</button>}
+        </div>
+      </header>
+
+      <div className="hidden shrink-0 border-b border-white/[.055] bg-black px-4 py-2 sm:hidden">
+        {threads.length ? <select aria-label="Conversation" value={threadId || ""} onChange={(event) => setThreadId(event.target.value || null)} className="focus-ring h-10 w-full rounded-full border-0 bg-[#1c1c1f] px-4 text-sm text-white outline-none">
+          {threads.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+        </select> : null}
+      </div>
+
+      <header className="copilot-toolbar hidden min-h-[52px] flex-wrap items-center justify-between gap-2 border-b border-white/[.055] bg-[#0a0b09]/60 px-3 py-2 backdrop-blur-xl sm:flex sm:min-h-[58px] sm:px-6">
         <div className="min-w-0"><h1 className="truncate text-sm font-semibold text-[#eef1e9]">{thread?.title || "New conversation"}</h1><p className="mt-0.5 truncate font-mono text-[10px] text-[#6e7568]">{scope ? `${scope.team.name} · ${scope.team.league.name || "League"} ${scope.team.league.season}` : "Select a team"}</p></div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:flex-none">
           {models.data?.models.length && modelSelection ? <>
@@ -179,10 +199,10 @@ export function AgentPanel() {
       </header>
       {contextNotice && <div className="border-b border-white/[.06] px-6 py-2 text-xs text-[#8c9992]">{contextNotice}</div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-8 sm:py-8">
-        <div className="mx-auto flex min-h-full max-w-[820px] flex-col space-y-4 sm:space-y-7">
-          {!thread && !loadingThreads && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-2xl font-semibold tracking-[-.03em] text-white">Start with your team</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Each conversation belongs to the selected team workspace and uses its league context.</p>{scope ? <button onClick={newThread} className="focus-ring mt-6 rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">New conversation</button> : <Link href="/settings" className="focus-ring mt-6 inline-flex rounded-md border border-[#b7f34a]/40 px-5 py-2.5 text-sm font-semibold text-[#b7f34a]">Open settings</Link>}</div>}
-          {thread && !agent.messages.length && <div className="m-auto max-w-xl py-16 text-center"><h2 className="text-2xl font-semibold tracking-[-.03em] text-white">What are you deciding?</h2><p className="mt-3 text-sm leading-6 text-[#78847e]">Ask about a player, compare your roster, or work through a waiver or trade decision.</p></div>}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-8 sm:py-8">
+        <div className="mx-auto flex min-h-full max-w-[820px] flex-col space-y-5 sm:space-y-7">
+          {!thread && (!loadingThreads || !scope) && <div className="m-auto max-w-lg py-16 text-center"><span className="mx-auto text-xl text-[#b7f34a]">✦</span><h2 className="mt-5 text-[26px] font-semibold tracking-[-.03em] text-white sm:text-2xl">Start with your team</h2><p className="mt-3 text-base leading-7 text-[#9b9ba0] sm:text-sm sm:leading-6 sm:text-[#78847e]">Connect a league, then ask Copilot about lineups, waivers, trades, and matchups.</p>{scope ? <button onClick={newThread} className="focus-ring mt-7 rounded-full bg-white px-7 py-3 text-sm font-semibold text-black sm:rounded-md sm:border sm:border-[#b7f34a]/40 sm:bg-transparent sm:px-5 sm:py-2.5 sm:text-[#b7f34a]">New conversation</button> : <Link href="/settings" className="focus-ring mt-7 inline-flex rounded-full bg-white px-7 py-3 text-sm font-semibold text-black sm:rounded-md sm:border sm:border-[#b7f34a]/40 sm:bg-transparent sm:px-5 sm:py-2.5 sm:text-[#b7f34a]">Open settings</Link>}</div>}
+          {thread && !agent.messages.length && <div className="m-auto max-w-xl py-16 text-center"><h2 className="text-[26px] font-semibold tracking-[-.03em] text-white sm:text-2xl">What are you deciding?</h2><p className="mt-3 text-base leading-7 text-[#9b9ba0] sm:text-sm sm:leading-6 sm:text-[#78847e]">Ask about a player, compare your roster, or work through a waiver or trade decision.</p></div>}
           {agent.messages.map((message) => <AgentMessage key={message.id} message={message} />)}
           {agent.status !== "idle" && agent.status !== "error" && <div className="flex items-center gap-2 text-xs text-[#78847e]"><span className="size-2 animate-pulse rounded-full bg-[#b7f34a]" />{agent.status === "running-tool" ? "Checking the data…" : "Thinking…"}</div>}
           {agent.error && <div role="alert" className="flex items-center justify-between gap-3 border-l-2 border-red-400/40 bg-red-400/[.04] px-4 py-3 text-xs text-red-200"><span>{agent.error}</span><button onClick={agent.clearError} className="underline">Dismiss</button></div>}
@@ -190,10 +210,11 @@ export function AgentPanel() {
         </div>
       </div>
 
-      <form onSubmit={submit} className="copilot-composer-fade shrink-0 bg-gradient-to-t from-[#080907] via-[#080907]/95 to-transparent px-2.5 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-8 sm:pb-5">
-        <div className="copilot-composer mx-auto flex max-w-[820px] items-end gap-2 rounded-[10px] border border-white/[.08] bg-[#151713]/90 p-1.5 shadow-[0_18px_40px_-26px_rgba(0,0,0,.85)] backdrop-blur-xl focus-within:border-[#c9f958]/25">
-          <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2 text-sm leading-6 text-[#eef1e9] outline-none placeholder:text-[#5f6659] disabled:opacity-50" />
-          {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring mb-1 h-8 shrink-0 rounded-[6px] bg-white/[.055] px-2.5 text-[10px] font-medium text-[#aeb5a8] transition hover:bg-red-400/[.08] hover:text-red-200">Stop</button> : <button aria-label="Send message" disabled={!thread || !input.trim()} className="focus-ring mb-1 grid size-8 shrink-0 place-items-center rounded-[6px] bg-gradient-to-br from-[#d9ff6e] to-[#a8e63c] text-base font-semibold text-[#12200a] disabled:opacity-20">↑</button>}
+      <form onSubmit={submit} className="copilot-composer-fade shrink-0 bg-gradient-to-t from-black via-black/95 to-transparent px-4 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:bg-gradient-to-t sm:from-[#080907] sm:via-[#080907]/95 sm:px-8 sm:pb-5">
+        <div className="copilot-composer mx-auto flex max-w-[820px] items-end gap-2 rounded-[26px] border border-white/[.08] bg-[#1f1f21] p-2 shadow-[0_18px_40px_-26px_rgba(0,0,0,.85)] backdrop-blur-xl focus-within:border-white/20 sm:rounded-[10px] sm:bg-[#151713]/90 sm:p-1.5 sm:focus-within:border-[#c9f958]/25">
+          <button type="button" aria-label="Add context" className="mb-1 grid size-9 shrink-0 place-items-center rounded-full text-3xl font-light leading-none text-white/90 sm:hidden">+</button>
+          <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade…" : "Create a conversation first"} className="max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-base leading-6 text-white outline-none placeholder:text-[#8d8d92] disabled:opacity-50 sm:px-2.5 sm:text-sm sm:text-[#eef1e9] sm:placeholder:text-[#5f6659]" />
+          {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="focus-ring mb-1 h-9 shrink-0 rounded-full bg-white/[.08] px-3 text-[11px] font-medium text-white transition hover:bg-red-400/[.08] hover:text-red-200 sm:h-8 sm:rounded-[6px] sm:px-2.5 sm:text-[10px] sm:text-[#aeb5a8]">Stop</button> : <button aria-label="Send message" disabled={!thread || !input.trim()} className="focus-ring mb-1 grid size-9 shrink-0 place-items-center rounded-full bg-[#0a84ff] text-xl font-semibold text-white disabled:bg-white/[.08] disabled:text-white/25 sm:size-8 sm:rounded-[6px] sm:bg-gradient-to-br sm:from-[#d9ff6e] sm:to-[#a8e63c] sm:text-base sm:text-[#12200a] sm:disabled:opacity-20">↑</button>}
         </div>
       </form>
     </section>

@@ -32,7 +32,7 @@ export default function RootLayout({
       >
         <AppProviders>
           <Header />
-          <main className="min-h-[calc(100vh-6.75rem)] sm:min-h-[calc(100vh-3.5rem)]">
+          <main className="min-h-[calc(100vh-6.75rem)] has-[[data-copilot-mobile]]:min-h-dvh sm:min-h-[calc(100vh-3.5rem)]">
             {children}
           </main>
         </AppProviders>
