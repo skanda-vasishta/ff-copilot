@@ -1,7 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useState } from "react";
-import type { AgentMessage as Message, ToolCallPart } from "@ff-copilot/agent-runtime";
+import Link from "next/link";
+import type { AgentMessage as Message, ToolCallPart, ToolResultPart } from "@ff-copilot/agent-runtime";
 
 const TOOL_LABELS: Record<string, string> = {
   search_players: "Searched players",
@@ -33,14 +34,24 @@ function ToolActivity({ calls }: { calls: ToolCallPart[] }) {
   </div>;
 }
 
-function PlayerSummaryCall({ call }: { call: ToolCallPart }) {
-  const input = call.input as { player_id?: unknown };
-  const player = typeof input.player_id === 'string' ? input.player_id : 'Player';
-  return <div className="mt-3 max-w-md overflow-hidden rounded-[10px] border border-[#c94f49]/20 bg-[#c94f49]/[.045]">
-    <div className="flex items-center gap-3 px-4 py-3"><span className="grid size-9 place-items-center rounded-full bg-[#c94f49]/15 font-mono text-xs text-[#efaaa5]">◎</span><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#c36761]">Player summary</p><p className="truncate text-sm font-semibold text-[var(--foreground)]">{player}</p></div><span className="ml-auto text-[10px] text-[#888]">Loading facts</span></div>
-    <div className="grid grid-cols-3 gap-px border-t border-white/[.06] bg-white/[.06] text-center"><div className="bg-black/10 px-2 py-2 text-[10px] text-[#888]">Projection</div><div className="bg-black/10 px-2 py-2 text-[10px] text-[#888]">Rankings</div><div className="bg-black/10 px-2 py-2 text-[10px] text-[#888]">Status</div></div>
-  </div>;
+function PlayerSummaryResult({ result }: { result: ToolResultPart }) {
+  const output = result.output as { player?: Record<string, unknown>; projection_consensus?: Record<string, unknown>; ranking_summary?: Record<string, unknown>; latest_snapshot?: Record<string, unknown> } | null;
+  const player = output?.player;
+  if (!player || typeof player.id !== 'string') return null;
+  const projections = output?.projection_consensus || {};
+  const snapshot = output?.latest_snapshot || {};
+  const ranking = output?.ranking_summary || {};
+  const value = (...keys: string[]) => keys.map((key) => projections[key] ?? snapshot[key] ?? ranking[key]).find((item) => item != null);
+  const projection = value('projected_total_points', 'projected_average_points', 'average_points');
+  const rank = value('overall_rank', 'position_rank', 'median_rank');
+  const status = player.injury_status || snapshot.injury_status || 'Healthy';
+  return <Link href={`/player-lookup/${player.id}`} className="group mt-3 block max-w-md overflow-hidden rounded-[10px] border border-[#c94f49]/25 bg-[#c94f49]/[.045] transition hover:border-[#df6a63]/70 hover:bg-[#c94f49]/[.08]">
+    <div className="flex items-center gap-3 px-4 py-3"><span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-white/[.08] text-xs font-semibold text-[#e9a29d]">{typeof player.name === 'string' ? player.name.split(' ').map((part) => part[0]).join('').slice(0, 2) : 'P'}</span><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#c36761]">Player summary</p><p className="truncate text-sm font-semibold text-[var(--foreground)]">{String(player.name || 'Player')}</p><p className="truncate text-[10px] text-[#888]">{[player.nfl_team, player.position].filter(Boolean).join(' · ') || 'NFL player'}</p></div><span className="ml-auto shrink-0 text-[10px] font-semibold text-[#d98780] opacity-70 transition group-hover:opacity-100">View →</span></div>
+    <div className="grid grid-cols-3 gap-px border-t border-white/[.06] bg-white/[.06] text-center"><SummaryMetric label="Projection" value={projection == null ? '—' : String(projection)} /><SummaryMetric label="Rank" value={rank == null ? '—' : `#${rank}`} /><SummaryMetric label="Status" value={String(status)} /></div>
+  </Link>;
 }
+
+function SummaryMetric({ label, value }: { label: string; value: string }) { return <div className="min-w-0 bg-black/10 px-2 py-2"><p className="truncate text-[9px] uppercase tracking-[.08em] text-[#888]">{label}</p><p className="mt-0.5 truncate text-[11px] font-medium text-[#e1e1e1]">{value}</p></div>; }
 
 function Markdown({ children }: { children: string }) {
   return <ReactMarkdown
@@ -69,7 +80,9 @@ function Markdown({ children }: { children: string }) {
 }
 
 export function AgentMessage({ message }: { message: Message }) {
-  if (message.role === "tool") return null;
+  if (message.role === "tool") {
+    return <div className="space-y-2">{message.parts.filter((part): part is ToolResultPart => part.type === "tool-result" && (part.name === 'playersummary' || part.name === 'get_player_overview')).map((part) => <PlayerSummaryResult key={part.callId} result={part} />)}</div>;
+  }
   const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n");
   const calls = message.parts.filter((part): part is ToolCallPart => part.type === "tool-call");
   const isUser = message.role === "user";
@@ -84,7 +97,6 @@ export function AgentMessage({ message }: { message: Message }) {
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <Markdown>{text}</Markdown>}
       </div>}
       {calls.length > 0 && <div className={text ? "mt-3" : ""}><ToolActivity calls={calls} /></div>}
-      {calls.filter((call) => call.name === 'playersummary' || call.name === 'get_player_overview').map((call) => <PlayerSummaryCall key={`summary-${call.id}`} call={call} />)}
     </div>
   </article>;
 }
