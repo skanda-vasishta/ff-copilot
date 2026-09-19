@@ -6,6 +6,7 @@ import type { AgentMessage as Message, ToolCallPart } from "@ff-copilot/agent-ru
 const TOOL_LABELS: Record<string, string> = {
   search_players: "Searched players",
   get_player_overview: "Opened player overview",
+  playersummary: "Built player summary",
   get_player_espn: "Checked ESPN",
   get_player_sleeper: "Checked Sleeper",
   get_player_fantasypros: "Checked FantasyPros",
@@ -29,6 +30,15 @@ function ToolActivity({ calls }: { calls: ToolCallPart[] }) {
     {open && <div className="ml-2 mt-1.5 space-y-0.5 border-l border-[var(--border)] pl-3">
       {calls.map((call) => <div key={call.id} className="copilot-muted flex w-fit items-center gap-2 py-1 text-[11px]"><span className="copilot-brand font-mono text-[10px]">✓</span><span>{TOOL_LABELS[call.name] || "Checked data"}</span></div>)}
     </div>}
+  </div>;
+}
+
+function PlayerSummaryCall({ call }: { call: ToolCallPart }) {
+  const input = call.input as { player_id?: unknown };
+  const player = typeof input.player_id === 'string' ? input.player_id : 'Player';
+  return <div className="mt-3 max-w-md overflow-hidden rounded-[10px] border border-[#c94f49]/20 bg-[#c94f49]/[.045]">
+    <div className="flex items-center gap-3 px-4 py-3"><span className="grid size-9 place-items-center rounded-full bg-[#c94f49]/15 font-mono text-xs text-[#efaaa5]">◎</span><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#c36761]">Player summary</p><p className="truncate text-sm font-semibold text-[var(--foreground)]">{player}</p></div><span className="ml-auto text-[10px] text-[#888]">Loading facts</span></div>
+    <div className="grid grid-cols-3 gap-px border-t border-white/[.06] bg-white/[.06] text-center"><div className="bg-black/10 px-2 py-2 text-[10px] text-[#888]">Projection</div><div className="bg-black/10 px-2 py-2 text-[10px] text-[#888]">Rankings</div><div className="bg-black/10 px-2 py-2 text-[10px] text-[#888]">Status</div></div>
   </div>;
 }
 
@@ -74,6 +84,7 @@ export function AgentMessage({ message }: { message: Message }) {
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <Markdown>{text}</Markdown>}
       </div>}
       {calls.length > 0 && <div className={text ? "mt-3" : ""}><ToolActivity calls={calls} /></div>}
+      {calls.filter((call) => call.name === 'playersummary' || call.name === 'get_player_overview').map((call) => <PlayerSummaryCall key={`summary-${call.id}`} call={call} />)}
     </div>
   </article>;
 }

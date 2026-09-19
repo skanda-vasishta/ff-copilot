@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
+import { ScoreboardTicker } from "@/components/layout/ScoreboardTicker";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 const instrumentSans = Instrument_Sans({
@@ -32,6 +33,7 @@ export default function RootLayout({
       >
         <AppProviders>
           <Header />
+          <ScoreboardTicker />
           <main className="min-h-[calc(100vh-6.75rem)] has-[[data-copilot-mobile]]:min-h-dvh sm:min-h-[calc(100vh-3.5rem)]">
             {children}
           </main>

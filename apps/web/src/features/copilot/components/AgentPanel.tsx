@@ -19,6 +19,8 @@ export function AgentPanel() {
   const [threadQuery, setThreadQuery] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set(["Earlier"]));
   const [input, setInput] = useState("");
+  const [attachment, setAttachment] = useState<{ name: string; text: string } | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [mobileScreen, setMobileScreen] = useState<"list" | "chat">("list");
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [refreshingContext, setRefreshingContext] = useState(false);
@@ -139,14 +141,24 @@ export function AgentPanel() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const value = input;
+    const value = attachment ? `${input}\n\n[Attached document: ${attachment.name}]\n${attachment.text}` : input;
     if (!value.trim()) return;
     setInput("");
+    setAttachment(null);
     if (thread && thread.title === "New conversation") {
       const title = value.trim().slice(0, 60);
       updateThread(thread.id, { title }).then((updated) => setThreads((current) => current.map((item) => item.id === updated.id ? updated : item)));
     }
     await agent.send(value);
+  }
+
+  async function attachDocument(file: File | undefined) {
+    if (!file) return;
+    setAttachmentError(null);
+    const allowed = /\.(txt|md|markdown|csv|json|xml|html?)$/i.test(file.name) || file.type.startsWith('text/');
+    if (!allowed) { setAttachmentError('Attach a text, Markdown, CSV, JSON, XML, or HTML document.'); return; }
+    if (file.size > 1_000_000) { setAttachmentError('Documents must be smaller than 1 MB.'); return; }
+    setAttachment({ name: file.name, text: await file.text() });
   }
 
   function openThread(id: string) {
@@ -273,10 +285,11 @@ export function AgentPanel() {
 
       <form onSubmit={submit} className="copilot-composer-fade shrink-0 px-4 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-8 sm:pb-[22px]">
         <div className="copilot-composer mx-auto flex max-w-[760px] items-end gap-2 rounded-[10px] border p-2 transition sm:p-2.5">
-          <button type="button" aria-label="Add context" className="mb-1 grid size-9 shrink-0 place-items-center rounded-full text-3xl font-light leading-none text-white/90 sm:hidden">+</button>
+          <label aria-label="Attach document" title="Attach document" className="focus-ring mb-1 grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-xl font-light leading-none text-white/90 transition hover:bg-white/[.06]"><input type="file" className="sr-only" accept=".txt,.md,.markdown,.csv,.json,.xml,.html,.htm,text/*" onChange={(event) => { void attachDocument(event.target.files?.[0]); event.currentTarget.value = ''; }} />+</label>
           <textarea aria-label="Message" disabled={!thread || agent.status !== "idle"} rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={thread ? "Ask about players, your roster, waivers, or a trade" : "Create a conversation first"} className="max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-base leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--subtle)] disabled:opacity-50 sm:px-2.5 sm:text-[15px]" />
           {agent.status !== "idle" && agent.status !== "error" ? <button type="button" onClick={agent.cancel} className="copilot-control focus-ring mb-1 h-8 shrink-0 rounded-[6px] border px-2.5 text-[11px] font-medium transition hover:text-red-300">Stop</button> : <button aria-label="Send message" disabled={!thread || !input.trim()} className="copilot-send focus-ring mb-1 grid size-8 shrink-0 place-items-center rounded-[6px] text-base font-semibold transition">↑</button>}
         </div>
+        {(attachment || attachmentError) && <div className="mx-auto mt-2 flex max-w-[760px] items-center justify-between gap-3 px-2 text-[11px]">{attachment ? <span className="truncate text-[#aaa]">Attached: <strong className="text-[#e5e5e5]">{attachment.name}</strong></span> : <span role="alert" className="text-red-300">{attachmentError}</span>}<button type="button" onClick={() => { setAttachment(null); setAttachmentError(null); }} className="shrink-0 text-[#888] hover:text-white">Remove</button></div>}
       </form>
     </section>
   </div>;

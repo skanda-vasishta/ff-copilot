@@ -10,6 +10,39 @@ type PlayerDetail = {
   sources: Array<Record<string, unknown> & { source: string }>;
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PLAYER_REFERENCE_TOOLS = new Set([
+  "get_player_overview",
+  "playersummary",
+  "get_player_schedule",
+  "get_player_espn",
+  "get_player_sleeper",
+  "get_player_fantasypros",
+  "get_player_fftoday",
+  "get_player_reddit",
+  "get_player_game_stats",
+]);
+
+async function resolvePlayerReference(reference: string, season: number) {
+  if (UUID_PATTERN.test(reference)) return reference;
+  const result = await api<{ items: Array<Record<string, unknown>> }>(`/v1/players?${queryString({
+    search: reference,
+    season,
+    page_size: 20,
+    sort: "projected_total_points",
+    direction: "desc",
+  })}`);
+  const normalized = reference.trim().toLocaleLowerCase();
+  const exact = result.items.filter((player) => String(player.name || "").trim().toLocaleLowerCase() === normalized);
+  const matches = exact.length ? exact : result.items;
+  if (matches.length !== 1 || typeof matches[0]?.id !== "string") {
+    throw new Error(matches.length
+      ? `Player name "${reference}" is ambiguous. Call search_players and use the returned player_id.`
+      : `No player matched "${reference}". Call search_players with a broader name.`);
+  }
+  return matches[0].id as string;
+}
+
 function compactRoster(roster: { snapshot: Record<string, unknown> | null; players: unknown[] }) {
   const snapshot = roster.snapshot;
   return {
@@ -39,6 +72,9 @@ function compactRoster(roster: { snapshot: Record<string, unknown> | null; playe
 export async function executeTool(call: ToolCallPart, thread: AgentThread) {
   const input = validateToolInput(call.name, call.input) as Record<string, unknown>;
   const season = thread.season || 2026;
+  if (PLAYER_REFERENCE_TOOLS.has(call.name) && typeof input.player_id === "string") {
+    input.player_id = await resolvePlayerReference(input.player_id, season);
+  }
   if (call.name === "search_players") {
     const result = await api<{ items: Array<Record<string, unknown>>; [key: string]: unknown }>(`/v1/players?${queryString({
       search: String(input.query || ""),
@@ -59,7 +95,7 @@ export async function executeTool(call: ToolCallPart, thread: AgentThread) {
       })),
     };
   }
-  if (call.name === "get_player_overview") {
+  if (call.name === "get_player_overview" || call.name === "playersummary") {
     const detail = await api<PlayerDetail>(`/v1/players/${String(input.player_id)}/detail?season=${season}`);
     const snapshot = detail.snapshots.find((candidate) => candidate.source === "espn");
     return {

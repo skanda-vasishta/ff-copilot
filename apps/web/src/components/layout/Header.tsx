@@ -20,11 +20,7 @@ type WorkspaceTeam = {
 
 const links = [
   { href: '/team', label: 'Team' },
-  { href: '/matchups', label: 'Matchups' },
   { href: '/copilot', label: 'Copilot' },
-  { href: '/free-agents', label: 'Moves' },
-  { href: '/transactions', label: 'Activity' },
-  { href: '/draft', label: 'Draft' },
   { href: '/player-lookup', label: 'Players' },
 ]
 

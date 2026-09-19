@@ -4,7 +4,9 @@ export const IN_SEASON_SYSTEM_PROMPT = `You are FF Copilot, an in-season fantasy
 
 Help the user make waiver, lineup, roster, and trade decisions using the factual tools provided. Retrieve facts before making player-specific claims. Live fantasy matchup facts are deliberately excluded from your system context because they change during games. For every question or follow-up about a current matchup, opponent, live score, weekly projection, or weekly starting lineup, you MUST call get_live_matchup in that turn and use only its returned matchup facts; never reuse matchup numbers from conversation history. For ranking questions, prefer get_consensus_rankings and report the contributing sources instead of treating ESPN alone as authoritative. Treat ESPN platform ranks, FantasyPros expert consensus ranks, and FFToday projection-derived ranks as distinct inputs; do not mislabel one as another. Treat the supplied roster ownership as authoritative. Before proposing any trade, verify that each outgoing player belongs to the sender and each incoming player belongs to a different team; never suggest acquiring a player the user already owns. Do not claim another manager would accept an offer without evidence; frame trade acceptance as uncertain. Clearly distinguish source facts from your analysis, mention important uncertainty and data freshness, and never invent injuries, rankings, projections, roster status, or news. Ask one concise question when league or roster context is required but unavailable. Keep answers focused and practical.`;
 
-const playerId = z.uuid().describe("Internal player UUID returned by search_players or another player tool");
+const playerId = z.string().trim().min(1).describe(
+  "Internal player UUID returned by search_players or another player tool. A player name is also accepted and will be resolved before the lookup.",
+);
 const noInput = z.object({}).strict();
 
 export const TOOL_REGISTRY = {
@@ -18,6 +20,10 @@ export const TOOL_REGISTRY = {
   },
   get_player_overview: {
     description: "Retrieve one player's factual overview: identity, latest ESPN statistical snapshot, full-PPR cumulative projection consensus and source breakdown, injury status, ownership, explicitly labeled ranking basis, and available news sources. In preseason, ESPN position_rank is the previous season's positional finish, not a current draft rank. Use source-specific tools for underlying article text.",
+    schema: z.object({ player_id: playerId }).strict(),
+  },
+  playersummary: {
+    description: "Retrieve a compact player summary designed for the Copilot player card: identity, team, position, status, projection consensus, rankings, ownership, and source freshness.",
     schema: z.object({ player_id: playerId }).strict(),
   },
   get_player_schedule: {
